@@ -1,0 +1,1509 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Donna — Dashboard</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,500;12..96,600;12..96,700&family=Inter:wght@400;450;500;600&display=swap" rel="stylesheet">
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/mammoth/1.6.0/mammoth.browser.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+<script>if(window.pdfjsLib){pdfjsLib.GlobalWorkerOptions.workerSrc="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js";}</script>
+<style>
+  :root{
+    --ink:#13243d; --ink-2:#22375a; --canvas:#eef1f7; --surface:#ffffff;
+    --line:#dfe5f0; --line-2:#eef1f7; --muted:#5d6e8c; --muted-2:#8b99b3;
+    --signal:#e0892e; --signal-soft:#fbf0e0; --signal-line:#f0c790;
+    --site:#c8742a; --virtual:#1f8a86; --ok:#2f9e6f; --danger:#c0492f;
+    --r:13px; --r-sm:9px;
+  }
+  *{box-sizing:border-box;margin:0;padding:0}
+  html{-webkit-text-size-adjust:100%}
+  body{font-family:'Inter',system-ui,sans-serif;background:var(--canvas);color:var(--ink);-webkit-font-smoothing:antialiased;line-height:1.45}
+  h1,h2,h3,.display{font-family:'Bricolage Grotesque','Inter',sans-serif;letter-spacing:-.01em}
+  button{font-family:inherit;cursor:pointer}
+  input,select{font-family:inherit;font-size:14px;color:var(--ink)}
+  :focus-visible{outline:2.5px solid var(--signal);outline-offset:2px;border-radius:4px}
+  a{color:inherit}
+  .app{display:grid;grid-template-columns:240px 1fr;min-height:100vh}
+  .side{background:var(--ink);color:#cdd8ea;padding:22px 16px;display:flex;flex-direction:column;gap:4px}
+  .brand{display:flex;align-items:center;gap:10px;padding:4px 8px 20px}
+  .brand .mark{width:30px;height:30px;border-radius:9px;background:linear-gradient(150deg,var(--signal),#e6a85a);display:grid;place-items:center;color:#fff;flex:none}
+  .brand .mark svg{width:17px;height:17px}
+  .brand b{font-family:'Bricolage Grotesque';font-size:18px;color:#fff;font-weight:700;letter-spacing:-.02em}
+  .brand small{display:block;font-size:10.5px;color:#7e8db0;letter-spacing:.12em;text-transform:uppercase;margin-top:1px}
+  .nav-label{font-size:10px;letter-spacing:.14em;text-transform:uppercase;color:#62739a;padding:14px 8px 6px}
+  .nav-item{display:flex;align-items:center;gap:11px;padding:9px 11px;border-radius:9px;font-size:13.5px;font-weight:500;color:#bcc9dc;border:none;background:none;width:100%;text-align:left;transition:.13s}
+  .nav-item svg{width:16px;height:16px;flex:none;opacity:.85}
+  .nav-item:hover{background:#1d3252;color:#fff}
+  .nav-item.active{background:#26416a;color:#fff}
+  .nav-item.soon{opacity:.5;cursor:default}
+  .nav-item.soon:hover{background:none;color:#bcc9dc}
+  .nav-item .tag{margin-left:auto;font-size:9px;letter-spacing:.08em;text-transform:uppercase;color:#7e8db0;border:1px solid #2e486f;padding:1px 5px;border-radius:20px}
+  .side-foot{margin-top:auto;padding:12px 8px 0;border-top:1px solid #213a5e;font-size:12px;color:#8493b4}
+  .side-foot b{color:#dde6f3;font-weight:600;display:block;font-size:12.5px}
+  .side-foot .out{background:none;border:none;color:#8fa0c2;font-size:12px;margin-top:9px;padding:0;text-decoration:underline}
+  .side-foot .out:hover{color:#fff}
+  .main{padding:0;overflow:auto}
+  .topbar{display:flex;align-items:center;justify-content:space-between;padding:16px 30px;background:var(--surface);border-bottom:1px solid var(--line);position:sticky;top:0;z-index:5}
+  .crumbs{font-size:12.5px;color:var(--muted)} .crumbs b{color:var(--ink);font-weight:600}
+  .acct-chip{display:flex;align-items:center;gap:9px;font-size:13px}
+  .acct-chip .av{width:30px;height:30px;border-radius:50%;background:var(--ink);color:#fff;display:grid;place-items:center;font-weight:600;font-size:12px}
+  .acct-chip .who b{font-weight:600;font-size:13px} .acct-chip .who span{color:var(--muted);font-size:11.5px}
+  .page{padding:30px;max-width:920px}
+  .page-head{margin-bottom:24px} .page-head h1{font-size:27px;font-weight:700}
+  .page-head p{color:var(--muted);font-size:14px;margin-top:4px;max-width:62ch}
+  .card{background:var(--surface);border:1px solid var(--line);border-radius:var(--r);padding:22px 24px;margin-bottom:18px}
+  .card-h{display:flex;align-items:baseline;justify-content:space-between;margin-bottom:18px}
+  .card-h h2{font-size:16px;font-weight:600} .card-h .hint{font-size:12px;color:var(--muted-2)}
+  .grid-2{display:grid;grid-template-columns:1fr 1fr;gap:16px}
+  .field{margin-bottom:15px} .field:last-child{margin-bottom:0}
+  label.lab{display:block;font-size:12.5px;font-weight:550;margin-bottom:6px;color:var(--ink-2)}
+  label.lab .sub{font-weight:400;color:var(--muted-2)}
+  .inp,select.inp{width:100%;padding:10px 12px;border:1px solid var(--line);border-radius:var(--r-sm);background:#fbfcfe;transition:.13s}
+  .inp:focus{border-color:var(--signal);background:#fff;outline:none;box-shadow:0 0 0 3px var(--signal-soft)}
+  .chips{display:flex;flex-wrap:wrap;gap:8px}
+  .chip{padding:7px 13px;border:1px solid var(--line);border-radius:20px;font-size:12.5px;background:#fbfcfe;color:var(--muted);font-weight:500;transition:.12s}
+  .chip[aria-pressed="true"]{background:var(--ink);border-color:var(--ink);color:#fff}
+  .switch{display:inline-flex;align-items:center;gap:10px;cursor:pointer}
+  .switch .track{width:40px;height:23px;border-radius:20px;background:#cdd6e6;position:relative;transition:.16s;flex:none}
+  .switch .track::after{content:"";position:absolute;top:2.5px;left:2.5px;width:18px;height:18px;border-radius:50%;background:#fff;transition:.16s;box-shadow:0 1px 2px rgba(0,0,0,.2)}
+  .switch input{position:absolute;opacity:0}
+  .switch input:checked + .track{background:var(--ok)}
+  .switch input:checked + .track::after{transform:translateX(17px)}
+  .switch .txt{font-size:13px;font-weight:500} .switch .txt small{display:block;color:var(--muted-2);font-weight:400;font-size:11.5px}
+  .btn{padding:10px 17px;border-radius:var(--r-sm);border:1px solid var(--line);background:#fff;font-size:13.5px;font-weight:550;color:var(--ink);transition:.13s}
+  .btn:hover{border-color:var(--ink-2)} .btn.primary{background:var(--ink);border-color:var(--ink);color:#fff}
+  .btn.primary:hover{background:#0e1d33} .btn.sm{padding:6px 12px;font-size:12.5px}
+  .btn:disabled{opacity:.55;cursor:default}
+  .preview{background:linear-gradient(165deg,#16294a,#0f1f39);border-radius:var(--r);padding:22px 24px;color:#dbe5f5;position:relative;overflow:hidden}
+  .preview::before{content:"";position:absolute;inset:0;background:radial-gradient(120% 90% at 88% -10%,rgba(224,137,46,.22),transparent 60%)}
+  .preview .live{display:inline-flex;align-items:center;gap:7px;font-size:10.5px;letter-spacing:.13em;text-transform:uppercase;color:var(--signal);font-weight:600;position:relative}
+  .preview .live .dot{width:8px;height:8px;border-radius:50%;background:var(--signal);box-shadow:0 0 0 0 rgba(224,137,46,.6);animation:pulse 1.8s infinite}
+  .preview.off .live{color:#6b7c9e} .preview.off .live .dot{background:#6b7c9e;animation:none}
+  @keyframes pulse{0%{box-shadow:0 0 0 0 rgba(224,137,46,.55)}70%{box-shadow:0 0 0 9px rgba(224,137,46,0)}100%{box-shadow:0 0 0 0 rgba(224,137,46,0)}}
+  @media (prefers-reduced-motion:reduce){.preview .live .dot{animation:none}}
+  .preview .say{font-family:'Bricolage Grotesque';font-size:21px;line-height:1.4;font-weight:500;margin-top:14px;color:#fff;position:relative}
+  .preview .say .v{color:#f4c98a}
+  .preview .cap{font-size:11.5px;color:#8ea0c2;margin-top:13px;position:relative}
+  .preview .prev-foot{display:flex;align-items:center;gap:14px;margin-top:17px;position:relative;flex-wrap:wrap}
+  .preview .prev-foot .cap{margin-top:0}
+  .preview .play{display:inline-flex;align-items:center;gap:8px;background:rgba(255,255,255,.12);border:1px solid rgba(255,255,255,.22);color:#fff;padding:8px 15px;border-radius:22px;font-size:13px;font-weight:550;transition:.13s}
+  .preview .play:hover{background:rgba(255,255,255,.22)} .preview .play svg{width:13px;height:13px}
+  .preview .play.speaking{background:var(--signal);border-color:var(--signal)} .preview .play:disabled{opacity:.5;cursor:default}
+  .sched-row{display:grid;grid-template-columns:96px 1fr 1fr;gap:14px;align-items:center;padding:11px 0;border-top:1px solid var(--line-2)}
+  .sched-row:first-of-type{border-top:none} .sched-row .day{font-weight:600;font-size:13px}
+  .win{display:flex;align-items:center;gap:8px}
+  .win .times{display:flex;align-items:center;gap:6px;font-size:12.5px;color:var(--muted)}
+  .win .times input{width:96px;padding:6px 8px;border:1px solid var(--line);border-radius:7px;background:#fbfcfe}
+  .win.off .times{opacity:.35;pointer-events:none}
+  .col-h{display:grid;grid-template-columns:96px 1fr 1fr;gap:14px;font-size:11px;letter-spacing:.08em;text-transform:uppercase;color:var(--muted-2);padding-bottom:6px;font-weight:600}
+  .mini-switch{position:relative;display:inline-flex;align-items:center}
+  .mini-switch input{position:absolute;opacity:0;width:34px;height:20px;margin:0;cursor:pointer}
+  .mini-switch .t{width:34px;height:20px;border-radius:14px;background:#cdd6e6;transition:.15s;flex:none}
+  .mini-switch .t::after{content:"";position:absolute;top:2px;left:2px;width:16px;height:16px;border-radius:50%;background:#fff;transition:.15s;box-shadow:0 1px 2px rgba(0,0,0,.2)}
+  .mini-switch input:checked + .t{background:var(--ink-2)} .mini-switch input:checked + .t::after{transform:translateX(14px)}
+  .block-item{display:flex;align-items:center;gap:12px;padding:11px 14px;border:1px solid var(--line);border-radius:var(--r-sm);margin-bottom:8px;background:#fbfcfe}
+  .block-item .bt{font-size:10px;letter-spacing:.07em;text-transform:uppercase;font-weight:700;padding:3px 8px;border-radius:20px}
+  .bt.dnd{background:#eef1f7;color:var(--muted)} .bt.vacation{background:#e7f3f2;color:var(--virtual)} .bt.holiday{background:var(--signal-soft);color:var(--signal)}
+  .block-item .bx{font-size:13px;font-weight:500} .block-item .bx small{display:block;color:var(--muted-2);font-weight:400;font-size:11.5px}
+  .block-item .rm{margin-left:auto;color:var(--muted-2);background:none;border:none;font-size:13px;padding:4px 6px;border-radius:6px}
+  .block-item .rm:hover{color:var(--danger);background:#faecea}
+  .m-item{border:1px solid var(--line);border-radius:var(--r-sm);padding:13px 15px;margin-bottom:9px;background:#fbfcfe}
+  .m-item.new{border-color:var(--signal-line);background:var(--signal-soft)}
+  .m-item.done{opacity:.6}
+  .m-top{display:flex;align-items:baseline;justify-content:space-between;gap:10px}
+  .m-who{font-weight:600;font-size:14px;display:flex;align-items:center;gap:8px}
+  .m-new{font-size:9.5px;letter-spacing:.07em;text-transform:uppercase;font-weight:700;color:var(--signal);border:1px solid var(--signal-line);padding:1px 6px;border-radius:20px}
+  .m-when{font-size:11.5px;color:var(--muted-2);white-space:nowrap}
+  .m-num{display:inline-block;font-size:12.5px;color:var(--ink-2);font-weight:500;margin-top:2px;text-decoration:none}
+  .m-num:hover{text-decoration:underline}
+  .m-text{font-size:13.5px;color:var(--ink-2);margin-top:7px;line-height:1.5}
+  .m-actions{margin-top:11px}
+  .nav-item .tag.unread{background:var(--signal);border-color:var(--signal);color:#fff}
+  .appt-status{font-size:10px;letter-spacing:.06em;text-transform:uppercase;font-weight:700;padding:2px 8px;border-radius:20px;background:#eef1f7;color:var(--muted)}
+  .appt-status.s-scheduled{background:var(--signal-soft);color:var(--signal)}
+  .appt-status.s-confirmed{background:#e7f4ee;color:var(--ok)}
+  .appt-status.s-cancelled{background:#faecea;color:var(--danger)}
+  .appt-status.s-completed{background:#e9f0fb;color:var(--ink-2)}
+  .set-rows{display:flex;flex-direction:column}
+  .set-row{display:flex;justify-content:space-between;gap:16px;padding:11px 0;border-top:1px solid var(--line-2);font-size:13.5px}
+  .set-row:first-child{border-top:none}
+  .set-row .k{color:var(--muted)}
+  .set-row .v{font-weight:600;text-align:right;word-break:break-word}
+  .lang-badge{display:inline-block;margin-left:8px;font-size:10px;letter-spacing:.04em;font-weight:700;padding:2px 8px;border-radius:20px;background:#e9f0fb;color:var(--ink-2);vertical-align:middle}
+  .call-item{border:1px solid var(--line);border-radius:var(--r-sm);padding:12px 15px;margin-bottom:8px;background:#fbfcfe;cursor:pointer;transition:.12s}
+  .call-item:hover{border-color:var(--ink-2)}
+  .call-item.open{border-color:var(--signal);background:var(--signal-soft)}
+  .call-item.live{border-color:var(--signal-line)}
+  .livedot{display:inline-block;width:8px;height:8px;border-radius:50%;background:var(--signal);margin-right:6px;vertical-align:middle;box-shadow:0 0 0 0 rgba(224,137,46,.6);animation:pulse 1.8s infinite}
+  .calls-live{display:inline-flex;align-items:center;gap:6px;font-size:11px;letter-spacing:.06em;text-transform:uppercase;color:var(--ok);font-weight:600}
+  .calls-live .d{width:7px;height:7px;border-radius:50%;background:var(--ok)}
+  .transcript{display:flex;flex-direction:column;gap:9px}
+  .tline{display:flex;flex-direction:column;max-width:80%}
+  .tline .who{font-size:10.5px;letter-spacing:.04em;text-transform:uppercase;color:var(--muted-2);font-weight:600;margin-bottom:3px}
+  .tline .bub{padding:9px 13px;border-radius:13px;font-size:13.5px;line-height:1.45}
+  .tline.donna{align-self:flex-start}
+  .tline.donna .bub{background:#eef1f7;color:var(--ink);border-bottom-left-radius:3px}
+  .tline.caller{align-self:flex-end;align-items:flex-end}
+  .tline.caller .bub{background:var(--ink);color:#fff;border-bottom-right-radius:3px}
+  .tline.system .bub,.tline.admin .bub{background:var(--signal-soft);color:var(--signal);font-size:12.5px}
+  .appt-status.s-answered,.appt-status.s-booked{background:#e7f4ee;color:var(--ok)}
+  .appt-status.s-message_taken{background:var(--signal-soft);color:var(--signal)}
+  .type-item{display:flex;align-items:center;gap:14px;padding:13px 16px;border:1px solid var(--line);border-radius:var(--r-sm);margin-bottom:9px;background:#fbfcfe}
+  .type-item .ic{width:34px;height:34px;border-radius:9px;display:grid;place-items:center;flex:none}
+  .ic.phone{background:#e7f3f2;color:var(--virtual)} .ic.virtual{background:#e9f0fb;color:var(--ink-2)} .ic.in_person{background:var(--signal-soft);color:var(--site)}
+  .type-item .ic svg{width:17px;height:17px}
+  .type-item .nm{font-weight:600;font-size:14px} .type-item .nm small{display:block;color:var(--muted);font-weight:400;font-size:12px;margin-top:1px}
+  .type-item .mode{margin-left:auto;font-size:11px;letter-spacing:.06em;text-transform:uppercase;color:var(--muted-2);font-weight:600;white-space:nowrap}
+  .empty{text-align:center;padding:46px 20px;color:var(--muted)} .empty svg{width:34px;height:34px;color:var(--muted-2);margin-bottom:10px}
+  .gate{min-height:100vh;display:grid;place-items:center;padding:24px;background:radial-gradient(120% 90% at 50% -10%,#1b3258 0%,var(--canvas) 46%)}
+  .gate-card{background:var(--surface);border:1px solid var(--line);border-radius:18px;padding:34px 34px 30px;width:100%;max-width:460px;box-shadow:0 24px 60px -28px rgba(19,36,61,.4)}
+  .gate-card .brand{padding:0 0 18px} .gate-card h1{font-size:23px;font-weight:700}
+  .gate-card .lede{color:var(--muted);font-size:13.5px;margin:5px 0 22px}
+  .gate-card .toggle{margin-top:16px;font-size:13px;color:var(--muted);text-align:center}
+  .gate-card .toggle button{background:none;border:none;color:var(--signal);font-weight:600;font-size:13px;text-decoration:underline}
+  .msg{font-size:13px;padding:10px 12px;border-radius:var(--r-sm);margin-bottom:14px;display:none}
+  .msg.err{display:block;background:#faecea;color:var(--danger);border:1px solid #f0cdc6}
+  .msg.ok{display:block;background:#e7f4ee;color:var(--ok);border:1px solid #bfe3d1}
+  .booting{min-height:100vh;display:grid;place-items:center;color:var(--muted);font-size:14px}
+  @media(max-width:780px){.app{grid-template-columns:1fr}.side{display:none}.grid-2{grid-template-columns:1fr}.page{padding:20px}.topbar{padding:14px 18px}.sched-row,.col-h{grid-template-columns:1fr;gap:8px}.col-h{display:none}}
+</style>
+</head>
+<body>
+<div id="root"><div class="booting">Loading…</div></div>
+
+<script>
+/* ===================== SUPABASE ===================== */
+const SUPABASE_URL = "https://hingbdtmxozbjetzwibj.supabase.co";
+const SUPABASE_KEY = "sb_publishable_eCiC9HkJ8PO3D1N_0vtwWQ_Bphb6RXX";
+const db = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+let pendingRecovery = /type=recovery/i.test(location.hash || "");
+
+const DEFAULT_NAME = "Donna";
+const DAYS = ["Sunday","Monday","Tuesday","Wednesday","Thursday","Friday","Saturday"];
+const state = {
+  account:null, owner:null, assistantId:null,
+  assistant:{ name:DEFAULT_NAME, greetingLabel:"the office", voice:"warm-female", languages:["en"], number:"", recordingNotice:true, active:true, routing:{} },
+  schedule: DAYS.map((_,i)=>({ working:{on:false,start:"08:00",end:"18:00"}, bookable:{on:false,start:"09:00",end:"15:00"} })),
+  blocks:[], types:[], messages:[], appointments:[], calls:[], openCallId:null, callTranscript:[], callsChannel:null, txChannel:null, view:"assistant", authMode:"signup"
+};
+const LANGS = [
+  ["ar","Arabic"],["yue","Cantonese"],["nl","Dutch"],["en","English"],["fr","French"],
+  ["de","German"],["hi","Hindi"],["it","Italian"],["ja","Japanese"],["ko","Korean"],
+  ["zh","Mandarin"],["fa","Persian"],["pt","Portuguese"],["ru","Russian"],["es","Spanish"],
+  ["th","Thai"],["vi","Vietnamese"]
+];
+const VOICES = [["warm-female","Warm — female"],["pro-female","Professional — female"],["warm-male","Warm — male"],["pro-male","Professional — male"]];
+const $ = (s,el=document)=>el.querySelector(s);
+const esc = s => (s||"").replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
+const aName = ()=> (state.assistant && state.assistant.name) ? state.assistant.name : DEFAULT_NAME;
+
+const I = {
+  bot:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="8" width="16" height="11" rx="3"/><path d="M12 8V4M9 13h.01M15 13h.01M8 19v2M16 19v2"/></svg>',
+  cal:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="5" width="18" height="16" rx="2"/><path d="M3 9h18M8 3v4M16 3v4"/></svg>',
+  tag:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20.6 13.6 13 21l-9-9V4h8l8.6 8.6a2 2 0 0 1 0 2.8z"/><circle cx="8" cy="8" r="1.4"/></svg>',
+  phone:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 4h4l2 5-2.5 1.5a11 11 0 0 0 5 5L20 13l1 4v3a1 1 0 0 1-1 1A16 16 0 0 1 4 5a1 1 0 0 1 1-1z"/></svg>',
+  users:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2M9 11a4 4 0 1 0 0-8 4 4 0 0 0 0 8zM22 21v-2a4 4 0 0 0-3-3.87M16 3.13a4 4 0 0 1 0 7.75"/></svg>',
+  book:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 19.5V6a2 2 0 0 1 2-2h13v16H6a2 2 0 0 0-2 2zM19 4v18"/></svg>',
+  card:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="5" width="20" height="14" rx="2"/><path d="M2 10h20"/></svg>',
+  pin:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 10c0 6-8 12-8 12s-8-6-8-12a8 8 0 0 1 16 0z"/><circle cx="12" cy="10" r="3"/></svg>',
+  vid:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="6" width="14" height="12" rx="2"/><path d="m22 8-6 4 6 4V8z"/></svg>',
+  inbox:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 12h-6l-2 3h-4l-2-3H2"/><path d="M5.5 5.5 2 12v6a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2v-6l-3.5-6.5A2 2 0 0 0 16.8 4H7.2a2 2 0 0 0-1.7 1.5z"/></svg>',
+  appt:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="5" width="18" height="16" rx="2"/><path d="M3 9h18M8 3v4M16 3v4M9 14l2 2 4-4"/></svg>',
+  gear:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>'
+};
+
+/* ===================== AUTH ===================== */
+function renderAuth(){
+  if(state.authMode==="forgot") return renderForgot();
+  if(state.authMode==="reset")  return renderReset();
+  const signup = state.authMode==="signup";
+  document.getElementById("root").innerHTML = `
+  <div class="gate"><div class="gate-card">
+    <div class="brand"><span class="mark">${I.bot}</span><div><b>${esc(DEFAULT_NAME)}</b><small>${signup?'Set up your account':'Welcome back'}</small></div></div>
+    <h1>${signup?'Create your account':'Sign in'}</h1>
+    <p class="lede">${signup?'This is the company your assistant will answer for. You\'ll be the owner.':'Sign in to manage your assistant.'}</p>
+    <div class="msg" id="auth-msg"></div>
+    ${signup?`
+    <div class="field"><label class="lab">Business name</label><input class="inp" id="f-company" placeholder="e.g. HT Construction DFW"></div>
+    <div class="grid-2">
+      <div class="field"><label class="lab">Industry</label><select class="inp" id="f-industry"><option value="">Choose…</option><option>Construction</option><option>Property management</option><option>Dental / medical</option><option>HVAC / plumbing</option><option>Professional services</option><option>Other</option></select></div>
+      <div class="field"><label class="lab">Your title</label><input class="inp" id="f-title" placeholder="e.g. Owner"></div>
+    </div>
+    <div class="grid-2">
+      <div class="field"><label class="lab">Your name</label><input class="inp" id="f-name" placeholder="Full name"></div>
+      <div class="field"><label class="lab">Your mobile <span class="sub">assistant texts/forwards here</span></label><input class="inp" id="f-phone" type="tel" placeholder="(817) 555-0100"></div>
+    </div>`:''}
+    <div class="grid-2">
+      <div class="field"><label class="lab">Email</label><input class="inp" id="f-email" type="email" placeholder="you@business.com"></div>
+      <div class="field"><label class="lab">Password</label><input class="inp" id="f-pass" type="password" placeholder="${signup?'8+ characters':'Your password'}"></div>
+    </div>
+    <button class="btn primary" style="width:100%;margin-top:6px" id="f-go">${signup?'Create account & continue':'Sign in'}</button>
+    ${!signup?`<div class="toggle"><button id="f-forgot">Forgot password?</button></div>`:''}
+    <div class="toggle">${signup?'Already set up?':'Need an account?'} <button id="f-toggle">${signup?'Sign in':'Create one'}</button></div>
+  </div></div>`;
+  $("#f-toggle").onclick=()=>{ state.authMode = signup?"login":"signup"; renderAuth(); };
+  $("#f-go").onclick = signup?doSignup:doLogin;
+  if(!signup){ const fp=$("#f-forgot"); if(fp) fp.onclick=()=>{ state.authMode="forgot"; renderAuth(); }; }
+}
+function renderForgot(){
+  document.getElementById("root").innerHTML = `
+  <div class="gate"><div class="gate-card">
+    <div class="brand"><span class="mark">${I.bot}</span><div><b>${esc(DEFAULT_NAME)}</b><small>Reset your password</small></div></div>
+    <h1>Forgot password</h1>
+    <p class="lede">Enter your email and we'll send you a link to set a new password.</p>
+    <div class="msg" id="auth-msg"></div>
+    <div class="field"><label class="lab">Email</label><input class="inp" id="f-email" type="email" placeholder="you@business.com"></div>
+    <button class="btn primary" style="width:100%;margin-top:6px" id="f-go">Send reset link</button>
+    <div class="toggle">Remembered it? <button id="f-back">Back to sign in</button></div>
+  </div></div>`;
+  $("#f-go").onclick=doForgot;
+  $("#f-back").onclick=()=>{ state.authMode="login"; renderAuth(); };
+}
+function renderReset(){
+  document.getElementById("root").innerHTML = `
+  <div class="gate"><div class="gate-card">
+    <div class="brand"><span class="mark">${I.bot}</span><div><b>${esc(DEFAULT_NAME)}</b><small>Set a new password</small></div></div>
+    <h1>New password</h1>
+    <p class="lede">Choose a new password for your account.</p>
+    <div class="msg" id="auth-msg"></div>
+    <div class="field"><label class="lab">New password</label><input class="inp" id="f-pass" type="password" placeholder="8+ characters" autocomplete="new-password"></div>
+    <div class="field"><label class="lab">Confirm new password</label><input class="inp" id="f-pass2" type="password" placeholder="Re-enter new password" autocomplete="new-password"></div>
+    <button class="btn primary" style="width:100%;margin-top:6px" id="f-go">Update password</button>
+  </div></div>`;
+  $("#f-go").onclick=doReset;
+}
+function authErr(t){ const m=$("#auth-msg"); m.className="msg err"; m.textContent=t; }
+function authOk(t){ const m=$("#auth-msg"); m.className="msg ok"; m.textContent=t; }
+
+async function doSignup(){
+  const email=$("#f-email").value.trim(), password=$("#f-pass").value;
+  if(!email||password.length<8){ authErr("Enter an email and a password of at least 8 characters."); return; }
+  $("#f-go").disabled=true;
+  const { data, error } = await db.auth.signUp({ email, password, options:{ data:{
+    company:$("#f-company").value.trim(), industry:$("#f-industry").value,
+    full_name:$("#f-name").value.trim(), title:$("#f-title").value.trim(), phone:$("#f-phone").value.trim()
+  }}});
+  $("#f-go").disabled=false;
+  if(error){ authErr(error.message); return; }
+  if(data.session){ await boot(); }            // email confirmation off -> straight in
+  else { authOk("Account created. Check your email to confirm, then sign in."); state.authMode="login"; setTimeout(renderAuth,1600); }
+}
+async function doLogin(){
+  const email=$("#f-email").value.trim(), password=$("#f-pass").value;
+  if(!email||!password){ authErr("Enter your email and password."); return; }
+  $("#f-go").disabled=true;
+  const { error } = await db.auth.signInWithPassword({ email, password });
+  $("#f-go").disabled=false;
+  if(error){ authErr(error.message); return; }
+  await boot();
+}
+async function doForgot(){
+  const email=$("#f-email").value.trim();
+  if(!email){ authErr("Enter your email."); return; }
+  $("#f-go").disabled=true;
+  const redirectTo = location.href.split('#')[0];
+  const { error } = await db.auth.resetPasswordForEmail(email, { redirectTo });
+  $("#f-go").disabled=false;
+  if(error){ authErr(error.message); return; }
+  authOk("If an account exists for that email, a reset link is on its way. Check your inbox.");
+}
+async function doReset(){
+  const p1=$("#f-pass").value, p2=$("#f-pass2").value;
+  if(p1.length<8){ authErr("Password must be at least 8 characters."); return; }
+  if(p1!==p2){ authErr("Passwords do not match."); return; }
+  $("#f-go").disabled=true;
+  const { error } = await db.auth.updateUser({ password:p1 });
+  $("#f-go").disabled=false;
+  if(error){ authErr(error.message); return; }
+  authOk("Password updated. Signing you in…");
+  pendingRecovery=false;
+  setTimeout(boot, 1200);
+}
+async function signOut(){ await db.auth.signOut(); state.account=null; renderAuth(); }
+
+/* ===================== DATA LOAD ===================== */
+async function loadData(){
+  const { data:{ user } } = await db.auth.getUser();
+  if(!user) return false;
+  const { data: me } = await db.from('users').select('*').eq('id', user.id).maybeSingle();
+  if(!me){ return false; }   // trigger may still be settling
+  state.owner = { id:me.id, name:me.full_name||"Owner", email:me.email, title:me.title||"Owner", phone:me.phone||"" };
+  const { data: acct } = await db.from('accounts').select('*').eq('id', me.account_id).single();
+  state.account = { id:acct.id, company:acct.name, industry:acct.industry, plan:acct.plan, status:acct.status, settings:acct.settings||{}, timezone:(acct.settings&&acct.settings.timezone)||'America/Chicago' };
+  const { data: asst } = await db.from('assistants').select('*').eq('account_id', acct.id).order('created_at').limit(1).maybeSingle();
+  if(asst){
+    state.assistantId = asst.id;
+    state.assistant = {
+      name:asst.assistant_name||DEFAULT_NAME, greetingLabel:asst.greeting_label||"the office",
+      voice:asst.voice_id||"warm-female", languages:(asst.languages&&asst.languages.length)?asst.languages:["en"],
+      number:asst.twilio_number||"", recordingNotice:!(asst.routing&&asst.routing.recording_notice===false), active:asst.is_active,
+      routing:(asst.routing&&typeof asst.routing==='object')?asst.routing:{}
+    };
+  }
+  const { data: types } = await db.from('appointment_types').select('*').eq('account_id', acct.id).order('created_at');
+  state.types = (types||[]).map(t=>({ id:t.id, name:t.name, mode:t.mode, dur:t.default_duration_min, before:t.buffer_before_min, after:t.buffer_after_min, travel:t.requires_travel }));
+  const { data: rules } = await db.from('availability_rules').select('*').eq('user_id', me.id);
+  state.schedule = DAYS.map(()=>({ working:{on:false,start:"08:00",end:"18:00"}, bookable:{on:false,start:"09:00",end:"15:00"} }));
+  (rules||[]).forEach(r=>{ const w = r.rule_type==='working'?state.schedule[r.day_of_week].working:state.schedule[r.day_of_week].bookable; w.on=true; w.start=(r.start_time||"08:00").slice(0,5); w.end=(r.end_time||"18:00").slice(0,5); });
+  const { data: blocks } = await db.from('calendar_blocks').select('*').eq('user_id', me.id).order('starts_at');
+  state.blocks = (blocks||[]).map(b=>({ id:b.id, type:b.block_type, start:(b.starts_at||"").slice(0,10), end:(b.ends_at||"").slice(0,10), reason:b.reason||"" }));
+  await loadMessages();
+  await loadAppointments();
+  await loadCalls();
+  return true;
+}
+
+/* ===================== APP SHELL ===================== */
+function renderApp(){
+  if(new URLSearchParams(location.search).get('calendar')) state.view='settings';
+  const navConfig=[["assistant","Assistant",I.bot],["schedule","Schedule",I.cal],["types","Appointment types",I.tag],["knowledge","Knowledge",I.book],["settings","Settings",I.gear]];
+  const navActivity=[["calls","Calls",I.phone],["appointments","Appointments",I.appt],["messages","Messages",I.inbox]];
+  const soon=[["contacts","Contacts",I.users],["billing","Billing",I.card]];
+  const navBtn=n=>`<button class="nav-item ${state.view===n[0]?'active':''}" data-v="${n[0]}">${n[2]}<span>${n[1]}</span>${n[0]==='messages'&&unreadCount()?`<span class="tag unread">${unreadCount()}</span>`:''}</button>`;
+  const initials=(state.owner.name||"O").split(" ").map(w=>w[0]).slice(0,2).join("").toUpperCase();
+  document.title=`${aName()} — Dashboard`;
+  document.getElementById("root").innerHTML = `
+  <div class="app">
+    <aside class="side">
+      <div class="brand"><span class="mark">${I.bot}</span><div><b id="brand-name">${esc(aName())}</b><small>${esc(state.account.company)}</small></div></div>
+      <div class="nav-label">Configure</div>
+      ${navConfig.map(navBtn).join("")}
+      <div class="nav-label">Activity</div>
+      ${navActivity.map(navBtn).join("")}
+      <div class="nav-label" id="run-label">Running ${esc(aName())}</div>
+      ${soon.map(n=>`<button class="nav-item soon">${n[2]}<span>${n[1]}</span><span class="tag">soon</span></button>`).join("")}
+      <div class="side-foot"><b>${esc(state.owner.name)}</b>${esc(state.owner.title)} · Owner<br><button class="out" id="signout">Sign out</button></div>
+    </aside>
+    <main class="main">
+      <div class="topbar">
+        <div class="crumbs">${state.view==='settings'?'Account':(['messages','appointments','calls'].includes(state.view)?'Activity':'Configure')} · <b>${esc(({assistant:"Assistant",schedule:"Schedule",types:"Appointment types",messages:"Messages",appointments:"Appointments",settings:"Settings",calls:"Calls",knowledge:"Knowledge"})[state.view])}</b></div>
+        <div class="acct-chip"><span class="av">${initials}</span><div class="who"><b>${esc(state.account.company)}</b><span>${esc((state.account.status||'trial'))} · ${esc(state.account.plan||'starter')}</span></div></div>
+      </div>
+      <div id="page"></div>
+    </main>
+  </div>`;
+  document.querySelectorAll(".nav-item[data-v]").forEach(b=>b.onclick=()=>{state.view=b.dataset.v;renderPage();});
+  $("#signout").onclick=signOut;
+  renderPage();
+}
+function renderPage(){
+  if('speechSynthesis' in window) window.speechSynthesis.cancel();
+  teardownRealtime();
+  document.querySelectorAll(".nav-item[data-v]").forEach(b=>b.classList.toggle("active",b.dataset.v===state.view));
+  $(".crumbs").innerHTML=`${state.view==='settings'?'Account':(['messages','appointments','calls'].includes(state.view)?'Activity':'Configure')} · <b>${esc(({assistant:"Assistant",schedule:"Schedule",types:"Appointment types",messages:"Messages",appointments:"Appointments",settings:"Settings",calls:"Calls",knowledge:"Knowledge"})[state.view])}</b>`;
+  ({assistant:pageAssistant, schedule:pageSchedule, types:pageTypes, messages:pageMessages, appointments:pageAppointments, settings:pageSettings, calls:pageCalls, knowledge:pageKnowledge})[state.view]();
+}
+
+/* ===================== ASSISTANT PAGE ===================== */
+function greetingText(){ const a=state.assistant; let s=`Hello, this is <span class="v">${esc(a.name||DEFAULT_NAME)}</span> with ${esc(a.greetingLabel||"the office")}. `; if(a.recordingNotice) s+=`Just so you know, this call may be recorded for quality and training. `; return s+`How can I help you?`; }
+function greetingPlain(){ const a=state.assistant; let s=`Hello, this is ${a.name||DEFAULT_NAME} with ${a.greetingLabel||"the office"}. `; if(a.recordingNotice) s+=`Just so you know, this call may be recorded for quality and training. `; return s+`How can I help you?`; }
+function pickVoice(g){ const all=window.speechSynthesis.getVoices(); const en=all.filter(v=>/^en(-|_|$)/i.test(v.lang)); const pool=en.length?en:all; const f=/(female|samantha|victoria|zira|karen|moira|tessa|susan|fiona|serena|allison|ava|jenny|aria)/i; const m=/(daniel|alex|david|fred|aaron|thomas|oliver|arthur|gordon|guy|ryan)/i; const want=g==="female"?f:m; return pool.find(v=>want.test(v.name))||pool[0]||null; }
+function speakGreeting(btn){ if(!('speechSynthesis' in window))return; const lbl=btn.querySelector(".lbl"); if(window.speechSynthesis.speaking){window.speechSynthesis.cancel();return;} const u=new SpeechSynthesisUtterance(greetingPlain()); const v=pickVoice(state.assistant.voice.includes("female")?"female":"male"); if(v)u.voice=v; u.rate=1;u.pitch=1; u.onstart=()=>{btn.classList.add("speaking");lbl.textContent="Stop";}; u.onend=u.onerror=()=>{btn.classList.remove("speaking");lbl.textContent="Play greeting";}; window.speechSynthesis.speak(u); }
+
+function pageAssistant(){
+  const a=state.assistant;
+  const isActive=state.account.status==='active';
+  $("#page").innerHTML=`
+  <div class="page">
+    <div class="page-head"><h1>Assistant</h1><p id="assist-lede">Configure how ${esc(aName())} introduces herself and answers. The name you set here flows across your whole dashboard and is what callers hear. On the Enterprise plan each person can have their own.</p></div>
+    <div class="card">
+      <div class="card-h"><h2>What callers hear</h2><span class="hint">Updates live</span></div>
+      <div class="preview ${a.active?'':'off'}" id="prev">
+        <span class="live"><span class="dot"></span>${a.active? esc(a.name||DEFAULT_NAME)+' is live':'Paused'}</span>
+        <div class="say" id="say">${greetingText()}</div>
+        <div class="prev-foot"><button class="play" id="play-btn"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M7 5v14l12-7z"/></svg><span class="lbl">Play greeting</span></button><span class="cap">Browser voice — a preview. The real premium voice is set when the phone layer is wired.</span></div>
+      </div>
+    </div>
+    <div class="card">
+      <div class="card-h"><h2>Identity</h2></div>
+      <div class="grid-2">
+        <div class="field"><label class="lab">Assistant name</label><input class="inp" id="a-name" value="${esc(a.name)}"></div>
+        <div class="field"><label class="lab">Greeting — "with ___"</label><input class="inp" id="a-label" value="${esc(a.greetingLabel)}"></div>
+      </div>
+      <div class="grid-2">
+        <div class="field"><label class="lab">Voice</label><select class="inp" id="a-voice">${VOICES.map(v=>`<option value="${v[0]}" ${a.voice===v[0]?'selected':''}>${v[1]}</option>`).join("")}</select></div>
+        <div class="field"><label class="lab">Phone number <span class="sub">Twilio or forwarded line</span></label><input class="inp" id="a-num" placeholder="(817) 555-0100" value="${esc(a.number)}"></div>
+      </div>
+      ${a.number ? `
+      <div class="field" id="change-row" style="${isActive?'':'display:none'}">
+        <button class="btn sm" id="change-toggle">Change number</button>
+        <div id="change-box" style="display:none;margin-top:10px">
+          <label class="lab">New area code <span class="sub">Releases ${esc(a.number)} and sets up a new local number</span></label>
+          <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+            <input class="inp" id="chg-area" placeholder="Area code, e.g. 214" maxlength="3" inputmode="numeric" style="max-width:200px">
+            <button class="btn" id="chg-go">Replace number</button>
+            <span id="chg-msg" style="font-size:12.5px;color:var(--muted)"></span>
+          </div>
+        </div>
+      </div>` : (isActive ? `
+      <div class="field" id="provision-row">
+        <label class="lab">Get a phone number <span class="sub">We'll set up a local number and connect it to ${esc(a.name||DEFAULT_NAME)}</span></label>
+        <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+          <input class="inp" id="prov-area" placeholder="Area code, e.g. 817" maxlength="3" inputmode="numeric" style="max-width:200px">
+          <button class="btn" id="prov-go">Get a local number</button>
+          <span id="prov-msg" style="font-size:12.5px;color:var(--muted)"></span>
+        </div>
+      </div>` : `
+      <div class="field"><p style="font-size:12.5px;color:var(--muted-2)">A local phone number is included once your plan is active.</p></div>`)}
+      <div class="field"><label class="lab">Languages</label><div class="chips" id="a-langs">${LANGS.map(l=>`<button class="chip" data-l="${l[0]}" aria-pressed="${a.languages.includes(l[0])}">${l[1]}</button>`).join("")}</div><p style="font-size:11.5px;color:var(--muted-2);margin-top:8px">${esc(aName())} detects and replies in the caller's language. Spoken quality depends on the voice selected in Retell — test a language on a real call before relying on it.</p></div>
+    </div>
+    <div class="card">
+      <div class="card-h"><h2>Behavior</h2></div>
+      <div class="field"><label class="switch"><input type="checkbox" id="a-rec" ${a.recordingNotice?'checked':''}><span class="track"></span><span class="txt">Recording notice<small>Says the call may be recorded. Leave on unless your lawyer clears otherwise.</small></span></label></div>
+      <div class="field"><label class="switch"><input type="checkbox" id="a-active" ${a.active?'checked':''}><span class="track"></span><span class="txt">Answering calls<small>Turn off to pause; calls fall back to your line.</small></span></label></div>
+      <div style="margin-top:18px"><button class="btn primary" id="a-save">Save assistant</button></div>
+    </div>
+  </div>`;
+  const sync=()=>{
+    a.name=$("#a-name").value; a.greetingLabel=$("#a-label").value; a.voice=$("#a-voice").value; a.number=$("#a-num").value;
+    a.recordingNotice=$("#a-rec").checked; a.active=$("#a-active").checked;
+    $("#say").innerHTML=greetingText();
+    const p=$("#prev"); p.classList.toggle("off",!a.active);
+    p.querySelector(".live").innerHTML=`<span class="dot"></span>${a.active? esc(a.name||DEFAULT_NAME)+' is live':'Paused'}`;
+    const nm=a.name||DEFAULT_NAME;
+    const bn=$("#brand-name"); if(bn) bn.textContent=nm;
+    const rl=$("#run-label"); if(rl) rl.textContent=`Running ${nm}`;
+    document.title=`${nm} — Dashboard`;
+    const ld=$("#assist-lede"); if(ld) ld.textContent=`Configure how ${nm} introduces herself and answers. The name you set here flows across your whole dashboard and is what callers hear. On the Enterprise plan each person can have their own.`;
+  };
+  ["a-name","a-label","a-num"].forEach(id=>$("#"+id).oninput=sync);
+  ["a-voice","a-rec","a-active"].forEach(id=>$("#"+id).onchange=sync);
+  $("#a-langs").querySelectorAll(".chip").forEach(c=>c.onclick=()=>{ const l=c.dataset.l, on=c.getAttribute("aria-pressed")==="true"; if(on){a.languages=a.languages.filter(x=>x!==l);}else{a.languages.push(l);} c.setAttribute("aria-pressed",String(!on)); });
+  $("#a-save").onclick=saveAssistant;
+  async function runProvision(area, replace, btn, msg){
+    if(area.length!==3){ msg.style.color="var(--danger)"; msg.textContent="Enter a 3-digit area code."; return; }
+    btn.disabled=true; const o=btn.textContent; btn.textContent=replace?"Replacing…":"Getting a number…"; msg.style.color="var(--muted)"; msg.textContent="";
+    try{
+      const { data, error }=await db.functions.invoke("provision-phone-number",{ body:{ area_code:area, replace } });
+      if(error || !data || !data.ok){ msg.style.color="var(--danger)"; msg.textContent=(data&&data.error)||(error&&error.message)||"Could not get a number."; btn.disabled=false; btn.textContent=o; return; }
+      a.number=data.phone_number;
+      const ni=$("#a-num"); if(ni) ni.value=data.phone_number;
+      msg.style.color="var(--ok)"; msg.textContent=(replace?"New number: ":"Connected: ")+(data.phone_number_pretty||data.phone_number);
+      setTimeout(()=>pageAssistant(), 1500);
+    }catch(e){ msg.style.color="var(--danger)"; msg.textContent="Could not get a number."; btn.disabled=false; btn.textContent=o; }
+  }
+  const pg=$("#prov-go");
+  if(pg) pg.onclick=()=>runProvision(($("#prov-area").value||"").replace(/\D/g,""), false, pg, $("#prov-msg"));
+  const ct=$("#change-toggle");
+  if(ct) ct.onclick=()=>{ const box=$("#change-box"); if(box) box.style.display="block"; ct.style.display="none"; };
+  const cg=$("#chg-go");
+  if(cg) cg.onclick=()=>{
+    const area=($("#chg-area").value||"").replace(/\D/g,"");
+    if(!confirm("This releases your current number ("+a.number+"). Anyone who calls it will no longer reach you. Continue?")) return;
+    runProvision(area, true, cg, $("#chg-msg"));
+  };
+  const pb=$("#play-btn");
+  if(!('speechSynthesis' in window)){ pb.disabled=true; pb.querySelector(".lbl").textContent="Audio not supported"; }
+  else pb.onclick=()=>{ sync(); speakGreeting(pb); };
+}
+async function saveAssistant(){
+  const a=state.assistant, btn=$("#a-save"); btn.disabled=true; const o=btn.textContent; btn.textContent="Saving…";
+  const routing=Object.assign({}, a.routing||{}, {recording_notice:a.recordingNotice});
+  const row={ assistant_name:a.name, greeting_label:a.greetingLabel, voice_id:a.voice, languages:a.languages, twilio_number:a.number||null, is_active:a.active, routing };
+  let error;
+  if(state.assistantId){ ({error}=await db.from('assistants').update(row).eq('id',state.assistantId)); }
+  else { row.account_id=state.account.id; const r=await db.from('assistants').insert(row).select().single(); error=r.error; if(r.data) state.assistantId=r.data.id; }
+  if(!error) a.routing=routing;
+  btn.disabled=false; btn.textContent=error?"Error — retry":"Saved ✓"; setTimeout(()=>btn.textContent=o,1300);
+}
+
+/* ===================== SCHEDULE PAGE ===================== */
+function pageSchedule(){
+  $("#page").innerHTML=`
+  <div class="page">
+    <div class="page-head"><h1>Schedule</h1><p style="margin-bottom:6px">Two separate schedules, both different from your general hours of operation, which live in Knowledge.</p><p><b>Live transfer hours</b> are when a person is available, so ${esc(aName())} can transfer a live call to someone. <b>Booking hours</b> are when ${esc(aName())} can place an appointment, enforced on every booking.</p></div>
+    <div class="card">
+      <div class="card-h"><h2>Weekly hours</h2><button class="btn sm" id="hours-save">Save hours</button></div>
+      <div class="col-h"><span></span><span>Live transfer hours</span><span>Booking hours</span></div>
+      ${state.schedule.map((d,i)=>`<div class="sched-row"><span class="day">${DAYS[i].slice(0,3)}</span>${winHTML(i,"working",d.working)}${winHTML(i,"bookable",d.bookable)}</div>`).join("")}
+    </div>
+    <div class="card">
+      <div class="card-h"><h2>Time off &amp; Do-Not-Disturb</h2><span class="hint">${esc(aName())} still answers — just won't transfer or book into these</span></div>
+      <div id="blocks">${state.blocks.map(blockHTML).join("")||emptyBlocks()}</div>
+      <div class="grid-2" style="margin-top:14px;align-items:end">
+        <div class="field" style="margin:0"><label class="lab">Type</label><select class="inp" id="b-type"><option value="vacation">Vacation</option><option value="holiday">Holiday</option><option value="dnd">Do Not Disturb</option></select></div>
+        <div class="field" style="margin:0"><label class="lab">Label</label><input class="inp" id="b-reason" placeholder="e.g. Out of town"></div>
+      </div>
+      <div class="grid-2" style="margin-top:12px;align-items:end">
+        <div class="field" style="margin:0"><label class="lab">From</label><input class="inp" type="date" id="b-start"></div>
+        <div class="field" style="margin:0"><label class="lab">To</label><input class="inp" type="date" id="b-end"></div>
+      </div>
+      <div style="margin-top:14px"><button class="btn" id="b-add">+ Add block</button></div>
+    </div>
+  </div>`;
+  state.schedule.forEach((d,i)=>["working","bookable"].forEach(kind=>{
+    $(`#sw-${kind}-${i}`).onchange=e=>{ d[kind].on=e.target.checked; $(`#win-${kind}-${i}`).classList.toggle("off",!e.target.checked); };
+    $(`#st-${kind}-${i}`).onchange=e=>d[kind].start=e.target.value;
+    $(`#et-${kind}-${i}`).onchange=e=>d[kind].end=e.target.value;
+  }));
+  $("#hours-save").onclick=saveHours;
+  $("#b-add").onclick=addBlock;
+  bindBlockRemovers();
+}
+function winHTML(i,kind,w){ return `<div class="win ${w.on?'':'off'}" id="win-${kind}-${i}"><label class="mini-switch"><input type="checkbox" id="sw-${kind}-${i}" ${w.on?'checked':''}><span class="t"></span></label><span class="times"><input type="time" id="st-${kind}-${i}" value="${w.start}"> – <input type="time" id="et-${kind}-${i}" value="${w.end}"></span></div>`; }
+function blockHTML(b,idx){ const fmt=d=>d?new Date(d+"T00:00").toLocaleDateString(undefined,{month:"short",day:"numeric"}):""; const range=b.start===b.end?fmt(b.start):`${fmt(b.start)} – ${fmt(b.end)}`; return `<div class="block-item"><span class="bt ${b.type}">${b.type==="dnd"?"DND":b.type}</span><span class="bx">${esc(b.reason||({dnd:"Do Not Disturb",vacation:"Time off",holiday:"Holiday"}[b.type]))}<small>${range}</small></span><button class="rm" data-id="${b.id||''}" data-i="${idx}" title="Remove">✕</button></div>`; }
+function emptyBlocks(){ return `<div class="empty" style="padding:24px">${I.cal}<div>No time off scheduled.</div></div>`; }
+function bindBlockRemovers(){ document.querySelectorAll("#blocks .rm").forEach(b=>b.onclick=()=>removeBlock(b.dataset.id, +b.dataset.i)); }
+
+async function saveHours(){
+  const btn=$("#hours-save"); btn.disabled=true; const o=btn.textContent; btn.textContent="Saving…";
+  await db.from('availability_rules').delete().eq('user_id', state.owner.id);
+  const rows=[];
+  state.schedule.forEach((d,i)=>{
+    if(d.working.on) rows.push({account_id:state.account.id,user_id:state.owner.id,rule_type:'working',day_of_week:i,start_time:d.working.start,end_time:d.working.end});
+    if(d.bookable.on) rows.push({account_id:state.account.id,user_id:state.owner.id,rule_type:'bookable',appointment_type_id:null,day_of_week:i,start_time:d.bookable.start,end_time:d.bookable.end});
+  });
+  let error; if(rows.length){ ({error}=await db.from('availability_rules').insert(rows)); }
+  btn.disabled=false; btn.textContent=error?"Error — retry":"Saved ✓"; setTimeout(()=>btn.textContent=o,1300);
+}
+async function addBlock(){
+  const s=$("#b-start").value; if(!s){ const b=$("#b-add"); const o=b.textContent; b.textContent="Pick a date"; setTimeout(()=>b.textContent=o,1100); return; }
+  const en=$("#b-end").value||s;
+  const row={ account_id:state.account.id, user_id:state.owner.id, block_type:$("#b-type").value, starts_at:`${s}T00:00:00`, ends_at:`${en}T23:59:59`, reason:$("#b-reason").value||null };
+  const { data, error } = await db.from('calendar_blocks').insert(row).select().single();
+  if(!error && data){ state.blocks.push({id:data.id,type:data.block_type,start:data.starts_at.slice(0,10),end:data.ends_at.slice(0,10),reason:data.reason||""}); pageSchedule(); }
+}
+async function removeBlock(id,idx){
+  if(id){ await db.from('calendar_blocks').delete().eq('id',id); }
+  state.blocks.splice(idx,1); pageSchedule();
+}
+
+/* ===================== APPOINTMENT TYPES PAGE ===================== */
+function pageTypes(){
+  $("#page").innerHTML=`
+  <div class="page">
+    <div class="page-head"><h1>Appointment types</h1><p>Each type carries its own length and buffers. In-person types get travel time reserved automatically when ${esc(aName())} books them.</p></div>
+    <div class="card"><div class="card-h"><h2>Your types</h2></div><div id="types">${state.types.map(typeHTML).join("")||`<div class="empty">${I.tag}<div>No appointment types yet.</div></div>`}</div></div>
+    <div class="card">
+      <div class="card-h"><h2>Add a type</h2></div>
+      <div class="grid-2">
+        <div class="field"><label class="lab">Name</label><input class="inp" id="t-name" placeholder="e.g. Estimate visit"></div>
+        <div class="field"><label class="lab">Mode</label><select class="inp" id="t-mode"><option value="phone">Phone</option><option value="virtual">Virtual</option><option value="in_person">In person</option></select></div>
+      </div>
+      <div class="grid-2">
+        <div class="field"><label class="lab">Length (min)</label><input class="inp" type="number" id="t-dur" value="30" min="5" step="5"></div>
+        <div class="field"><label class="lab">Buffer after (min)</label><input class="inp" type="number" id="t-after" value="0" min="0" step="5"></div>
+      </div>
+      <div class="field"><label class="switch"><input type="checkbox" id="t-travel"><span class="track"></span><span class="txt">Reserve travel time<small>Auto-on for in-person — drive time is checked before booking.</small></span></label></div>
+      <div style="margin-top:8px"><button class="btn primary" id="t-add">+ Add type</button></div>
+    </div>
+  </div>`;
+  const modeSel=$("#t-mode"), travel=$("#t-travel");
+  modeSel.onchange=()=>{ travel.checked = modeSel.value==="in_person"; };
+  $("#t-add").onclick=addType;
+  bindTypeRemovers();
+}
+function typeHTML(t){ const lbl={phone:"Phone",virtual:"Virtual",in_person:"In person"}[t.mode]; const icon={phone:I.phone,virtual:I.vid,in_person:I.pin}[t.mode]; return `<div class="type-item"><span class="ic ${t.mode}">${icon}</span><span class="nm">${esc(t.name)}<small>${t.dur} min${t.after?` · ${t.after} min buffer`:""}${t.travel?" · travel reserved":""}</small></span><span class="mode">${lbl}</span><button class="rm" data-id="${t.id||''}" title="Remove" style="margin-left:12px;background:none;border:none;color:var(--muted-2);font-size:13px">✕</button></div>`; }
+function bindTypeRemovers(){ document.querySelectorAll("#types .rm").forEach(b=>b.onclick=()=>removeType(b.dataset.id)); }
+async function addType(){
+  const name=$("#t-name").value.trim(); if(!name){ const b=$("#t-add"); const o=b.textContent; b.textContent="Name it first"; setTimeout(()=>b.textContent=o,1100); return; }
+  const row={ account_id:state.account.id, name, mode:$("#t-mode").value, default_duration_min:+$("#t-dur").value||30, buffer_before_min:0, buffer_after_min:+$("#t-after").value||0, requires_travel:$("#t-travel").checked };
+  const { data, error } = await db.from('appointment_types').insert(row).select().single();
+  if(!error && data){ state.types.push({id:data.id,name:data.name,mode:data.mode,dur:data.default_duration_min,before:data.buffer_before_min,after:data.buffer_after_min,travel:data.requires_travel}); pageTypes(); }
+}
+async function removeType(id){ if(id){ await db.from('appointment_types').delete().eq('id',id); } state.types=state.types.filter(t=>t.id!==id); pageTypes(); }
+
+/* ===================== MESSAGES PAGE ===================== */
+async function loadMessages(){
+  const { data } = await db.from('messages').select('*').eq('account_id', state.account.id).order('created_at',{ascending:false}).limit(200);
+  state.messages = (data||[]).map(m=>({ id:m.id, body:m.body||"", type:m.type, status:m.status, at:m.created_at, language:m.language||null }));
+}
+function unreadCount(){ return state.messages.filter(m=>m.status==='new').length; }
+function parseMsg(body){
+  const m = /^Message from (.+?)(?: \(callback: (.+?)\))?: ([\s\S]*)$/.exec(body||"");
+  if(m) return { name:m[1], number:m[2]||"", text:m[3] };
+  return { name:"", number:"", text:body||"" };
+}
+function fmtWhen(iso){
+  const d=new Date(iso), now=new Date();
+  const t=d.toLocaleTimeString(undefined,{hour:'numeric',minute:'2-digit'});
+  return d.toDateString()===now.toDateString() ? `Today ${t}` : d.toLocaleDateString(undefined,{month:'short',day:'numeric'})+` · ${t}`;
+}
+function pageMessages(){
+  const open = state.messages.filter(m=>m.status!=='resolved');
+  const done = state.messages.filter(m=>m.status==='resolved');
+  const render = list => list.map(msgHTML).join("");
+  $("#page").innerHTML=`
+  <div class="page">
+    <div class="page-head"><h1>Messages</h1><p>Calls ${esc(aName())} couldn't fully handle, saved here with a callback number. New ones are highlighted — mark them resolved once you've followed up.</p></div>
+    <div class="card">
+      <div class="card-h"><h2>To follow up${open.length?` <span style="color:var(--signal)">(${open.length})</span>`:''}</h2><button class="btn sm" id="m-refresh">Refresh</button></div>
+      <div id="m-open">${open.length?render(open):`<div class="empty">${I.inbox}<div>No messages waiting. When a caller leaves one, it shows up here.</div></div>`}</div>
+    </div>
+    ${done.length?`<div class="card"><div class="card-h"><h2>Resolved</h2><span class="hint">${done.length}</span></div><div id="m-done">${render(done)}</div></div>`:''}
+  </div>`;
+  $("#m-refresh").onclick=async()=>{ const b=$("#m-refresh"); b.disabled=true; b.textContent="…"; await loadMessages(); pageMessages(); };
+  bindMsgActions();
+}
+function langBadge(lang){ return (lang && String(lang).toLowerCase()!=='english') ? `<span class="lang-badge">${esc(lang)}</span>` : ''; }
+function msgHTML(m){
+  const p=parseMsg(m.body), isNew=m.status==='new', resolved=m.status==='resolved';
+  const tel=p.number?p.number.replace(/[^\d+]/g,''):"";
+  return `<div class="m-item ${isNew?'new':''} ${resolved?'done':''}">
+    <div class="m-top"><span class="m-who">${esc(p.name||"Caller")}${isNew?'<span class="m-new">New</span>':''}${langBadge(m.language)}</span><span class="m-when">${fmtWhen(m.at)}</span></div>
+    ${p.number?`<a class="m-num" href="tel:${esc(tel)}">${esc(p.number)}</a>`:''}
+    <div class="m-text">${esc(p.text)}</div>
+    <div class="m-actions">${resolved?`<button class="btn sm" data-act="reopen" data-id="${m.id}">Reopen</button>`:`<button class="btn sm primary" data-act="resolve" data-id="${m.id}">Mark resolved</button>`}</div>
+  </div>`;
+}
+function bindMsgActions(){
+  document.querySelectorAll('#page [data-act]').forEach(b=>b.onclick=async()=>{
+    const id=b.dataset.id, status=b.dataset.act==='resolve'?'resolved':'new';
+    b.disabled=true;
+    const { error } = await db.from('messages').update({ status }).eq('id', id);
+    if(!error){ const m=state.messages.find(x=>x.id===id); if(m) m.status=status; pageMessages(); updateNavBadge(); }
+    else { b.disabled=false; }
+  });
+}
+function updateNavBadge(){
+  const item=document.querySelector('.nav-item[data-v="messages"]'); if(!item) return;
+  let tag=item.querySelector('.tag.unread'); const n=unreadCount();
+  if(n){ if(!tag){ tag=document.createElement('span'); tag.className='tag unread'; item.appendChild(tag);} tag.textContent=n; }
+  else if(tag){ tag.remove(); }
+}
+
+/* ===================== APPOINTMENTS PAGE ===================== */
+const TZS = [
+  ["America/New_York","Eastern (New York)"],
+  ["America/Chicago","Central (Chicago)"],
+  ["America/Denver","Mountain (Denver)"],
+  ["America/Phoenix","Arizona (no DST)"],
+  ["America/Los_Angeles","Pacific (Los Angeles)"],
+  ["America/Anchorage","Alaska"],
+  ["Pacific/Honolulu","Hawaii"]
+];
+function tzLabel(tz){ const f=TZS.find(t=>t[0]===tz); return f?f[1]:tz; }
+async function loadAppointments(){
+  const { data } = await db.from('appointments').select('*').eq('account_id', state.account.id).order('starts_at',{ascending:true});
+  state.appointments = (data||[]).map(a=>({ id:a.id, title:a.title, status:a.status, mode:a.mode, start:a.starts_at, end:a.ends_at, notes:a.notes||"", language:a.language||null }));
+}
+function fmtAppt(iso, withDate=true){
+  const tz=state.account.timezone;
+  const o = withDate ? {timeZone:tz, weekday:'short', month:'short', day:'numeric', hour:'numeric', minute:'2-digit'} : {timeZone:tz, hour:'numeric', minute:'2-digit'};
+  return new Intl.DateTimeFormat('en-US', o).format(new Date(iso));
+}
+function pageAppointments(){
+  const now=Date.now();
+  const active = state.appointments.filter(a=>a.status!=='cancelled');
+  const upcoming = active.filter(a=> new Date(a.end||a.start).getTime()>=now);
+  const past = active.filter(a=> new Date(a.end||a.start).getTime()<now);
+  const cancelled = state.appointments.filter(a=>a.status==='cancelled');
+  const card = list => list.map(apptHTML).join("");
+  $("#page").innerHTML=`
+  <div class="page">
+    <div class="page-head"><h1>Appointments</h1><p>Consultations ${esc(aName())} has booked. Times shown in ${esc(tzLabel(state.account.timezone))} — your dashboard time zone.</p></div>
+    <div class="card"><div class="card-h"><h2>Upcoming${upcoming.length?` (${upcoming.length})`:''}</h2><button class="btn sm" id="ap-refresh">Refresh</button></div>
+      <div>${upcoming.length?card(upcoming):`<div class="empty">${I.appt}<div>No upcoming appointments. When ${esc(aName())} books one, it shows here.</div></div>`}</div></div>
+    ${past.length?`<div class="card"><div class="card-h"><h2>Past</h2><span class="hint">${past.length}</span></div><div>${card(past)}</div></div>`:''}
+    ${cancelled.length?`<div class="card"><div class="card-h"><h2>Cancelled</h2><span class="hint">${cancelled.length}</span></div><div>${card(cancelled)}</div></div>`:''}
+  </div>`;
+  $("#ap-refresh").onclick=async()=>{ const b=$("#ap-refresh"); b.disabled=true; b.textContent="…"; await loadAppointments(); pageAppointments(); };
+  bindApptActions();
+}
+function apptHTML(a){
+  const cancelled=a.status==='cancelled';
+  return `<div class="m-item ${cancelled?'done':''}">
+    <div class="m-top"><span class="m-who">${esc(a.title||'Consultation')}${langBadge(a.language)}</span><span class="m-when">${esc(fmtAppt(a.start))}${a.end?` – ${esc(fmtAppt(a.end,false))}`:''}</span></div>
+    ${a.notes?`<div class="m-text">${esc(a.notes)}</div>`:''}
+    <div class="m-actions"><span class="appt-status s-${a.status}">${esc(a.status)}</span>${cancelled?'':`<button class="btn sm" data-cancel="${a.id}" style="margin-left:10px">Cancel</button>`}</div>
+  </div>`;
+}
+function bindApptActions(){
+  document.querySelectorAll('#page [data-cancel]').forEach(b=>b.onclick=async()=>{
+    if(!confirm('Cancel this appointment?')) return;
+    const id=b.dataset.cancel; b.disabled=true;
+    const { error } = await db.from('appointments').update({status:'cancelled'}).eq('id',id);
+    if(!error){ const a=state.appointments.find(x=>x.id===id); if(a) a.status='cancelled'; pageAppointments(); }
+    else b.disabled=false;
+  });
+}
+async function saveTimezone(){
+  const sel=$("#tz-select"); if(!sel) return;
+  const tz=sel.value, btn=$("#tz-save"); btn.disabled=true; const o=btn.textContent; btn.textContent="Saving…";
+  const settings = Object.assign({}, state.account.settings||{}, {timezone:tz});
+  const { error } = await db.from('accounts').update({settings}).eq('id',state.account.id);
+  if(!error){ state.account.settings=settings; state.account.timezone=tz; }
+  btn.disabled=false; btn.textContent=error?"Error — retry":"Saved ✓"; setTimeout(()=>btn.textContent=o,1300);
+}
+async function saveTransfer(){
+  const msg=$("#xfer-msg"), btn=$("#xfer-save"), numEl=$("#xfer-num"), enEl=$("#xfer-on");
+  if(!state.assistantId){ if(msg){ msg.style.color='var(--danger)'; msg.textContent='Set up your assistant first, then add a transfer number.'; } return; }
+  const enabled=enEl.checked;
+  const num=(numEl.value||"").trim().replace(/[\s()\-.]/g,"");
+  msg.style.color='var(--muted)'; msg.textContent='';
+  if(enabled || num){
+    if(!/^\+[1-9]\d{1,14}$/.test(num)){ msg.style.color='var(--danger)'; msg.textContent='Enter the number in full international format, like +18175551234.'; return; }
+  }
+  const routing=Object.assign({}, state.assistant.routing||{});
+  routing.transfer=Object.assign({}, routing.transfer||{}, {enabled, number:num});
+  btn.disabled=true; const o=btn.textContent; btn.textContent="Saving…";
+  const { error } = await db.from('assistants').update({routing}).eq('id',state.assistantId);
+  if(!error){ state.assistant.routing=routing; numEl.value=num; }
+  btn.disabled=false; btn.textContent=error?"Error — retry":"Saved ✓"; setTimeout(()=>btn.textContent=o,1300);
+}
+
+/* ---- Transfer directory (Pro) ---- */
+function readDirDom(){
+  const rows=[...document.querySelectorAll('#dir-rows .dir-row')];
+  const picked=$("#dir-general-select");
+  const pickedIdx = picked ? parseInt(picked.value,10) : -1;
+  state._dir=rows.map((r,i)=>({
+    name:r.querySelector('.dir-name').value.trim(),
+    phone:r.querySelector('.dir-phone').value.trim(),
+    email:r.querySelector('.dir-email').value.trim(),
+    general:(i===pickedIdx),
+    order:i+1
+  }));
+}
+function renderDirRows(){
+  const box=$("#dir-rows"); if(!box) return;
+  const rows=state._dir||[];
+  const cols='grid-template-columns:1.3fr 1.1fr 1.4fr 30px';
+  const head=`<div style="display:grid;${cols};gap:8px;font-size:11px;color:var(--muted-2);margin-bottom:6px"><span>Name</span><span>Phone</span><span>Email</span><span></span></div>`;
+  const bodyRows = rows.length ? rows.map((p,i)=>`<div class="dir-row" data-i="${i}" style="display:grid;${cols};gap:8px;align-items:center;margin-bottom:8px">
+    <input class="inp dir-name" placeholder="Name" value="${esc(p.name||'')}">
+    <input class="inp dir-phone" placeholder="+18175551234" value="${esc(p.phone||'')}">
+    <input class="inp dir-email" placeholder="name@company.com" value="${esc(p.email||'')}">
+    <button class="btn sm dir-del" data-i="${i}" title="Remove">✕</button>
+  </div>`).join("") : `<p style="font-size:12.5px;color:var(--muted-2);margin:0 0 6px">No one added yet. Click Add person to build your directory.</p>`;
+
+  let generalIdx = rows.findIndex(p=>p.general);
+  if(generalIdx<0 && rows.length) generalIdx=0;
+  const selectHtml = rows.length ? `
+    <div style="margin-bottom:14px">
+      <label class="lab" style="display:block;margin-bottom:6px">When a caller doesn't ask for anyone by name, send the call to</label>
+      <select class="inp" id="dir-general-select" style="max-width:340px">
+        ${rows.map((p,i)=>`<option value="${i}" ${i===generalIdx?'selected':''}>${esc(p.name||'(unnamed person '+(i+1)+')')}</option>`).join("")}
+      </select>
+    </div>` : "";
+
+  box.innerHTML=selectHtml+head+bodyRows;
+  box.querySelectorAll('.dir-del').forEach(b=>b.onclick=()=>{ readDirDom(); state._dir.splice(+b.dataset.i,1); renderDirRows(); });
+  const sel=$("#dir-general-select");
+  if(sel) sel.onchange=()=>{ readDirDom(); };
+}
+function addDirRow(){ readDirDom(); state._dir=state._dir||[]; state._dir.push({name:'',phone:'',email:'',general:(state._dir.length===0),order:state._dir.length+1}); renderDirRows(); }
+async function saveDirectory(){
+  readDirDom();
+  const msg=$("#dir-msg"), btn=$("#dir-save");
+  if(!state.assistantId){ if(msg){msg.style.color='var(--danger)';msg.textContent='Set up your assistant first.';} return; }
+  msg.style.color='var(--muted)'; msg.textContent='';
+  const clean=[];
+  for(const p of (state._dir||[])){
+    if(!p.name && !p.phone && !p.email) continue;
+    if(!p.name){ msg.style.color='var(--danger)'; msg.textContent='Every person needs a name.'; return; }
+    const phone=(p.phone||'').replace(/[\s()\-.]/g,'');
+    if(!/^\+[1-9]\d{1,14}$/.test(phone)){ msg.style.color='var(--danger)'; msg.textContent=`Enter ${p.name}'s phone in full format, like +18175551234.`; return; }
+    if(p.email && !/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(p.email)){ msg.style.color='var(--danger)'; msg.textContent=`Check ${p.name}'s email address.`; return; }
+    clean.push({name:p.name.trim(), phone, email:(p.email||'').trim(), general:!!p.general, order:p.order||(clean.length+1)});
+  }
+  const routing=Object.assign({}, state.assistant.routing||{});
+  const enOn=document.getElementById('dir-xfer-on');
+  if(enOn) routing.transfer=Object.assign({}, routing.transfer||{}, {enabled:enOn.checked});
+  routing.directory=clean;
+  btn.disabled=true; const o=btn.textContent; btn.textContent='Saving…';
+  const { error } = await db.from('assistants').update({routing}).eq('id',state.assistantId);
+  if(!error){ state.assistant.routing=routing; state._dir=clean.map(x=>Object.assign({},x)); renderDirRows(); msg.style.color='var(--muted)'; msg.textContent=clean.length+' saved.'; }
+  else { msg.style.color='var(--danger)'; msg.textContent='Could not save. Try again.'; }
+  btn.disabled=false; btn.textContent=error?"Error — retry":"Saved ✓"; setTimeout(()=>btn.textContent=o,1300);
+}
+function pageSettings(){
+  const ac=state.account;
+  const xfer=(state.assistant&&state.assistant.routing&&state.assistant.routing.transfer)||{};
+  const isPro=((ac.plan||'')==='pro');
+  $("#page").innerHTML=`
+  <div class="page">
+    <div class="page-head"><h1>Settings</h1><p>Account-level settings for ${esc(ac.company)}. These apply across ${esc(aName())} and your whole dashboard.</p></div>
+
+    <div class="card"><div class="card-h"><h2>Business</h2><button class="btn sm primary" id="set-biz-save">Save</button></div>
+      <div class="grid-2">
+        <div class="field"><label class="lab">Business name</label><input class="inp" id="set-company" value="${esc(ac.company||'')}"></div>
+        <div class="field"><label class="lab">Industry</label><input class="inp" id="set-industry" value="${esc(ac.industry||'')}" placeholder="e.g. Software / consulting"></div>
+      </div>
+      <p style="font-size:12px;color:var(--muted-2);margin-top:2px">The business name is what ${esc(aName())} says she's answering for and shows across your dashboard.</p>
+    </div>
+
+    <div class="card"><div class="card-h"><h2>Time zone</h2><button class="btn sm" id="tz-save">Save</button></div>
+      <p style="font-size:13px;color:var(--muted);margin-bottom:12px">${esc(aName())} books appointments and tells callers times in this zone. Set it to where your business operates.</p>
+      <select class="inp" id="tz-select" style="max-width:340px">${TZS.map(t=>`<option value="${t[0]}" ${ac.timezone===t[0]?'selected':''}>${t[1]}</option>`).join("")}</select>
+    </div>
+
+    ${!isPro ? `
+    <div class="card"><div class="card-h"><h2>Call transfer</h2><button class="btn sm" id="xfer-save">Save</button></div>
+      <p style="font-size:13px;color:var(--muted);margin-bottom:12px">When a caller asks for a person during your live transfer hours, set on the Schedule page, ${esc(aName())} can transfer the live call to this number. Use full international format, for example +18175551234.</p>
+      <label style="display:flex;align-items:center;gap:10px;margin-bottom:14px;cursor:pointer;font-size:13.5px;color:var(--ink)"><input type="checkbox" id="xfer-on" ${xfer.enabled?'checked':''}><span>Allow ${esc(aName())} to transfer live calls</span></label>
+      <div class="field" style="max-width:340px;margin:0"><label class="lab">Transfer number</label><input class="inp" id="xfer-num" placeholder="+18175551234" value="${esc(xfer.number||'')}"></div>
+      <div id="xfer-msg" style="font-size:12.5px;color:var(--muted);margin-top:8px"></div>
+    </div>` : ``}
+
+    ${isPro ? `
+    <div class="card"><div class="card-h"><h2>Transfer directory <span style="background:#0f2740;color:#fff;padding:2px 8px;border-radius:10px;font-size:11px;font-weight:600">Pro</span></h2><button class="btn sm" id="dir-save">Save</button></div>
+      <p style="font-size:13px;color:var(--muted);margin-bottom:12px">People ${esc(aName())} can transfer to during your live transfer hours. If a caller asks for someone by name, she connects that person directly. Otherwise she sends the call to whoever you pick below. If no one answers, she asks the caller if they'd like to leave a message, and every message is emailed to the right person, with your general inbox copied.</p>
+      <label style="display:flex;align-items:center;gap:10px;margin-bottom:14px;cursor:pointer;font-size:13.5px;color:var(--ink)"><input type="checkbox" id="dir-xfer-on" ${xfer.enabled?'checked':''}><span>Allow ${esc(aName())} to transfer live calls</span></label>
+      <div id="dir-rows"></div>
+      <button class="btn sm" id="dir-add" style="margin-top:6px">+ Add person</button>
+      <div id="dir-msg" style="font-size:12.5px;color:var(--muted);margin-top:8px"></div>
+    </div>` : `
+    <div class="card" style="opacity:.9"><div class="card-h"><h2>Transfer directory <span style="background:#64748b;color:#fff;padding:2px 8px;border-radius:10px;font-size:11px;font-weight:600">Pro</span></h2></div>
+      <p style="font-size:13px;color:var(--muted)">Route callers to multiple people by name, and cascade through your team in order until someone answers. Available on the Pro plan. You are on ${esc(ac.plan||'starter')}.</p>
+    </div>`}
+
+    <div class="card"><div class="card-h"><h2>Calendar</h2><span class="hint">Two-way sync</span></div>
+      <div id="cal-card-body"></div>
+    </div>
+
+    <div class="card"><div class="card-h"><h2>Login &amp; password</h2></div>
+      <div class="set-rows" style="margin-bottom:14px">
+        <div class="set-row"><span class="k">Your login</span><span class="v">${esc(state.owner.email)}</span></div>
+      </div>
+      <div class="grid-2">
+        <div class="field"><label class="lab">New password</label><input class="inp" id="set-pw1" type="password" placeholder="At least 8 characters" autocomplete="new-password"></div>
+        <div class="field"><label class="lab">Confirm new password</label><input class="inp" id="set-pw2" type="password" placeholder="Re-enter new password" autocomplete="new-password"></div>
+      </div>
+      <div style="display:flex;align-items:center;gap:12px;margin-top:4px">
+        <button class="btn sm primary" id="set-pw-save">Update password</button>
+        <span id="set-pw-msg" style="font-size:12.5px;color:var(--muted)"></span>
+      </div>
+    </div>
+
+    <div class="card"><div class="card-h"><h2>Account</h2><span class="hint">Read-only</span></div>
+      <div class="set-rows">
+        <div class="set-row"><span class="k">Plan</span><span class="v">${esc(ac.plan||'starter')}</span></div>
+        <div class="set-row"><span class="k">Status</span><span class="v">${esc(ac.status||'trial')}</span></div>
+        <div class="set-row"><span class="k">Owner</span><span class="v">${esc(state.owner.name)} · ${esc(state.owner.email)}</span></div>
+        <div class="set-row"><span class="k">Assistant number</span><span class="v">${esc(state.assistant.number||'Not set')}</span></div>
+      </div>
+    </div>
+  </div>`;
+  $("#set-biz-save").onclick=saveBusiness;
+  $("#tz-save").onclick=saveTimezone;
+  { const xs=$("#xfer-save"); if(xs) xs.onclick=saveTransfer; }
+  if(isPro){
+    state._dir = (state.assistant.routing&&Array.isArray(state.assistant.routing.directory)) ? JSON.parse(JSON.stringify(state.assistant.routing.directory)) : [];
+    renderDirRows();
+    $("#dir-add").onclick=addDirRow;
+    $("#dir-save").onclick=saveDirectory;
+  }
+  $("#set-pw-save").onclick=savePassword;
+  paintCalendarCard();
+}
+async function savePassword(){
+  const p1=$("#set-pw1").value, p2=$("#set-pw2").value, msg=$("#set-pw-msg"), btn=$("#set-pw-save");
+  msg.style.color='var(--muted)';
+  if(p1.length<8){ msg.style.color='var(--danger)'; msg.textContent='Password must be at least 8 characters.'; return; }
+  if(p1!==p2){ msg.style.color='var(--danger)'; msg.textContent='Passwords do not match.'; return; }
+  btn.disabled=true; const o=btn.textContent; btn.textContent='Updating…';
+  const { error } = await db.auth.updateUser({ password: p1 });
+  btn.disabled=false; btn.textContent=o;
+  if(error){ msg.style.color='var(--danger)'; msg.textContent=error.message||'Could not update password.'; }
+  else { msg.style.color='var(--ok)'; msg.textContent='Password updated.'; $("#set-pw1").value=''; $("#set-pw2").value=''; }
+}
+async function saveBusiness(){
+  const btn=$("#set-biz-save"); btn.disabled=true; const o=btn.textContent; btn.textContent="Saving…";
+  const name=$("#set-company").value.trim()||state.account.company;
+  const industry=$("#set-industry").value.trim()||null;
+  const { error } = await db.from('accounts').update({ name, industry }).eq('id', state.account.id);
+  if(!error){ state.account.company=name; state.account.industry=industry; }
+  btn.disabled=false; btn.textContent=error?"Error — retry":"Saved ✓";
+  setTimeout(()=>{ if(error){ btn.textContent=o; } else { renderApp(); } }, 900);
+}
+
+/* ===================== KNOWLEDGE PAGE ===================== */
+async function loadKnowledge(){
+  const { data } = await db.from('knowledge_entries').select('id,title,category,content,source,updated_at').neq('source','document').order('updated_at',{ascending:false});
+  state.knowledge = data || [];
+}
+async function loadDocuments(){
+  const { data: docs } = await db.from('documents').select('id,filename,doc_type,created_at').order('created_at',{ascending:false});
+  state.documents = docs || [];
+  const { data: chunks } = await db.from('knowledge_entries').select('id,document_id,title,content,approved').eq('source','document');
+  const stats={}, pass={};
+  (chunks||[]).forEach(c=>{ if(!c.document_id) return;
+    const s=stats[c.document_id]||(stats[c.document_id]={total:0,approved:0}); s.total++; if(c.approved) s.approved++;
+    (pass[c.document_id]||(pass[c.document_id]=[])).push(c);
+  });
+  state.docStats=stats; state.docPassages=pass;
+  if(!state.docOpen) state.docOpen=new Set();
+}
+function pageKnowledge(){
+  state.kbEdit=null;
+  $("#page").innerHTML=`
+  <div class="page">
+    <div class="page-head"><h1>Knowledge</h1><p>Teach ${esc(aName())} about your business. She uses this to answer callers' questions — hours, services, pricing, policies, directions. If she doesn't know something, she takes a message instead of guessing.</p></div>
+    <div class="card">
+      <div class="card-h"><h2 id="kb-form-title">Add knowledge</h2><span class="hint">Donna learns it on save</span></div>
+      <div class="grid-2">
+        <div class="field"><label class="lab">Title <span class="sub">optional</span></label><input class="inp" id="kb-title" placeholder="e.g. Business hours"></div>
+        <div class="field"><label class="lab">Category <span class="sub">optional</span></label><input class="inp" id="kb-cat" placeholder="e.g. Hours, Services, Pricing"></div>
+      </div>
+      <div class="field"><label class="lab">What should ${esc(aName())} know?</label><textarea class="inp" id="kb-content" rows="4" placeholder="e.g. We're open Monday through Friday, 8am to 5pm, and closed weekends and major holidays."></textarea></div>
+      <div style="display:flex;align-items:center;gap:12px">
+        <button class="btn primary" id="kb-save">Save</button>
+        <button class="btn" id="kb-cancel" style="display:none">Cancel</button>
+        <span id="kb-msg" style="font-size:12.5px;color:var(--muted)"></span>
+      </div>
+    </div>
+    <div class="card">
+      <div class="card-h"><h2>What ${esc(aName())} knows</h2><button class="btn sm" id="kb-refresh">Refresh</button></div>
+      <div id="kb-list"><div class="empty">Loading…</div></div>
+    </div>
+    <div class="card">
+      <div class="card-h"><h2>Import from your website</h2><span class="hint">fastest way to start</span></div>
+      <p style="font-size:12.5px;color:var(--muted);margin-bottom:12px">Got a website? Paste it and ${esc(aName())} reads your main pages (services, about, contact, pricing) and turns them into knowledge for you to review. Skip this if there's no site.</p>
+      <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap">
+        <input class="inp" id="kb-url" placeholder="yourbusiness.com" style="max-width:280px">
+        <button class="btn primary" id="kb-url-go">Import</button>
+        <span id="kb-url-msg" style="font-size:12.5px;color:var(--muted)"></span>
+      </div>
+    </div>
+    <div class="card">
+      <div class="card-h"><h2>Set up by voice</h2><span class="hint">talk, she listens</span></div>
+      <p style="font-size:12.5px;color:var(--muted);margin-bottom:12px">Have a short spoken conversation and ${esc(aName())} turns it into knowledge for you to review. Works best in a quiet room using Chrome on a computer. You can finish anytime.</p>
+      <div id="iv-setup" style="display:flex;align-items:center;gap:10px;flex-wrap:wrap">
+        <select class="inp" id="iv-lang" style="max-width:200px"></select>
+        <button class="btn primary" id="iv-start">Start the conversation</button>
+        <span id="iv-note" style="font-size:12.5px;color:var(--muted)"></span>
+      </div>
+      <div id="iv-panel" style="display:none;margin-top:6px">
+        <div id="iv-transcript" style="max-height:300px;overflow:auto;border:1px solid var(--line);border-radius:var(--r-sm);padding:12px;background:var(--surface);font-size:13px;line-height:1.5"></div>
+        <div style="display:flex;align-items:center;gap:10px;margin-top:10px">
+          <span id="iv-status" style="font-size:12.5px;color:var(--muted)">Getting ready…</span>
+          <span style="flex:1"></span>
+          <button class="btn" id="iv-finish">Finish &amp; save</button>
+          <button class="btn" id="iv-cancel">Cancel</button>
+        </div>
+      </div>
+    </div>
+    <div class="card">
+      <div class="card-h"><h2>Documents</h2><span class="hint">Word, Excel, text PDF</span></div>
+      <p style="font-size:12.5px;color:var(--muted);margin-bottom:12px">Upload a price list, service menu, or policy doc and ${esc(aName())} reads it into her knowledge for you to review. Word (.docx), Excel (.xlsx), CSV, plain text, and text-based PDFs work today. Scans and photos need OCR, which is coming soon — for those, type the details into Add knowledge above. Google Docs or Sheets: use File &rsaquo; Download as Word or Excel, then upload that.</p>
+      <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap">
+        <label class="btn primary" style="position:relative;overflow:hidden">Choose a file
+          <input type="file" id="kb-file" accept=".pdf,.doc,.docx,.xls,.xlsx,.csv,.txt" style="position:absolute;inset:0;opacity:0;cursor:pointer">
+        </label>
+        <span id="kb-up-msg" style="font-size:12.5px;color:var(--muted)"></span>
+      </div>
+      <div id="kb-docs" style="margin-top:14px"></div>
+    </div>
+  </div>`;
+  $("#kb-save").onclick=saveKnowledge;
+  $("#kb-cancel").onclick=()=>{ state.kbEdit=null; resetKbForm(); };
+  $("#kb-refresh").onclick=async()=>{ const b=$("#kb-refresh"); b.disabled=true; b.textContent="…"; await loadKnowledge(); paintKbList(); await loadDocuments(); paintDocs(); b.disabled=false; b.textContent="Refresh"; };
+  $("#kb-file").onchange=handleFileUpload;
+  $("#kb-url-go").onclick=importWebsite;
+  ivInitCard();
+  loadKnowledge().then(paintKbList);
+  loadDocuments().then(paintDocs);
+}
+function resetKbForm(){
+  const t=$("#kb-title"); if(!t) return;
+  t.value=""; $("#kb-cat").value=""; $("#kb-content").value="";
+  $("#kb-form-title").textContent="Add knowledge"; $("#kb-save").textContent="Save";
+  $("#kb-cancel").style.display="none"; const m=$("#kb-msg"); if(m) m.textContent="";
+}
+function paintKbList(){
+  const el=$("#kb-list"); if(!el) return;
+  const rows=state.knowledge||[];
+  el.innerHTML = rows.length ? rows.map(kbRow).join("") : `<div class="empty">${I.book}<div>Nothing yet. Add what ${esc(aName())} should know about your business above.</div></div>`;
+  el.querySelectorAll("[data-edit]").forEach(b=>b.onclick=()=>editKnowledge(b.dataset.edit));
+  el.querySelectorAll("[data-del]").forEach(b=>b.onclick=()=>deleteKnowledge(b.dataset.del));
+}
+function kbRow(k){
+  const cat = k.category?` <span class="lang-badge">${esc(k.category)}</span>`:'';
+  return `<div class="block-item" style="align-items:flex-start;gap:10px">
+    <div style="flex:1;min-width:0">
+      <div style="font-weight:600;font-size:13.5px;margin-bottom:3px">${esc(k.title||'(untitled)')}${cat}</div>
+      <div style="font-size:12.5px;color:var(--muted)">${esc(k.content)}</div>
+    </div>
+    <button class="btn sm" data-edit="${k.id}">Edit</button>
+    <button class="btn sm" data-del="${k.id}">Delete</button>
+  </div>`;
+}
+function editKnowledge(id){
+  const k=(state.knowledge||[]).find(x=>x.id===id); if(!k) return;
+  state.kbEdit=id;
+  $("#kb-title").value=k.title||""; $("#kb-cat").value=k.category||""; $("#kb-content").value=k.content||"";
+  $("#kb-form-title").textContent="Edit knowledge"; $("#kb-save").textContent="Update";
+  $("#kb-cancel").style.display=""; const m=$("#kb-msg"); if(m) m.textContent="";
+  window.scrollTo({top:0,behavior:'smooth'});
+}
+async function saveKnowledge(){
+  const title=$("#kb-title").value.trim(), category=$("#kb-cat").value.trim(), content=$("#kb-content").value.trim();
+  const msg=$("#kb-msg"), btn=$("#kb-save");
+  if(!content){ msg.style.color="var(--danger)"; msg.textContent="Add some content first."; return; }
+  btn.disabled=true; const o=btn.textContent; btn.textContent="Saving…"; msg.style.color="var(--muted)"; msg.textContent="";
+  try{
+    const payload={ title, category, content }; if(state.kbEdit) payload.id=state.kbEdit;
+    const { data, error }=await db.functions.invoke("knowledge-upsert",{ body:payload });
+    if(error || !data || !data.ok){ msg.style.color="var(--danger)"; msg.textContent=(data&&data.error)||(error&&error.message)||"Could not save."; btn.disabled=false; btn.textContent=o; return; }
+    state.kbEdit=null; resetKbForm();
+    await loadKnowledge(); paintKbList();
+    const m2=$("#kb-msg"); if(m2){ m2.style.color="var(--ok)"; m2.textContent="Saved."; setTimeout(()=>{ if(m2) m2.textContent=""; },1500); }
+  }catch(e){ msg.style.color="var(--danger)"; msg.textContent="Could not save."; btn.disabled=false; btn.textContent=o; }
+}
+async function deleteKnowledge(id){
+  if(!confirm("Delete this? "+aName()+" will no longer use it.")) return;
+  const { error }=await db.from('knowledge_entries').delete().eq('id',id);
+  if(!error){ state.knowledge=(state.knowledge||[]).filter(x=>x.id!==id); paintKbList(); }
+}
+
+/* ---- document upload (browser-side text extraction) ---- */
+const KB_EXT_OK=['pdf','doc','docx','xls','xlsx','csv','txt'];
+const KB_EXT_IMG=['jpg','jpeg','png','gif','heic','heif','webp','tif','tiff','bmp'];
+async function extractText(file){
+  const ext=(file.name.split('.').pop()||'').toLowerCase();
+  if(ext==='txt'||ext==='csv') return await file.text();
+  if(ext==='docx'){
+    if(!window.mammoth) throw new Error("Reader still loading — try again in a moment.");
+    const r=await window.mammoth.extractRawText({arrayBuffer:await file.arrayBuffer()});
+    return r.value||"";
+  }
+  if(ext==='doc') throw new Error("Old .doc format isn't supported. Open it and Save As .docx, then upload.");
+  if(ext==='xlsx'||ext==='xls'){
+    if(!window.XLSX) throw new Error("Reader still loading — try again in a moment.");
+    const wb=window.XLSX.read(await file.arrayBuffer(),{type:'array'});
+    return wb.SheetNames.map(n=>{
+      const csv=window.XLSX.utils.sheet_to_csv(wb.Sheets[n]);
+      return (wb.SheetNames.length>1?("# "+n+"\n"):"")+csv;
+    }).join("\n\n");
+  }
+  if(ext==='pdf'){
+    if(!window.pdfjsLib) throw new Error("PDF reader still loading — try again in a moment.");
+    const pdf=await window.pdfjsLib.getDocument({data:await file.arrayBuffer()}).promise;
+    const out=[];
+    for(let i=1;i<=pdf.numPages;i++){
+      const tc=await (await pdf.getPage(i)).getTextContent();
+      out.push(tc.items.map(it=>it.str).join(" "));
+    }
+    return out.join("\n\n");
+  }
+  throw new Error("Unsupported file type.");
+}
+async function handleFileUpload(e){
+  const file=e.target.files&&e.target.files[0]; const msg=$("#kb-up-msg");
+  e.target.value="";
+  if(!file||!msg) return;
+  const ext=(file.name.split('.').pop()||'').toLowerCase();
+  if(KB_EXT_IMG.includes(ext)){ msg.style.color="var(--danger)"; msg.textContent="Images and scans need OCR, which isn't supported yet. Type the details into Add knowledge for now."; return; }
+  if(!KB_EXT_OK.includes(ext)){ msg.style.color="var(--danger)"; msg.textContent="That file type isn't supported."; return; }
+  msg.style.color="var(--muted)"; msg.textContent="Reading "+file.name+"…";
+  let text="";
+  try{ text=((await extractText(file))||"").trim(); }
+  catch(err){ msg.style.color="var(--danger)"; msg.textContent=err.message||"Couldn't read that file."; return; }
+  if(text.length<20){
+    msg.style.color="var(--danger)";
+    msg.textContent = ext==='pdf'
+      ? "This PDF looks like a scan (no readable text). OCR is coming soon — for now type the key details into Add knowledge."
+      : "Couldn't find any text in that file.";
+    return;
+  }
+  msg.textContent="Teaching "+aName()+" from "+file.name+"…";
+  try{
+    const { data, error }=await db.functions.invoke("knowledge-ingest-document",{ body:{ filename:file.name, text } });
+    if(error || !data || !data.ok){ msg.style.color="var(--danger)"; msg.textContent=(data&&(data.message||data.error))||(error&&error.message)||"Couldn't save that document."; return; }
+    msg.style.color="var(--ok)"; msg.textContent="Added "+file.name+" — "+data.chunks+" passage"+(data.chunks===1?"":"s")+" to review below.";
+    await loadDocuments(); paintDocs();
+  }catch(err){ msg.style.color="var(--danger)"; msg.textContent="Couldn't save that document."; }
+}
+function paintDocs(){
+  const el=$("#kb-docs"); if(!el) return;
+  const docs=state.documents||[]; const stats=state.docStats||{}; const pass=state.docPassages||{};
+  if(!state.docOpen) state.docOpen=new Set();
+  if(!docs.length){ el.innerHTML=`<div style="font-size:12.5px;color:var(--muted-2)">Nothing uploaded or imported yet.</div>`; return; }
+  let pendingDocs=0; docs.forEach(d=>{ const s=stats[d.id]||{total:0,approved:0}; if(s.total>s.approved) pendingDocs++; });
+  const bar = pendingDocs>1 ? `<div style="display:flex;justify-content:flex-end;margin-bottom:8px"><button class="btn sm primary" id="kb-approve-all">Approve all (${pendingDocs})</button></div>` : "";
+  const pill=(bg,fg,txt)=>`<span style="display:inline-block;font-size:11px;font-weight:600;padding:2px 9px;border-radius:999px;background:${bg};color:${fg}">${txt}</span>`;
+  el.innerHTML = bar + docs.map(d=>{
+    const s=stats[d.id]||{total:0,approved:0}; const pending=s.total-s.approved;
+    let status;
+    if(s.total===0) status=`<span style="font-size:12px;color:var(--muted-2)">processing…</span>`;
+    else if(pending>0) status=pill("var(--signal-soft)","var(--site)","Pending review · "+s.total+" passage"+(s.total===1?"":"s"));
+    else status=pill("#e7f5ee","var(--ok)","Live · "+s.total+" passage"+(s.total===1?"":"s"));
+    const open=state.docOpen.has(d.id);
+    const viewBtn = s.total>0 ? `<button class="btn sm" data-docview="${d.id}">${open?"Hide":"View"}</button>` : "";
+    const approveBtn = pending>0 ? `<button class="btn sm primary" data-docok="${d.id}">Approve</button>` : "";
+    let passHtml="";
+    if(open){
+      const list=(pass[d.id]||[]);
+      const rows = list.length ? list.map(p=>{
+        const dot = p.approved
+          ? `<span style="color:var(--ok);font-size:11px;font-weight:600">Live</span>`
+          : `<span style="color:var(--site);font-size:11px;font-weight:600">Pending</span>`;
+        return `<div style="display:flex;align-items:flex-start;gap:10px">
+          <div style="flex:1;min-width:0">
+            <div style="font-weight:600;font-size:12.5px;margin-bottom:2px">${esc(p.title||"(untitled)")} <span style="margin-left:6px">${dot}</span></div>
+            <div style="font-size:12.5px;color:var(--muted)">${esc(p.content)}</div>
+          </div>
+          <button class="btn sm" data-passdel="${p.id}">Delete</button>
+        </div>`;
+      }).join("") : `<div style="font-size:12px;color:var(--muted-2)">No passages.</div>`;
+      const footer = pending>0 ? `<div style="display:flex;justify-content:flex-end;margin-top:4px"><button class="btn sm primary" data-docok="${d.id}">Approve ${pending} passage${pending===1?"":"s"}</button></div>` : "";
+      passHtml = `<div style="margin-top:10px;border-top:1px solid var(--line-2);padding-top:10px;display:flex;flex-direction:column;gap:11px">`+rows+footer+`</div>`;
+    }
+    return `<div class="block-item" style="display:block">
+      <div style="display:flex;align-items:flex-start;gap:10px;flex-wrap:wrap">
+        <div style="flex:1;min-width:150px">
+          <div style="font-weight:600;font-size:13.5px;margin-bottom:4px">${esc(d.filename)}</div>
+          <div>${status}</div>
+        </div>
+        <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">
+          ${viewBtn}
+          ${approveBtn}
+          <button class="btn sm" data-docdel="${d.id}">Delete</button>
+        </div>
+      </div>
+      ${passHtml}
+    </div>`;
+  }).join("");
+  const aa=$("#kb-approve-all"); if(aa) aa.onclick=approveAllDocs;
+  el.querySelectorAll("[data-docview]").forEach(b=>b.onclick=()=>toggleDoc(b.dataset.docview));
+  el.querySelectorAll("[data-docok]").forEach(b=>b.onclick=()=>approveDocument(b.dataset.docok));
+  el.querySelectorAll("[data-docdel]").forEach(b=>b.onclick=()=>deleteDocument(b.dataset.docdel));
+  el.querySelectorAll("[data-passdel]").forEach(b=>b.onclick=()=>deletePassage(b.dataset.passdel));
+}
+function toggleDoc(id){ if(!state.docOpen) state.docOpen=new Set(); if(state.docOpen.has(id)) state.docOpen.delete(id); else state.docOpen.add(id); paintDocs(); }
+async function deletePassage(id){
+  if(!confirm("Delete this passage? "+aName()+" will no longer use it.")) return;
+  const { error }=await db.from('knowledge_entries').delete().eq('id',id);
+  if(!error){ await loadDocuments(); paintDocs(); }
+}
+async function approveDocument(id){
+  const { error }=await db.from('knowledge_entries').update({approved:true}).eq('document_id',id).eq('approved',false);
+  if(!error){ await loadDocuments(); paintDocs(); }
+}
+async function approveAllDocs(){
+  if(!confirm(aName()+" will start using everything pending with real callers. Continue?")) return;
+  const { error }=await db.from('knowledge_entries').update({approved:true}).eq('source','document').eq('approved',false);
+  if(!error){ await loadDocuments(); paintDocs(); }
+}
+async function importWebsite(){
+  const inp=$("#kb-url"), msg=$("#kb-url-msg"), btn=$("#kb-url-go");
+  const url=(inp.value||"").trim();
+  if(!url){ msg.style.color="var(--danger)"; msg.textContent="Enter your website address."; return; }
+  btn.disabled=true; const o=btn.textContent; btn.textContent="Reading…"; msg.style.color="var(--muted)"; msg.textContent="Reading your site — this can take a few seconds…";
+  try{
+    const { data, error }=await db.functions.invoke("knowledge-ingest-website",{ body:{ url } });
+    if(error || !data || !data.ok){ msg.style.color="var(--danger)"; msg.textContent=(data&&(data.message||data.error))||(error&&error.message)||"Couldn't read that site."; btn.disabled=false; btn.textContent=o; return; }
+    msg.style.color="var(--ok)"; msg.textContent="Read "+data.pages+" page"+(data.pages===1?"":"s")+" → "+data.chunks+" passage"+(data.chunks===1?"":"s")+" to review below.";
+    inp.value="";
+    await loadDocuments(); paintDocs();
+  }catch(e){ msg.style.color="var(--danger)"; msg.textContent="Couldn't read that site."; }
+  btn.disabled=false; btn.textContent=o;
+}
+/* ---- voice interview ---- */
+const IV_LANGS=[
+  ["en-US","English"],["es-US","Spanish / Español"],["fr-FR","French / Français"],
+  ["de-DE","German / Deutsch"],["it-IT","Italian / Italiano"],["pt-BR","Portuguese / Português"],
+  ["zh-CN","Chinese / 中文"],["ja-JP","Japanese / 日本語"],["ko-KR","Korean / 한국어"],
+  ["vi-VN","Vietnamese / Tiếng Việt"],["hi-IN","Hindi / हिन्दी"],["ru-RU","Russian / Русский"],
+  ["nl-NL","Dutch / Nederlands"],["th-TH","Thai / ไทย"],["ar-SA","Arabic / العربية"]
+];
+function ivSpeechSupported(){ return !!(window.SpeechRecognition||window.webkitSpeechRecognition); }
+function ivInitCard(){
+  const sel=$("#iv-lang"); if(!sel) return;
+  sel.innerHTML=IV_LANGS.map(([c,l])=>`<option value="${c}">${esc(l)}</option>`).join("");
+  try{ if(window.speechSynthesis){ speechSynthesis.getVoices(); speechSynthesis.onvoiceschanged=()=>{}; } }catch(e){}
+  const note=$("#iv-note");
+  if(!ivSpeechSupported()){ if(note){ note.style.color="var(--danger)"; note.textContent="Voice needs Chrome on a computer. You can use website import, documents, or type knowledge instead."; } $("#iv-start").disabled=true; }
+  $("#iv-start").onclick=ivStart;
+  $("#iv-finish").onclick=()=>ivFinish(false);
+  $("#iv-cancel").onclick=()=>ivFinish(true);
+}
+function ivPickVoice(langTag){
+  if(!window.speechSynthesis) return null;
+  const vs=speechSynthesis.getVoices()||[]; const base=langTag.split("-")[0].toLowerCase();
+  const inLang=vs.filter(v=>v.lang&&v.lang.toLowerCase().startsWith(base));
+  const fem=/(female|samantha|victoria|karen|moira|tessa|fiona|google us english|google uk english female|zira|susan|linda|allison|ava|joanna|amelie|am[ée]lie|anna|paulina|m[óo]nica|ting-ting|kyoko|yuna|milena|google español|sara|nicky|carmit)/i;
+  return inLang.find(v=>fem.test(v.name))||inLang.find(v=>/female/i.test(v.name))||inLang[0]||vs.find(v=>fem.test(v.name))||vs[0]||null;
+}
+function ivSpeak(text){
+  return new Promise(res=>{
+    if(!window.speechSynthesis){ res(); return; }
+    try{ speechSynthesis.cancel(); }catch(e){}
+    const u=new SpeechSynthesisUtterance(text);
+    const v=ivPickVoice(state.iv.langTag); if(v){ u.voice=v; u.lang=v.lang; } else { u.lang=state.iv.langTag; }
+    u.rate=1; let done=false; const fin=()=>{ if(!done){ done=true; res(); } };
+    u.onend=fin; u.onerror=fin;
+    speechSynthesis.speak(u);
+    setTimeout(fin, Math.min(16000, 2500+text.length*75));
+  });
+}
+function ivListen(){
+  return new Promise(res=>{
+    const SR=window.SpeechRecognition||window.webkitSpeechRecognition;
+    if(!SR){ res(""); return; }
+    const rec=new SR(); state.iv.rec=rec;
+    rec.lang=state.iv.langTag; rec.interimResults=false; rec.maxAlternatives=1; rec.continuous=false;
+    let got=""; let done=false;
+    const finish=(t)=>{ if(done) return; done=true; try{rec.stop();}catch(e){} res(t); };
+    rec.onresult=(e)=>{ try{ got=e.results[0][0].transcript||""; }catch(_){ got=""; } };
+    rec.onerror=()=>finish("");
+    rec.onend=()=>finish(got);
+    try{ rec.start(); }catch(e){ res(""); }
+  });
+}
+function ivAddLine(role,text){
+  state.iv.transcript.push({role,text});
+  const el=$("#iv-transcript"); if(!el) return;
+  const who=role==="assistant"?esc(aName()):"You";
+  const color=role==="assistant"?"var(--ink)":"var(--virtual)";
+  el.insertAdjacentHTML("beforeend",`<div style="margin-bottom:8px"><span style="font-weight:600;color:${color}">${who}:</span> ${esc(text)}</div>`);
+  el.scrollTop=el.scrollHeight;
+}
+function ivSetStatus(t){ const s=$("#iv-status"); if(s) s.textContent=t; }
+async function ivStart(){
+  if(!ivSpeechSupported()) return;
+  const sel=$("#iv-lang"); const langTag=sel.value; const langName=(IV_LANGS.find(x=>x[0]===langTag)||["","English"])[1].split(" / ")[0];
+  state.iv={ langTag, langName, summary:"", turn:0, transcript:[], running:true, rec:null, maxTurns:16 };
+  $("#iv-setup").style.display="none"; $("#iv-panel").style.display="";
+  $("#iv-transcript").innerHTML=""; ivSetStatus("Connecting…");
+  try{
+    const first=await ivTurn(true);
+    if(!first){ ivReset(); return; }
+    await ivConverse();
+  }catch(e){ ivSetStatus("Something went wrong. Press Finish to save what you have."); }
+}
+async function ivTurn(){
+  const recent=state.iv.transcript.slice(-6);
+  const { data, error }=await db.functions.invoke("interview-turn",{ body:{
+    languageName:state.iv.langName, summary:state.iv.summary, recent, turn:state.iv.turn, maxTurns:state.iv.maxTurns, business:aName()
+  }});
+  if(error || !data || !data.ok){ ivSetStatus((data&&(data.message||data.error))||(error&&error.message)||"Model error."); return null; }
+  state.iv.summary=data.summary||state.iv.summary;
+  ivAddLine("assistant",data.say);
+  ivSetStatus("Speaking…"); await ivSpeak(data.say);
+  return data;
+}
+async function ivConverse(){
+  let done=false;
+  while(state.iv.running && !done && state.iv.turn < state.iv.maxTurns+4){
+    ivSetStatus("Listening… speak your answer.");
+    let answer=await ivListen();
+    if(!state.iv.running) break;
+    if(!answer){ ivSetStatus("Didn't catch that — listening again…"); answer=await ivListen(); }
+    if(!state.iv.running) break;
+    if(!answer){ ivSetStatus("Still nothing. Keep talking when ready, or press Finish to save."); continue; }
+    ivAddLine("user",answer);
+    state.iv.turn++;
+    ivSetStatus("Thinking…");
+    const res=await ivTurn(false);
+    if(!res) break;
+    done=res.done;
+  }
+  if(done && state.iv.running){ await ivFinish(false); }
+}
+let ivFinishing=false;
+async function ivFinish(cancel){
+  if(ivFinishing) return; ivFinishing=true;
+  if(state.iv) state.iv.running=false;
+  try{ if(state.iv&&state.iv.rec) state.iv.rec.stop(); }catch(e){}
+  try{ if(window.speechSynthesis) speechSynthesis.cancel(); }catch(e){}
+  if(cancel){ ivReset(); ivFinishing=false; return; }
+  const tr=(state.iv&&state.iv.transcript)||[];
+  if(tr.filter(m=>m.role==="user").length===0){ ivSetStatus("Nothing to save yet."); ivReset(); ivFinishing=false; return; }
+  ivSetStatus("Saving what you taught me…");
+  try{
+    const { data, error }=await db.functions.invoke("interview-extract",{ body:{ languageName:(state.iv&&state.iv.langName)||"English", transcript:tr }});
+    if(error || !data || !data.ok){ ivSetStatus((data&&(data.message||data.error))||(error&&error.message)||"Couldn't save the interview."); ivFinishing=false; return; }
+    ivSetStatus("Saved "+data.count+" item"+(data.count===1?"":"s")+". "+aName()+" won't use these on calls until you review and approve them in the Documents section below.");
+    await loadDocuments(); paintDocs();
+    setTimeout(ivReset, 7000);
+  }catch(e){ ivSetStatus("Couldn't save the interview."); }
+  ivFinishing=false;
+}
+function ivReset(){
+  const p=$("#iv-panel"), s=$("#iv-setup"); if(p) p.style.display="none"; if(s) s.style.display="";
+}
+async function deleteDocument(id){
+  const d=(state.documents||[]).find(x=>x.id===id);
+  if(!confirm("Delete "+(d?d.filename:"this document")+"? "+aName()+" will forget everything from it.")) return;
+  const { error }=await db.from('documents').delete().eq('id',id);
+  if(!error){ state.documents=(state.documents||[]).filter(x=>x.id!==id); paintDocs(); }
+}
+
+/* ===================== CALENDAR CONNECT ===================== */
+const CAL_PROVIDERS = {
+  google: { label:"Google Calendar",
+    authUrl:"https://accounts.google.com/o/oauth2/v2/auth",
+    scope:"https://www.googleapis.com/auth/calendar.events https://www.googleapis.com/auth/calendar.freebusy",
+    callback: SUPABASE_URL + "/functions/v1/google-oauth-callback",
+    extra:{ access_type:"offline", prompt:"consent" } },
+  microsoft: { label:"Microsoft Outlook",
+    authUrl:"https://login.microsoftonline.com/common/oauth2/v2.0/authorize",
+    scope:"offline_access https://graph.microsoft.com/Calendars.ReadWrite",
+    callback: SUPABASE_URL + "/functions/v1/microsoft-oauth-callback",
+    extra:{ response_mode:"query", prompt:"consent" } }
+};
+async function calStatus(){ try{ const {data}=await db.rpc("donna_calendar_status"); return (data&&data[0])||null; }catch(e){ return null; } }
+async function calConfig(){ try{ const {data}=await db.rpc("donna_calendar_oauth_config"); return data||{}; }catch(e){ return {}; } }
+async function connectCalendar(provider){
+  const cfg=await calConfig(); const pc=cfg[provider]||{};
+  if(!pc.configured||!pc.client_id){ alert(CAL_PROVIDERS[provider].label+" isn't set up yet."); return; }
+  const { data: accountId, error }=await db.rpc("donna_my_account_id");
+  if(error||!accountId){ alert("Could not start the connection. Please reload and try again."); return; }
+  const p=CAL_PROVIDERS[provider];
+  const params=new URLSearchParams(Object.assign({ client_id:pc.client_id, redirect_uri:p.callback, response_type:"code", scope:p.scope, state:accountId }, p.extra));
+  window.location.href=p.authUrl+"?"+params.toString();
+}
+async function disconnectCalendar(btn){
+  btn.disabled=true; const o=btn.textContent; btn.textContent="Disconnecting…";
+  const { error }=await db.rpc("donna_calendar_disconnect");
+  if(error){ btn.disabled=false; btn.textContent=o; return; }
+  paintCalendarCard();
+}
+function calToast(){
+  const q=new URLSearchParams(location.search); const c=q.get("calendar");
+  if(!c) return "";
+  q.delete("calendar"); const qs=q.toString();
+  history.replaceState({}, "", location.pathname + (qs?"?"+qs:""));
+  if(c==="connected") return `<div style="margin-bottom:12px;font-size:13px;color:var(--ok)">Calendar connected.</div>`;
+  if(c==="error") return `<div style="margin-bottom:12px;font-size:13px;color:var(--danger)">Could not connect that calendar. Please try again.</div>`;
+  return "";
+}
+async function paintCalendarCard(){
+  const el=$("#cal-card-body"); if(!el) return;
+  const toast=calToast();
+  el.innerHTML=toast+`<p style="font-size:13px;color:var(--muted)">Checking connection…</p>`;
+  const [st,cfg]=await Promise.all([calStatus(), calConfig()]);
+  if(st&&st.connected){
+    const label=st.provider==="microsoft"?"Microsoft Outlook":"Google Calendar";
+    const other=st.provider==="microsoft"?"google":"microsoft";
+    const otherCfg=cfg[other]||{};
+    const switchBtn=otherCfg.configured?`<button class="btn sm cal-connect" data-pv="${other}">Switch to ${esc(CAL_PROVIDERS[other].label)}</button>`:"";
+    el.innerHTML=toast+`
+      <div class="set-rows" style="margin-bottom:14px">
+        <div class="set-row"><span class="k">Connected to</span><span class="v">${esc(label)}</span></div>
+        <div class="set-row"><span class="k">Calendar</span><span class="v">${esc(st.calendar_id||"primary")}</span></div>
+      </div>
+      <p style="font-size:12.5px;color:var(--muted);margin-bottom:12px">${esc(aName())} checks this calendar before offering times, so she never books over something already on it, and adds new bookings here automatically.</p>
+      <div style="display:flex;gap:10px;flex-wrap:wrap"><button class="btn sm" id="cal-disconnect">Disconnect</button>${switchBtn}</div>
+      ${switchBtn?`<p style="font-size:11.5px;color:var(--muted-2);margin-top:10px">Switching replaces your current calendar — ${esc(label)} will be disconnected automatically.</p>`:""}`;
+    $("#cal-disconnect").onclick=(e)=>disconnectCalendar(e.currentTarget);
+    el.querySelectorAll(".cal-connect").forEach(b=>b.onclick=()=>connectCalendar(b.dataset.pv));
+  } else {
+    const opts=["google","microsoft"].map(pv=>{
+      const c=cfg[pv]||{}; const lab=CAL_PROVIDERS[pv].label;
+      return c.configured
+        ? `<button class="btn primary cal-connect" data-pv="${pv}">Connect ${esc(lab)}</button>`
+        : `<button class="btn" disabled title="Not set up yet">${esc(lab)} — setup required</button>`;
+    }).join(" ");
+    el.innerHTML=toast+`
+      <p style="font-size:13px;color:var(--muted);margin-bottom:14px">Connect a calendar so ${esc(aName())} only offers times you're free and adds appointments automatically. Choose Google or Microsoft.</p>
+      <div style="display:flex;gap:10px;flex-wrap:wrap">${opts}</div>`;
+    el.querySelectorAll(".cal-connect").forEach(b=>b.onclick=()=>connectCalendar(b.dataset.pv));
+  }
+}
+
+/* ===================== CALLS PAGE (live) ===================== */
+async function loadCalls(){
+  const { data } = await db.from('calls').select('*').eq('account_id', state.account.id).order('started_at',{ascending:false}).limit(100);
+  state.calls = data || [];
+}
+function fmtDur(s){ if(!s&&s!==0) return ''; const m=Math.floor(s/60), ss=s%60; return m?`${m}m ${ss}s`:`${ss}s`; }
+function fmtDateTime(iso){ if(!iso) return ''; return new Intl.DateTimeFormat('en-US',{timeZone:state.account.timezone, weekday:'short', month:'short', day:'numeric', hour:'numeric', minute:'2-digit'}).format(new Date(iso)); }
+
+function pageCalls(){
+  $("#page").innerHTML=`
+  <div class="page">
+    <div class="page-head"><h1>Calls</h1><p>Every call ${esc(aName())} handles, with the full conversation. This page updates on its own — a call appears the moment it starts, and the transcript fills in when it wraps.</p></div>
+    <div class="card">
+      <div class="card-h"><h2>Recent calls</h2><span class="calls-live"><span class="d"></span>Live</span></div>
+      <div id="calls-list"></div>
+    </div>
+    <div id="call-detail"></div>
+  </div>`;
+  paintCallsList();
+  paintCallDetail();
+  subscribeCalls();
+}
+function paintCallsList(){
+  const el=$("#calls-list"); if(!el) return;
+  el.innerHTML = state.calls.length
+    ? state.calls.map(callRowHTML).join("")
+    : `<div class="empty">${I.phone}<div>No calls yet. When someone calls ${esc(aName())}, it shows up here in real time.</div></div>`;
+  el.querySelectorAll("[data-call]").forEach(b=>b.onclick=()=>openCall(b.dataset.call));
+}
+function callRowHTML(c){
+  const live = c.status==='in_progress' || c.status==='ringing';
+  const dur = (c.duration_seconds||c.duration_seconds===0)?fmtDur(c.duration_seconds):'';
+  const who = c.from_number || 'Unknown caller';
+  const open = state.openCallId===c.id;
+  const out = c.outcome?`<span class="appt-status s-${c.outcome}" style="margin-left:8px">${esc(String(c.outcome).replace(/_/g,' '))}</span>`:'';
+  const body = c.summary ? esc(c.summary)
+    : (live ? `<span style="color:var(--signal)">On the line now…</span>`
+            : `<span style="color:var(--muted-2)">No summary</span>`);
+  return `<div class="call-item ${live?'live':''} ${open?'open':''}" data-call="${c.id}">
+    <div class="m-top"><span class="m-who">${live?'<span class="livedot"></span>':''}${esc(who)}${out}${langBadge(c.language)}</span>
+      <span class="m-when">${esc(fmtDateTime(c.started_at))}${dur?` · ${dur}`:''}</span></div>
+    <div class="m-text">${body}</div>
+  </div>`;
+}
+async function openCall(id){
+  if(state.openCallId===id){ state.openCallId=null; if(state.txChannel){db.removeChannel(state.txChannel);state.txChannel=null;} paintCallsList(); paintCallDetail(); return; }
+  state.openCallId=id;
+  const { data } = await db.from('transcript_messages').select('*').eq('call_id',id).order('said_at',{ascending:true});
+  state.callTranscript = data || [];
+  paintCallsList();
+  paintCallDetail();
+  subscribeTranscript(id);
+}
+function paintCallDetail(){
+  const el=$("#call-detail"); if(!el) return;
+  if(!state.openCallId){ el.innerHTML=''; return; }
+  const c = state.calls.find(x=>x.id===state.openCallId);
+  const live = c && (c.status==='in_progress'||c.status==='ringing');
+  const lines = (state.callTranscript||[]).map(t=>`<div class="tline ${esc(t.speaker)}"><span class="who">${t.speaker==='donna'?esc(aName()):(t.speaker==='caller'?'Caller':esc(t.speaker))}</span><span class="bub">${esc(t.text)}</span></div>`).join("");
+  el.innerHTML=`<div class="card">
+    <div class="card-h"><h2>Transcript</h2><button class="btn sm" id="call-close">Close</button></div>
+    ${live?`<p style="font-size:12.5px;margin-bottom:12px"><span class="livedot"></span><span style="color:var(--signal)">Call in progress — the transcript appears once it ends.</span></p>`:''}
+    <div class="transcript">${lines || `<div class="empty" style="padding:26px">${live?'Listening…':'No transcript was captured for this call.'}</div>`}</div>
+    ${c&&c.recording_url?`<div style="margin-top:14px"><a class="btn sm" href="${esc(c.recording_url)}" target="_blank" rel="noopener">▶ Play recording</a></div>`:''}
+  </div>`;
+  const cl=$("#call-close"); if(cl) cl.onclick=()=>{ state.openCallId=null; if(state.txChannel){db.removeChannel(state.txChannel);state.txChannel=null;} paintCallsList(); paintCallDetail(); };
+}
+async function ensureRealtimeAuth(){
+  try{ const { data:{ session } } = await db.auth.getSession(); if(session) db.realtime.setAuth(session.access_token); }catch(e){}
+}
+async function subscribeCalls(){
+  if(state.callsChannel) return;
+  await ensureRealtimeAuth();
+  state.callsChannel = db.channel('rt-calls')
+    .on('postgres_changes', { event:'*', schema:'public', table:'calls', filter:`account_id=eq.${state.account.id}` },
+      async ()=>{ await loadCalls(); paintCallsList(); if(state.openCallId) paintCallDetail(); })
+    .subscribe();
+}
+async function subscribeTranscript(callId){
+  if(state.txChannel){ db.removeChannel(state.txChannel); state.txChannel=null; }
+  await ensureRealtimeAuth();
+  state.txChannel = db.channel('rt-tx-'+callId)
+    .on('postgres_changes', { event:'INSERT', schema:'public', table:'transcript_messages', filter:`call_id=eq.${callId}` },
+      payload=>{ state.callTranscript.push(payload.new); paintCallDetail(); })
+    .subscribe();
+}
+function teardownRealtime(){
+  if(state.callsChannel){ db.removeChannel(state.callsChannel); state.callsChannel=null; }
+  if(state.txChannel){ db.removeChannel(state.txChannel); state.txChannel=null; }
+  state.openCallId=null; state.callTranscript=[];
+}
+
+/* ===================== BOOT ===================== */
+async function boot(){
+  if(pendingRecovery){ state.authMode="reset"; renderAuth(); return; }
+  document.getElementById("root").innerHTML=`<div class="booting">Loading…</div>`;
+  const { data:{ session } } = await db.auth.getSession();
+  if(!session){ renderAuth(); return; }
+  let ok = await loadData();
+  if(!ok){ await new Promise(r=>setTimeout(r,1200)); ok = await loadData(); } // give the signup trigger a moment
+  if(ok) renderApp(); else renderAuth();
+}
+db.auth.onAuthStateChange((event)=>{ if(event==='PASSWORD_RECOVERY'){ pendingRecovery=true; state.authMode='reset'; renderAuth(); } });
+if('speechSynthesis' in window){ window.speechSynthesis.getVoices(); window.speechSynthesis.onvoiceschanged=()=>{}; }
+boot();
+</script>
+</body>
+</html>
