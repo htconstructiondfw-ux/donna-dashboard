@@ -730,6 +730,19 @@ async function saveTimezone(){
   if(!error){ state.account.settings=settings; state.account.timezone=tz; }
   btn.disabled=false; btn.textContent=error?"Error — retry":"Saved ✓"; setTimeout(()=>btn.textContent=o,1300);
 }
+async function saveAlertEmail(){
+  const inp=$("#alert-email"); if(!inp) return;
+  const msg=$("#alert-msg"), btn=$("#alert-save");
+  const email=inp.value.trim();
+  if(email && !/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)){ if(msg){msg.style.color='var(--danger)';msg.textContent='That does not look like a valid email address.';} return; }
+  if(msg){ msg.style.color='var(--muted)'; msg.textContent=''; }
+  btn.disabled=true; const o=btn.textContent; btn.textContent="Saving…";
+  const settings = Object.assign({}, state.account.settings||{}, {alert_email:email});
+  const { error } = await db.from('accounts').update({settings}).eq('id',state.account.id);
+  if(!error){ state.account.settings=settings; if(msg){ msg.style.color='var(--muted)'; msg.textContent=email?('Messages will be emailed to '+email+'.'):'General inbox cleared.'; } }
+  else if(msg){ msg.style.color='var(--danger)'; msg.textContent='Could not save. Try again.'; }
+  btn.disabled=false; btn.textContent=error?"Error — retry":"Saved ✓"; setTimeout(()=>btn.textContent=o,1300);
+}
 async function saveTransfer(){
   const msg=$("#xfer-msg"), btn=$("#xfer-save"), numEl=$("#xfer-num"), enEl=$("#xfer-on");
   if(!state.assistantId){ if(msg){ msg.style.color='var(--danger)'; msg.textContent='Set up your assistant first, then add a transfer number.'; } return; }
@@ -833,6 +846,12 @@ function pageSettings(){
       <select class="inp" id="tz-select" style="max-width:340px">${TZS.map(t=>`<option value="${t[0]}" ${ac.timezone===t[0]?'selected':''}>${t[1]}</option>`).join("")}</select>
     </div>
 
+    <div class="card"><div class="card-h"><h2>Message alerts</h2><button class="btn sm" id="alert-save">Save</button></div>
+      <p style="font-size:13px;color:var(--muted);margin-bottom:12px">When ${esc(aName())} takes a message, it is emailed here. If a caller asks for someone by name, that person is emailed directly and this inbox is copied. Use an address you actually check.</p>
+      <div class="field" style="max-width:340px;margin:0"><label class="lab">General inbox email</label><input class="inp" id="alert-email" type="email" placeholder="you@yourcompany.com" value="${esc((ac.settings&&ac.settings.alert_email)||'')}"></div>
+      <div id="alert-msg" style="font-size:12.5px;color:var(--muted);margin-top:8px"></div>
+    </div>
+
     ${!isPro ? `
     <div class="card"><div class="card-h"><h2>Call transfer</h2><button class="btn sm" id="xfer-save">Save</button></div>
       <p style="font-size:13px;color:var(--muted);margin-bottom:12px">When a caller asks for a person during your live transfer hours, set on the Schedule page, ${esc(aName())} can transfer the live call to this number. Use full international format, for example +18175551234.</p>
@@ -882,6 +901,7 @@ function pageSettings(){
   </div>`;
   $("#set-biz-save").onclick=saveBusiness;
   $("#tz-save").onclick=saveTimezone;
+  { const ae=$("#alert-save"); if(ae) ae.onclick=saveAlertEmail; }
   { const xs=$("#xfer-save"); if(xs) xs.onclick=saveTransfer; }
   if(isPro){
     state._dir = (state.assistant.routing&&Array.isArray(state.assistant.routing.directory)) ? JSON.parse(JSON.stringify(state.assistant.routing.directory)) : [];
