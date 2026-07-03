@@ -189,7 +189,7 @@ const state = {
   account:null, owner:null, assistantId:null,
   assistant:{ name:DEFAULT_NAME, greetingLabel:"the office", voice:"warm-female", languages:["en"], number:"", recordingNotice:true, active:true, routing:{} },
   schedule: DAYS.map((_,i)=>({ working:{on:false,start:"08:00",end:"18:00"}, bookable:{on:false,start:"09:00",end:"15:00"} })),
-  blocks:[], types:[], messages:[], appointments:[], calls:[], openCallId:null, callTranscript:[], callsChannel:null, txChannel:null, view:"assistant", authMode:"signup"
+  blocks:[], types:[], messages:[], appointments:[], calls:[], contacts:[], openCallId:null, callTranscript:[], callsChannel:null, txChannel:null, view:"assistant", authMode:"signup"
 };
 const LANGS = [
   ["ar","Arabic"],["yue","Cantonese"],["nl","Dutch"],["en","English"],["fr","French"],
@@ -355,6 +355,7 @@ async function loadData(){
   await loadMessages();
   await loadAppointments();
   await loadCalls();
+  await loadContacts();
   return true;
 }
 
@@ -362,8 +363,8 @@ async function loadData(){
 function renderApp(){
   if(new URLSearchParams(location.search).get('calendar')) state.view='settings';
   const navConfig=[["assistant","Assistant",I.bot],["schedule","Schedule",I.cal],["types","Appointment types",I.tag],["knowledge","Knowledge",I.book],["settings","Settings",I.gear]];
-  const navActivity=[["calls","Calls",I.phone],["appointments","Appointments",I.appt],["messages","Messages",I.inbox]];
-  const soon=[["contacts","Contacts",I.users],["billing","Billing",I.card]];
+  const navActivity=[["calls","Calls",I.phone],["appointments","Appointments",I.appt],["messages","Messages",I.inbox],["contacts","Contacts",I.users]];
+  const soon=[["billing","Billing",I.card]];
   const navBtn=n=>`<button class="nav-item ${state.view===n[0]?'active':''}" data-v="${n[0]}">${n[2]}<span>${n[1]}</span>${n[0]==='messages'&&unreadCount()?`<span class="tag unread">${unreadCount()}</span>`:''}</button>`;
   const initials=(state.owner.name||"O").split(" ").map(w=>w[0]).slice(0,2).join("").toUpperCase();
   document.title=`${aName()} — Dashboard`;
@@ -381,7 +382,7 @@ function renderApp(){
     </aside>
     <main class="main">
       <div class="topbar">
-        <div class="crumbs">${state.view==='settings'?'Account':(['messages','appointments','calls'].includes(state.view)?'Activity':'Configure')} · <b>${esc(({assistant:"Assistant",schedule:"Schedule",types:"Appointment types",messages:"Messages",appointments:"Appointments",settings:"Settings",calls:"Calls",knowledge:"Knowledge"})[state.view])}</b></div>
+        <div class="crumbs">${state.view==='settings'?'Account':(['messages','appointments','calls','contacts'].includes(state.view)?'Activity':'Configure')} · <b>${esc(({assistant:"Assistant",schedule:"Schedule",types:"Appointment types",messages:"Messages",appointments:"Appointments",settings:"Settings",calls:"Calls",knowledge:"Knowledge",contacts:"Contacts"})[state.view])}</b></div>
         <div class="acct-chip"><span class="av">${initials}</span><div class="who"><b>${esc(state.account.company)}</b><span>${esc((state.account.status||'trial'))} · ${esc(state.account.plan||'starter')}</span></div></div>
       </div>
       <div id="page"></div>
@@ -395,8 +396,8 @@ function renderPage(){
   if('speechSynthesis' in window) window.speechSynthesis.cancel();
   teardownRealtime();
   document.querySelectorAll(".nav-item[data-v]").forEach(b=>b.classList.toggle("active",b.dataset.v===state.view));
-  $(".crumbs").innerHTML=`${state.view==='settings'?'Account':(['messages','appointments','calls'].includes(state.view)?'Activity':'Configure')} · <b>${esc(({assistant:"Assistant",schedule:"Schedule",types:"Appointment types",messages:"Messages",appointments:"Appointments",settings:"Settings",calls:"Calls",knowledge:"Knowledge"})[state.view])}</b>`;
-  ({assistant:pageAssistant, schedule:pageSchedule, types:pageTypes, messages:pageMessages, appointments:pageAppointments, settings:pageSettings, calls:pageCalls, knowledge:pageKnowledge})[state.view]();
+  $(".crumbs").innerHTML=`${state.view==='settings'?'Account':(['messages','appointments','calls','contacts'].includes(state.view)?'Activity':'Configure')} · <b>${esc(({assistant:"Assistant",schedule:"Schedule",types:"Appointment types",messages:"Messages",appointments:"Appointments",settings:"Settings",calls:"Calls",knowledge:"Knowledge",contacts:"Contacts"})[state.view])}</b>`;
+  ({assistant:pageAssistant, schedule:pageSchedule, types:pageTypes, messages:pageMessages, appointments:pageAppointments, settings:pageSettings, calls:pageCalls, knowledge:pageKnowledge, contacts:pageContacts})[state.view]();
 }
 
 /* ===================== ASSISTANT PAGE ===================== */
@@ -665,6 +666,131 @@ function updateNavBadge(){
   let tag=item.querySelector('.tag.unread'); const n=unreadCount();
   if(n){ if(!tag){ tag=document.createElement('span'); tag.className='tag unread'; item.appendChild(tag);} tag.textContent=n; }
   else if(tag){ tag.remove(); }
+}
+
+/* ===================== CONTACTS PAGE ===================== */
+async function loadContacts(){
+  const { data } = await db.from('contacts').select('*').eq('account_id', state.account.id).order('last_call_at',{ascending:false, nullsFirst:false});
+  state.contacts = (data||[]).map(c=>({
+    id:c.id, phone:c.phone||"", name:c.name||"", company:c.company||"", interest:c.interest||"",
+    language:c.language||"", listType:c.list_type||"normal", callCount:c.call_count||0,
+    lastCallAt:c.last_call_at||null, lastSummary:c.last_call_summary||"", notes:c.notes||""
+  }));
+}
+function contactMatch(c,q){
+  if(!q) return true; q=q.toLowerCase();
+  return (c.name||"").toLowerCase().includes(q) || (c.phone||"").toLowerCase().includes(q) ||
+         (c.company||"").toLowerCase().includes(q) || (c.interest||"").toLowerCase().includes(q);
+}
+function contactsListHTML(list){
+  return list.length ? list.map(contactHTML).join("")
+    : `<div class="empty">${I.users}<div>${state.contacts.length?"No matches.":"No contacts yet. When "+esc(aName())+" saves a caller, they'll appear here."}</div></div>`;
+}
+function pageContacts(){
+  const q = state._cq||"";
+  const list = state.contacts.filter(c=>contactMatch(c,q));
+  const total = state.contacts.length;
+  $("#page").innerHTML=`
+  <style>
+    .c-tools{display:flex;gap:10px;align-items:center;margin-bottom:14px}
+    .c-search{flex:1;max-width:360px;padding:9px 12px;border:1px solid var(--line);border-radius:var(--r-sm);font:inherit;font-size:14px;background:var(--surface);color:var(--ink)}
+    .c-item{border:1px solid var(--line);border-radius:var(--r-sm);padding:13px 15px;margin-bottom:9px;background:var(--surface)}
+    .c-item.vip{border-color:var(--signal-line);background:var(--signal-soft)}
+    .c-item.blocked{opacity:.7}
+    .c-top{display:flex;align-items:center;gap:9px;flex-wrap:wrap}
+    .c-name{font-weight:600;font-size:15px;color:var(--ink)}
+    .c-badge{font-size:10px;letter-spacing:.05em;text-transform:uppercase;padding:2px 7px;border-radius:20px;font-weight:600}
+    .c-badge.vip{background:var(--signal);color:#fff}
+    .c-badge.blocked{background:var(--danger);color:#fff}
+    .c-num{margin-left:auto;font-size:13.5px;color:var(--virtual);text-decoration:none;font-weight:500}
+    .c-meta{color:var(--muted);font-size:13px;margin-top:4px}
+    .c-meta b{color:var(--ink-2);font-weight:500}
+    .c-sum{color:var(--muted);font-size:12.5px;margin-top:6px;font-style:italic}
+    .c-actions{display:flex;gap:7px;margin-top:11px;flex-wrap:wrap}
+    .c-actions .btn.danger{color:var(--danger);border-color:#e7bcb2}
+    .c-edit{margin-top:12px;padding-top:12px;border-top:1px solid var(--line-2);display:none;grid-template-columns:1fr 1fr;gap:9px}
+    .c-edit.open{display:grid}
+    .c-edit label{font-size:11px;color:var(--muted);font-weight:600;text-transform:uppercase;letter-spacing:.05em;display:block;margin-bottom:3px}
+    .c-edit input,.c-edit textarea{width:100%;padding:8px 10px;border:1px solid var(--line);border-radius:7px;font:inherit;font-size:13.5px;background:var(--surface);color:var(--ink)}
+    .c-edit .full{grid-column:1 / -1}
+    .c-edit .save-row{grid-column:1 / -1;display:flex;gap:8px;justify-content:flex-end}
+  </style>
+  <div class="page">
+    <div class="page-head"><h1>Contacts</h1><p>The customer list ${esc(aName())} builds automatically. Every caller she saves shows up here with what she learned, so you can see who's calling, mark your regulars, or block a number.</p></div>
+    <div class="card">
+      <div class="card-h"><h2>People${total?` <span class="hint">${total}</span>`:''}</h2><button class="btn sm" id="c-refresh">Refresh</button></div>
+      <div class="c-tools"><input class="c-search" id="c-search" type="search" placeholder="Search name, number, company\u2026" value="${esc(q)}"></div>
+      <div id="c-list">${contactsListHTML(list)}</div>
+    </div>
+  </div>`;
+  const s=$("#c-search");
+  s.oninput=()=>{ state._cq=s.value; $("#c-list").innerHTML=contactsListHTML(state.contacts.filter(c=>contactMatch(c,s.value))); bindContactActions(); };
+  $("#c-refresh").onclick=async()=>{ const b=$("#c-refresh"); b.disabled=true; b.textContent="\u2026"; await loadContacts(); pageContacts(); };
+  bindContactActions();
+}
+function contactHTML(c){
+  const vip=c.listType==='whitelist', blocked=c.listType==='blacklist';
+  const tel=c.phone?c.phone.replace(/[^\d+]/g,''):"";
+  const meta=[]; if(c.company) meta.push(`<b>${esc(c.company)}</b>`); if(c.interest) meta.push(esc(c.interest));
+  const calls = c.callCount? `${c.callCount} call${c.callCount>1?'s':''}` : 'Not called yet';
+  const last = c.lastCallAt? ` \u00b7 last ${fmtWhen(c.lastCallAt)}` : '';
+  return `<div class="c-item ${vip?'vip':''} ${blocked?'blocked':''}" data-id="${c.id}">
+    <div class="c-top">
+      <span class="c-name">${esc(c.name||"Unknown caller")}</span>
+      ${vip?'<span class="c-badge vip">VIP</span>':''}${blocked?'<span class="c-badge blocked">Blocked</span>':''}
+      ${langBadge(c.language)}
+      ${c.phone?`<a class="c-num" href="tel:${esc(tel)}">${esc(c.phone)}</a>`:''}
+    </div>
+    ${meta.length?`<div class="c-meta">${meta.join(" \u00b7 ")}</div>`:''}
+    <div class="c-meta">${calls}${last}</div>
+    ${c.lastSummary?`<div class="c-sum">\u201c${esc(c.lastSummary)}\u201d</div>`:''}
+    <div class="c-actions">
+      <button class="btn sm" data-act="edit" data-id="${c.id}">Edit</button>
+      <button class="btn sm" data-act="vip" data-id="${c.id}">${vip?'Remove VIP':'Mark VIP'}</button>
+      <button class="btn sm" data-act="block" data-id="${c.id}">${blocked?'Unblock':'Block'}</button>
+      <button class="btn sm danger" data-act="del" data-id="${c.id}">Delete</button>
+    </div>
+    <div class="c-edit" id="c-edit-${c.id}">
+      <div><label>Name</label><input data-f="name" value="${esc(c.name)}"></div>
+      <div><label>Company</label><input data-f="company" value="${esc(c.company)}"></div>
+      <div class="full"><label>Interest</label><input data-f="interest" value="${esc(c.interest)}"></div>
+      <div><label>Language</label><input data-f="language" value="${esc(c.language)}"></div>
+      <div><label>Phone</label><input data-f="phone" value="${esc(c.phone)}"></div>
+      <div class="full"><label>Notes</label><textarea data-f="notes" rows="2">${esc(c.notes)}</textarea></div>
+      <div class="save-row"><button class="btn sm" data-act="canceledit" data-id="${c.id}">Cancel</button><button class="btn sm primary" data-act="saveedit" data-id="${c.id}">Save</button></div>
+    </div>
+  </div>`;
+}
+function bindContactActions(){
+  document.querySelectorAll('#c-list [data-act]').forEach(b=>b.onclick=async()=>{
+    const id=b.dataset.id, act=b.dataset.act;
+    const c=state.contacts.find(x=>x.id===id); if(!c && act!=='del') return;
+    if(act==='edit'){ const p=$("#c-edit-"+id); if(p) p.classList.toggle('open'); return; }
+    if(act==='canceledit'){ const p=$("#c-edit-"+id); if(p) p.classList.remove('open'); return; }
+    if(act==='saveedit'){
+      const wrap=$("#c-edit-"+id); const g=f=>{ const el=wrap.querySelector('[data-f="'+f+'"]'); return el?el.value.trim():""; };
+      const patch={ name:g('name')||null, company:g('company')||null, interest:g('interest')||null, language:g('language')||null, phone:g('phone')||c.phone, notes:g('notes')||null, updated_at:new Date().toISOString() };
+      b.disabled=true; b.textContent="\u2026";
+      const { error } = await db.from('contacts').update(patch).eq('id', id);
+      if(!error){ Object.assign(c,{name:patch.name||"",company:patch.company||"",interest:patch.interest||"",language:patch.language||"",phone:patch.phone||"",notes:patch.notes||""}); pageContacts(); }
+      else { b.disabled=false; b.textContent="Save"; alert("Could not save: "+error.message); }
+      return;
+    }
+    if(act==='vip'||act==='block'){
+      const target = act==='vip' ? (c.listType==='whitelist'?'normal':'whitelist') : (c.listType==='blacklist'?'normal':'blacklist');
+      b.disabled=true;
+      const { error } = await db.from('contacts').update({ list_type:target, updated_at:new Date().toISOString() }).eq('id', id);
+      if(!error){ c.listType=target; pageContacts(); } else { b.disabled=false; alert("Could not update: "+error.message); }
+      return;
+    }
+    if(act==='del'){
+      if(!confirm("Delete this contact? "+aName()+" will treat them as a brand-new caller next time.")) return;
+      b.disabled=true;
+      const { error } = await db.from('contacts').delete().eq('id', id);
+      if(!error){ state.contacts=state.contacts.filter(x=>x.id!==id); pageContacts(); } else { b.disabled=false; alert("Could not delete: "+error.message); }
+      return;
+    }
+  });
 }
 
 /* ===================== APPOINTMENTS PAGE ===================== */
