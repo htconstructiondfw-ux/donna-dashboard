@@ -458,6 +458,7 @@ function pageAssistant(){
       <div class="field"><label class="switch"><input type="checkbox" id="a-rec" ${a.recordingNotice?'checked':''}><span class="track"></span><span class="txt">Recording notice<small>Says the call may be recorded. Leave on unless your lawyer clears otherwise.</small></span></label></div>
       <div class="field"><label class="switch"><input type="checkbox" id="a-active" ${a.active?'checked':''}><span class="track"></span><span class="txt">Answering calls<small>Turn off to pause; calls fall back to your line.</small></span></label></div>
       <div class="field"><label class="lab">Special instructions <span class="sub">Extra rules for how ${esc(aName())} answers, one per line. She follows these on every call.</span></label><textarea class="inp" id="a-instr" rows="5" style="min-height:120px;resize:vertical;font-family:inherit;line-height:1.5;width:100%" placeholder="e.g. Always ask what city the caller is calling from.&#10;If they ask about pricing, tell them a specialist will follow up with a quote.">${esc(((a.routing||{}).custom_instructions)||"")}</textarea></div>
+      <div class="field"><label class="lab">Opening question <span class="sub">Optional. Spoken word-for-word at the end of the greeting, replacing "How can I help you?" Works on every call, in the exact words you type.</span></label><input class="inp" id="a-openq" placeholder='e.g. Before we get started, may I ask what city you are calling from?' value="${esc(((a.routing||{}).opening_question)||"")}"></div>
       <div style="margin-top:18px"><button class="btn primary" id="a-save">Save assistant</button></div>
     </div>
   </div>`;
@@ -478,6 +479,7 @@ function pageAssistant(){
   $("#a-langs").querySelectorAll(".chip").forEach(c=>c.onclick=()=>{ const l=c.dataset.l, on=c.getAttribute("aria-pressed")==="true"; if(on){a.languages=a.languages.filter(x=>x!==l);}else{a.languages.push(l);} c.setAttribute("aria-pressed",String(!on)); });
   $("#a-save").onclick=saveAssistant;
   { const ie=$("#a-instr"); if(ie) ie.oninput=()=>{ state.assistant.routing=state.assistant.routing||{}; state.assistant.routing.custom_instructions=ie.value; }; }
+  { const oe=$("#a-openq"); if(oe) oe.oninput=()=>{ state.assistant.routing=state.assistant.routing||{}; state.assistant.routing.opening_question=oe.value; }; }
   async function runProvision(area, replace, btn, msg){
     if(area.length!==3){ msg.style.color="var(--danger)"; msg.textContent="Enter a 3-digit area code."; return; }
     btn.disabled=true; const o=btn.textContent; btn.textContent=replace?"Replacing…":"Getting a number…"; msg.style.color="var(--muted)"; msg.textContent="";
@@ -507,7 +509,8 @@ function pageAssistant(){
 async function saveAssistant(){
   const a=state.assistant, btn=$("#a-save"); btn.disabled=true; const o=btn.textContent; btn.textContent="Saving…";
   const instrEl=$("#a-instr"); const custom_instructions=instrEl?instrEl.value.trim():(((a.routing||{}).custom_instructions)||"");
-  const routing=Object.assign({}, a.routing||{}, {recording_notice:a.recordingNotice, custom_instructions});
+  const oqEl=$("#a-openq"); const opening_question=oqEl?oqEl.value.trim():(((a.routing||{}).opening_question)||"");
+  const routing=Object.assign({}, a.routing||{}, {recording_notice:a.recordingNotice, custom_instructions, opening_question});
   const row={ assistant_name:a.name, greeting_label:a.greetingLabel, voice_id:a.voice, languages:a.languages, twilio_number:a.number||null, is_active:a.active, routing };
   let error;
   if(state.assistantId){ ({error}=await db.from('assistants').update(row).eq('id',state.assistantId)); }
