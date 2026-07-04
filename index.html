@@ -401,8 +401,8 @@ function renderPage(){
 }
 
 /* ===================== ASSISTANT PAGE ===================== */
-function greetingText(){ const a=state.assistant; let s=`Hello, this is <span class="v">${esc(a.name||DEFAULT_NAME)}</span> with ${esc(a.greetingLabel||"the office")}. `; if(a.recordingNotice) s+=`Just so you know, this call may be recorded for quality and training. `; return s+`How can I help you?`; }
-function greetingPlain(){ const a=state.assistant; let s=`Hello, this is ${a.name||DEFAULT_NAME} with ${a.greetingLabel||"the office"}. `; if(a.recordingNotice) s+=`Just so you know, this call may be recorded for quality and training. `; return s+`How can I help you?`; }
+function greetingText(){ const a=state.assistant; let s=`Hello, this is <span class="v">${esc(a.name||DEFAULT_NAME)}</span> with ${esc(a.greetingLabel||"the office")}. `; if(a.recordingNotice) s+=`Just so you know, this call may be recorded for quality and training. `; const oq=((a.routing||{}).opening_question||"").trim(); return s+(oq?esc(oq):`How can I help you?`); }
+function greetingPlain(){ const a=state.assistant; let s=`Hello, this is ${a.name||DEFAULT_NAME} with ${a.greetingLabel||"the office"}. `; if(a.recordingNotice) s+=`Just so you know, this call may be recorded for quality and training. `; const oq=((a.routing||{}).opening_question||"").trim(); return s+(oq?oq:`How can I help you?`); }
 function pickVoice(g){ const all=window.speechSynthesis.getVoices(); const en=all.filter(v=>/^en(-|_|$)/i.test(v.lang)); const pool=en.length?en:all; const f=/(female|samantha|victoria|zira|karen|moira|tessa|susan|fiona|serena|allison|ava|jenny|aria)/i; const m=/(daniel|alex|david|fred|aaron|thomas|oliver|arthur|gordon|guy|ryan)/i; const want=g==="female"?f:m; return pool.find(v=>want.test(v.name))||pool[0]||null; }
 function speakGreeting(btn){ if(!('speechSynthesis' in window))return; const lbl=btn.querySelector(".lbl"); if(window.speechSynthesis.speaking){window.speechSynthesis.cancel();return;} const u=new SpeechSynthesisUtterance(greetingPlain()); const v=pickVoice(state.assistant.voice.includes("female")?"female":"male"); if(v)u.voice=v; u.rate=1;u.pitch=1; u.onstart=()=>{btn.classList.add("speaking");lbl.textContent="Stop";}; u.onend=u.onerror=()=>{btn.classList.remove("speaking");lbl.textContent="Play greeting";}; window.speechSynthesis.speak(u); }
 
@@ -479,7 +479,7 @@ function pageAssistant(){
   $("#a-langs").querySelectorAll(".chip").forEach(c=>c.onclick=()=>{ const l=c.dataset.l, on=c.getAttribute("aria-pressed")==="true"; if(on){a.languages=a.languages.filter(x=>x!==l);}else{a.languages.push(l);} c.setAttribute("aria-pressed",String(!on)); });
   $("#a-save").onclick=saveAssistant;
   { const ie=$("#a-instr"); if(ie) ie.oninput=()=>{ state.assistant.routing=state.assistant.routing||{}; state.assistant.routing.custom_instructions=ie.value; }; }
-  { const oe=$("#a-openq"); if(oe) oe.oninput=()=>{ state.assistant.routing=state.assistant.routing||{}; state.assistant.routing.opening_question=oe.value; }; }
+  { const oe=$("#a-openq"); if(oe) oe.oninput=()=>{ state.assistant.routing=state.assistant.routing||{}; state.assistant.routing.opening_question=oe.value; const sy=$("#say"); if(sy) sy.innerHTML=greetingText(); }; }
   async function runProvision(area, replace, btn, msg){
     if(area.length!==3){ msg.style.color="var(--danger)"; msg.textContent="Enter a 3-digit area code."; return; }
     btn.disabled=true; const o=btn.textContent; btn.textContent=replace?"Replacing…":"Getting a number…"; msg.style.color="var(--muted)"; msg.textContent="";
