@@ -189,7 +189,7 @@ const state = {
   account:null, owner:null, assistantId:null,
   assistant:{ name:DEFAULT_NAME, greetingLabel:"the office", voice:"warm-female", languages:["en"], number:"", recordingNotice:true, active:true, routing:{} },
   schedule: DAYS.map((_,i)=>({ working:{on:false,start:"08:00",end:"18:00"}, bookable:{on:false,start:"09:00",end:"15:00"} })),
-  blocks:[], types:[], messages:[], appointments:[], calls:[], contacts:[], openCallId:null, callTranscript:[], callsChannel:null, txChannel:null, view:"assistant", authMode:"signup"
+  blocks:[], types:[], messages:[], appointments:[], calls:[], contacts:[], gaps:[], openCallId:null, callTranscript:[], callsChannel:null, txChannel:null, view:"assistant", authMode:"signup"
 };
 const LANGS = [
   ["ar","Arabic"],["yue","Cantonese"],["nl","Dutch"],["en","English"],["fr","French"],
@@ -356,6 +356,7 @@ async function loadData(){
   await loadAppointments();
   await loadCalls();
   await loadContacts();
+  await loadGaps();
   return true;
 }
 
@@ -363,7 +364,7 @@ async function loadData(){
 function renderApp(){
   if(new URLSearchParams(location.search).get('calendar')) state.view='settings';
   const navConfig=[["assistant","Assistant",I.bot],["schedule","Schedule",I.cal],["types","Appointment types",I.tag],["knowledge","Knowledge",I.book],["settings","Settings",I.gear]];
-  const navActivity=[["calls","Calls",I.phone],["appointments","Appointments",I.appt],["messages","Messages",I.inbox],["contacts","Contacts",I.users]];
+  const navActivity=[["calls","Calls",I.phone],["appointments","Appointments",I.appt],["messages","Messages",I.inbox],["contacts","Contacts",I.users],["gaps","Questions",I.book]];
   const soon=[["billing","Billing",I.card]];
   const navBtn=n=>`<button class="nav-item ${state.view===n[0]?'active':''}" data-v="${n[0]}">${n[2]}<span>${n[1]}</span>${n[0]==='messages'&&unreadCount()?`<span class="tag unread">${unreadCount()}</span>`:''}</button>`;
   const initials=(state.owner.name||"O").split(" ").map(w=>w[0]).slice(0,2).join("").toUpperCase();
@@ -382,7 +383,7 @@ function renderApp(){
     </aside>
     <main class="main">
       <div class="topbar">
-        <div class="crumbs">${state.view==='settings'?'Account':(['messages','appointments','calls','contacts'].includes(state.view)?'Activity':'Configure')} · <b>${esc(({assistant:"Assistant",schedule:"Schedule",types:"Appointment types",messages:"Messages",appointments:"Appointments",settings:"Settings",calls:"Calls",knowledge:"Knowledge",contacts:"Contacts"})[state.view])}</b></div>
+        <div class="crumbs">${state.view==='settings'?'Account':(['messages','appointments','calls','contacts','gaps'].includes(state.view)?'Activity':'Configure')} · <b>${esc(({assistant:"Assistant",schedule:"Schedule",types:"Appointment types",messages:"Messages",appointments:"Appointments",settings:"Settings",calls:"Calls",knowledge:"Knowledge",contacts:"Contacts",gaps:"Open questions"})[state.view])}</b></div>
         <div class="acct-chip"><span class="av">${initials}</span><div class="who"><b>${esc(state.account.company)}</b><span>${esc((state.account.status||'trial'))} · ${esc(state.account.plan||'starter')}</span></div></div>
       </div>
       <div id="page"></div>
@@ -396,8 +397,8 @@ function renderPage(){
   if('speechSynthesis' in window) window.speechSynthesis.cancel();
   teardownRealtime();
   document.querySelectorAll(".nav-item[data-v]").forEach(b=>b.classList.toggle("active",b.dataset.v===state.view));
-  $(".crumbs").innerHTML=`${state.view==='settings'?'Account':(['messages','appointments','calls','contacts'].includes(state.view)?'Activity':'Configure')} · <b>${esc(({assistant:"Assistant",schedule:"Schedule",types:"Appointment types",messages:"Messages",appointments:"Appointments",settings:"Settings",calls:"Calls",knowledge:"Knowledge",contacts:"Contacts"})[state.view])}</b>`;
-  ({assistant:pageAssistant, schedule:pageSchedule, types:pageTypes, messages:pageMessages, appointments:pageAppointments, settings:pageSettings, calls:pageCalls, knowledge:pageKnowledge, contacts:pageContacts})[state.view]();
+  $(".crumbs").innerHTML=`${state.view==='settings'?'Account':(['messages','appointments','calls','contacts','gaps'].includes(state.view)?'Activity':'Configure')} · <b>${esc(({assistant:"Assistant",schedule:"Schedule",types:"Appointment types",messages:"Messages",appointments:"Appointments",settings:"Settings",calls:"Calls",knowledge:"Knowledge",contacts:"Contacts",gaps:"Open questions"})[state.view])}</b>`;
+  ({assistant:pageAssistant, schedule:pageSchedule, types:pageTypes, messages:pageMessages, appointments:pageAppointments, settings:pageSettings, calls:pageCalls, knowledge:pageKnowledge, contacts:pageContacts, gaps:pageGaps})[state.view]();
 }
 
 /* ===================== ASSISTANT PAGE ===================== */
@@ -675,12 +676,75 @@ function updateNavBadge(){
 }
 
 /* ===================== CONTACTS PAGE ===================== */
+/* ===================== KNOWLEDGE GAPS (OPEN QUESTIONS) ===================== */
+async function loadGaps(){
+  const { data } = await db.from('knowledge_gaps').select('*').eq('account_id', state.account.id).eq('status','open').order('times_asked',{ascending:false}).order('updated_at',{ascending:false});
+  state.gaps = data || [];
+}
+function pageGaps(){
+  const rows = state.gaps||[];
+  $("#page").innerHTML=`
+  <style>
+    .g-item{border:1px solid var(--line);border-radius:var(--r-sm);padding:14px 16px;margin-bottom:10px;background:var(--surface)}
+    .g-q{font-weight:600;font-size:15px;color:var(--ink)}
+    .g-meta{color:var(--muted);font-size:12.5px;margin-top:3px}
+    .g-ans{width:100%;margin-top:11px;padding:9px 11px;border:1px solid var(--line);border-radius:8px;font:inherit;font-size:14px;line-height:1.5;background:var(--surface);color:var(--ink);min-height:66px;resize:vertical}
+    .g-actions{display:flex;gap:8px;margin-top:9px;justify-content:flex-end;align-items:center}
+    .g-msg{font-size:12.5px;margin-left:auto}
+  </style>
+  <div class="page">
+    <div class="page-head"><h1>Open questions</h1><p>Questions callers asked that ${esc(aName())} could not answer. Answer one and it goes straight into her knowledge base, so she handles it herself on every call after.</p></div>
+    <div class="card">
+      <div class="card-h"><h2>Needs an answer${rows.length?` <span class="hint">${rows.length}</span>`:''}</h2><button class="btn sm" id="g-refresh">Refresh</button></div>
+      <div id="g-list">${rows.length?rows.map(gapHTML).join(""):`<div class="empty">${I.book}<div>No open questions yet. When a caller asks something ${esc(aName())} can't answer, it appears here for you to answer once.</div></div>`}</div>
+    </div>
+  </div>`;
+  $("#g-refresh").onclick=async()=>{ const b=$("#g-refresh"); b.disabled=true; b.textContent="\u2026"; await loadGaps(); pageGaps(); };
+  bindGapActions();
+}
+function gapHTML(g){
+  const n=g.times_asked||1;
+  return `<div class="g-item" data-id="${g.id}">
+    <div class="g-q">${esc(g.question)}</div>
+    <div class="g-meta">Asked ${n} time${n>1?'s':''}${g.updated_at?' \u00b7 last '+fmtWhen(g.updated_at):''}</div>
+    <textarea class="g-ans" data-a="${g.id}" placeholder="Type the answer ${esc(aName())} should give\u2026"></textarea>
+    <div class="g-actions"><span class="g-msg" id="g-msg-${g.id}"></span>
+      <button class="btn sm" data-act="dismiss" data-id="${g.id}">Dismiss</button>
+      <button class="btn sm primary" data-act="answer" data-id="${g.id}">Save answer</button>
+    </div>
+  </div>`;
+}
+function bindGapActions(){
+  document.querySelectorAll('#g-list [data-act]').forEach(b=>b.onclick=async()=>{
+    const id=b.dataset.id, act=b.dataset.act;
+    const g=(state.gaps||[]).find(x=>x.id===id); if(!g) return;
+    const msg=$("#g-msg-"+id);
+    if(act==='dismiss'){
+      b.disabled=true;
+      const { error }=await db.from('knowledge_gaps').update({status:'dismissed',updated_at:new Date().toISOString(),resolved_at:new Date().toISOString()}).eq('id',id);
+      if(!error){ state.gaps=(state.gaps||[]).filter(x=>x.id!==id); pageGaps(); } else { b.disabled=false; if(msg){msg.style.color='var(--danger)';msg.textContent='Could not dismiss.';} }
+      return;
+    }
+    if(act==='answer'){
+      const ta=document.querySelector('[data-a="'+id+'"]'); const answer=ta?ta.value.trim():"";
+      if(!answer){ if(msg){msg.style.color='var(--danger)';msg.textContent='Type an answer first.';} return; }
+      b.disabled=true; const o=b.textContent; b.textContent='Saving\u2026';
+      try{
+        const { data, error }=await db.functions.invoke("knowledge-upsert",{ body:{ title:g.question, category:'FAQ', content:answer } });
+        if(error || !data || !data.ok){ throw new Error((data&&data.error)||(error&&error.message)||'save failed'); }
+        await db.from('knowledge_gaps').update({status:'answered',answer,updated_at:new Date().toISOString(),resolved_at:new Date().toISOString()}).eq('id',id);
+        state.gaps=(state.gaps||[]).filter(x=>x.id!==id); pageGaps();
+      }catch(e){ b.disabled=false; b.textContent=o; if(msg){msg.style.color='var(--danger)';msg.textContent='Could not save. '+(e.message||'');} }
+      return;
+    }
+  });
+}
 async function loadContacts(){
   const { data } = await db.from('contacts').select('*').eq('account_id', state.account.id).order('last_call_at',{ascending:false, nullsFirst:false});
   state.contacts = (data||[]).map(c=>({
     id:c.id, phone:c.phone||"", name:c.name||"", company:c.company||"", interest:c.interest||"",
     language:c.language||"", listType:c.list_type||"normal", callCount:c.call_count||0,
-    lastCallAt:c.last_call_at||null, lastSummary:c.last_call_summary||"", notes:c.notes||""
+    lastCallAt:c.last_call_at||null, lastSummary:c.last_call_summary||"", notes:c.notes||"", memory:c.memory||""
   }));
 }
 function contactMatch(c,q){
@@ -750,6 +814,7 @@ function contactHTML(c){
     ${meta.length?`<div class="c-meta">${meta.join(" \u00b7 ")}</div>`:''}
     <div class="c-meta">${calls}${last}</div>
     ${c.lastSummary?`<div class="c-sum">\u201c${esc(c.lastSummary)}\u201d</div>`:''}
+    ${c.memory?`<div class="c-sum" style="font-style:normal;color:var(--ink-2);line-height:1.5"><strong style="color:var(--muted);font-weight:600;font-size:10px;text-transform:uppercase;letter-spacing:.05em;margin-right:6px">Remembers</strong>${esc(c.memory)}</div>`:''}
     <div class="c-actions">
       <button class="btn sm" data-act="edit" data-id="${c.id}">Edit</button>
       <button class="btn sm" data-act="vip" data-id="${c.id}">${vip?'Remove VIP':'Mark VIP'}</button>
@@ -762,6 +827,7 @@ function contactHTML(c){
       <div class="full"><label>Interest</label><input data-f="interest" value="${esc(c.interest)}"></div>
       <div><label>Language</label><input data-f="language" value="${esc(c.language)}"></div>
       <div><label>Phone</label><input data-f="phone" value="${esc(c.phone)}"></div>
+      <div class="full"><label>Memory (auto, editable)</label><textarea data-f="memory" rows="3">${esc(c.memory)}</textarea></div>
       <div class="full"><label>Notes</label><textarea data-f="notes" rows="2">${esc(c.notes)}</textarea></div>
       <div class="save-row"><button class="btn sm" data-act="canceledit" data-id="${c.id}">Cancel</button><button class="btn sm primary" data-act="saveedit" data-id="${c.id}">Save</button></div>
     </div>
@@ -775,7 +841,7 @@ function bindContactActions(){
     if(act==='canceledit'){ const p=$("#c-edit-"+id); if(p) p.classList.remove('open'); return; }
     if(act==='saveedit'){
       const wrap=$("#c-edit-"+id); const g=f=>{ const el=wrap.querySelector('[data-f="'+f+'"]'); return el?el.value.trim():""; };
-      const patch={ name:g('name')||null, company:g('company')||null, interest:g('interest')||null, language:g('language')||null, phone:g('phone')||c.phone, notes:g('notes')||null, updated_at:new Date().toISOString() };
+      const patch={ name:g('name')||null, company:g('company')||null, interest:g('interest')||null, language:g('language')||null, phone:g('phone')||c.phone, notes:g('notes')||null, memory:g('memory')||null, updated_at:new Date().toISOString() };
       b.disabled=true; b.textContent="\u2026";
       const { error } = await db.from('contacts').update(patch).eq('id', id);
       if(!error){ Object.assign(c,{name:patch.name||"",company:patch.company||"",interest:patch.interest||"",language:patch.language||"",phone:patch.phone||"",notes:patch.notes||""}); pageContacts(); }
