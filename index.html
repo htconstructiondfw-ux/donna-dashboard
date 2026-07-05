@@ -1055,10 +1055,14 @@ async function saveAlertEmail(){
   const inp=$("#alert-email"); if(!inp) return;
   const msg=$("#alert-msg"), btn=$("#alert-save");
   const email=inp.value.trim();
+  const escInp=$("#esc-email"); const escEmail=escInp?escInp.value.trim():"";
+  const emailRe=/^[^@\s]+@[^@\s]+\.[^@\s]+$/;
+  if(escInp && escEmail && !emailRe.test(escEmail)){ if(msg){msg.style.color='var(--danger)';msg.textContent='The escalation inbox is not a valid email address.';} return; }
+  if(escInp && escEmail && email && escEmail.toLowerCase()===email.toLowerCase()){ if(msg){msg.style.color='var(--danger)';msg.textContent='The escalation inbox must be different from the general inbox, since '+aName()+' answers the general inbox.';} return; }
   if(email && !/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)){ if(msg){msg.style.color='var(--danger)';msg.textContent='That does not look like a valid email address.';} return; }
   if(msg){ msg.style.color='var(--muted)'; msg.textContent=''; }
   btn.disabled=true; const o=btn.textContent; btn.textContent="Saving…";
-  const settings = Object.assign({}, state.account.settings||{}, {alert_email:email});
+  const settings = Object.assign({}, state.account.settings||{}, Object.assign({alert_email:email}, escInp?{escalation_email:escEmail}:{}));
   const { error } = await db.from('accounts').update({settings}).eq('id',state.account.id);
   if(!error){ state.account.settings=settings; if(msg){ msg.style.color='var(--muted)'; msg.textContent=email?('Messages will be emailed to '+email+'.'):'General inbox cleared.'; } }
   else if(msg){ msg.style.color='var(--danger)'; msg.textContent='Could not save. Try again.'; }
@@ -1170,6 +1174,7 @@ function pageSettings(){
     <div class="card"><div class="card-h"><h2>Message alerts</h2><button class="btn sm" id="alert-save">Save</button></div>
       <p style="font-size:13px;color:var(--muted);margin-bottom:12px">When ${esc(aName())} takes a message, it is emailed here. If a caller asks for someone by name, that person is emailed directly and this inbox is copied. Use an address you actually check.</p>
       <div class="field" style="max-width:340px;margin:0"><label class="lab">General inbox email</label><input class="inp" id="alert-email" type="email" placeholder="you@yourcompany.com" value="${esc((ac.settings&&ac.settings.alert_email)||'')}"></div>
+      ${(ac.settings&&ac.settings.messaging_enabled)?`<div class="field" style="max-width:340px;margin:14px 0 0"><label class="lab">Escalation inbox <span style="display:block;font-weight:400;color:var(--muted);font-size:11.5px;margin-top:2px">When email is on, ${esc(aName())} sends questions she cannot answer and replies to review here. Must be a different address from the general inbox, which ${esc(aName())} answers.</span></label><input class="inp" id="esc-email" type="email" placeholder="you@yourcompany.com" value="${esc((ac.settings&&ac.settings.escalation_email)||'')}"></div>`:''}
       <div id="alert-msg" style="font-size:12.5px;color:var(--muted);margin-top:8px"></div>
     </div>
 
