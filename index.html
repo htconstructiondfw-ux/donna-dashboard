@@ -189,7 +189,7 @@ const state = {
   account:null, owner:null, assistantId:null,
   assistant:{ name:DEFAULT_NAME, greetingLabel:"the office", voice:"warm-female", languages:["en"], number:"", recordingNotice:true, active:true, routing:{} },
   schedule: DAYS.map((_,i)=>({ working:{on:false,start:"08:00",end:"18:00"}, bookable:{on:false,start:"09:00",end:"15:00"} })),
-  blocks:[], types:[], messages:[], appointments:[], calls:[], contacts:[], gaps:[], openCallId:null, callTranscript:[], callsChannel:null, txChannel:null, view:"assistant", authMode:"signup"
+  blocks:[], types:[], messages:[], appointments:[], calls:[], contacts:[], gaps:[], conversations:[], openConvId:null, threadMsgs:[], openCallId:null, callTranscript:[], callsChannel:null, txChannel:null, view:"assistant", authMode:"signup"
 };
 const LANGS = [
   ["ar","Arabic"],["yue","Cantonese"],["nl","Dutch"],["en","English"],["fr","French"],
@@ -357,6 +357,7 @@ async function loadData(){
   await loadCalls();
   await loadContacts();
   await loadGaps();
+  await loadConversations();
   return true;
 }
 
@@ -364,7 +365,7 @@ async function loadData(){
 function renderApp(){
   if(new URLSearchParams(location.search).get('calendar')) state.view='settings';
   const navConfig=[["assistant","Assistant",I.bot],["schedule","Schedule",I.cal],["types","Appointment types",I.tag],["knowledge","Knowledge",I.book],["settings","Settings",I.gear]];
-  const navActivity=[["calls","Calls",I.phone],["appointments","Appointments",I.appt],["messages","Messages",I.inbox],["contacts","Contacts",I.users],["gaps","Questions",I.book]];
+  const navActivity=[["calls","Calls",I.phone],["appointments","Appointments",I.appt],["messages","Messages",I.inbox],["contacts","Contacts",I.users],["gaps","Questions",I.book],["conversations","Inbox",I.inbox]];
   const soon=[["billing","Billing",I.card]];
   const navBtn=n=>`<button class="nav-item ${state.view===n[0]?'active':''}" data-v="${n[0]}">${n[2]}<span>${n[1]}</span>${n[0]==='messages'&&unreadCount()?`<span class="tag unread">${unreadCount()}</span>`:''}</button>`;
   const initials=(state.owner.name||"O").split(" ").map(w=>w[0]).slice(0,2).join("").toUpperCase();
@@ -383,7 +384,7 @@ function renderApp(){
     </aside>
     <main class="main">
       <div class="topbar">
-        <div class="crumbs">${state.view==='settings'?'Account':(['messages','appointments','calls','contacts','gaps'].includes(state.view)?'Activity':'Configure')} · <b>${esc(({assistant:"Assistant",schedule:"Schedule",types:"Appointment types",messages:"Messages",appointments:"Appointments",settings:"Settings",calls:"Calls",knowledge:"Knowledge",contacts:"Contacts",gaps:"Open questions"})[state.view])}</b></div>
+        <div class="crumbs">${state.view==='settings'?'Account':(['messages','appointments','calls','contacts','gaps','conversations'].includes(state.view)?'Activity':'Configure')} · <b>${esc(({assistant:"Assistant",schedule:"Schedule",types:"Appointment types",messages:"Messages",appointments:"Appointments",settings:"Settings",calls:"Calls",knowledge:"Knowledge",contacts:"Contacts",gaps:"Open questions",conversations:"Inbox"})[state.view])}</b></div>
         <div class="acct-chip"><span class="av">${initials}</span><div class="who"><b>${esc(state.account.company)}</b><span>${esc((state.account.status||'trial'))} · ${esc(state.account.plan||'starter')}</span></div></div>
       </div>
       <div id="page"></div>
@@ -397,8 +398,8 @@ function renderPage(){
   if('speechSynthesis' in window) window.speechSynthesis.cancel();
   teardownRealtime();
   document.querySelectorAll(".nav-item[data-v]").forEach(b=>b.classList.toggle("active",b.dataset.v===state.view));
-  $(".crumbs").innerHTML=`${state.view==='settings'?'Account':(['messages','appointments','calls','contacts','gaps'].includes(state.view)?'Activity':'Configure')} · <b>${esc(({assistant:"Assistant",schedule:"Schedule",types:"Appointment types",messages:"Messages",appointments:"Appointments",settings:"Settings",calls:"Calls",knowledge:"Knowledge",contacts:"Contacts",gaps:"Open questions"})[state.view])}</b>`;
-  ({assistant:pageAssistant, schedule:pageSchedule, types:pageTypes, messages:pageMessages, appointments:pageAppointments, settings:pageSettings, calls:pageCalls, knowledge:pageKnowledge, contacts:pageContacts, gaps:pageGaps})[state.view]();
+  $(".crumbs").innerHTML=`${state.view==='settings'?'Account':(['messages','appointments','calls','contacts','gaps','conversations'].includes(state.view)?'Activity':'Configure')} · <b>${esc(({assistant:"Assistant",schedule:"Schedule",types:"Appointment types",messages:"Messages",appointments:"Appointments",settings:"Settings",calls:"Calls",knowledge:"Knowledge",contacts:"Contacts",gaps:"Open questions",conversations:"Inbox"})[state.view])}</b>`;
+  ({assistant:pageAssistant, schedule:pageSchedule, types:pageTypes, messages:pageMessages, appointments:pageAppointments, settings:pageSettings, calls:pageCalls, knowledge:pageKnowledge, contacts:pageContacts, gaps:pageGaps, conversations:pageConversations})[state.view]();
 }
 
 /* ===================== ASSISTANT PAGE ===================== */
@@ -677,6 +678,128 @@ function updateNavBadge(){
 
 /* ===================== CONTACTS PAGE ===================== */
 /* ===================== KNOWLEDGE GAPS (OPEN QUESTIONS) ===================== */
+/* ===================== CONVERSATIONS (EMAIL INBOX) ===================== */
+async function loadConversations(){
+  const { data } = await db.from('conversations').select('*').eq('account_id', state.account.id).eq('channel','email').order('updated_at',{ascending:false});
+  state.conversations = data || [];
+}
+function convStatusBadge(st){
+  if(st==='awaiting_staff') return '<span class="c-badge" style="background:#fff4e5;color:#9a5b00">Needs you</span>';
+  if(st==='closed') return '<span class="c-badge" style="background:#eef2f6;color:#667">Closed</span>';
+  if(st==='opted_out') return '<span class="c-badge" style="background:#fde8e8;color:#a12">Opted out</span>';
+  return '<span class="c-badge" style="background:#e7f4ee;color:#177245">Active</span>';
+}
+function pageConversations(){
+  if(state.openConvId){ return renderThread(); }
+  const rows = state.conversations||[];
+  const needs = rows.filter(r=>r.status==='awaiting_staff').length;
+  $("#page").innerHTML=`
+  <style>
+    .cv-item{display:flex;align-items:center;gap:12px;border:1px solid var(--line);border-radius:var(--r-sm);padding:12px 14px;margin-bottom:8px;background:var(--surface);cursor:pointer}
+    .cv-item:hover{border-color:var(--accent,#3b6)}
+    .cv-who{font-weight:600;color:var(--ink)}
+    .cv-meta{color:var(--muted);font-size:12.5px;margin-top:2px}
+    .cv-right{margin-left:auto;text-align:right}
+    .th-msg{border:1px solid var(--line);border-radius:10px;padding:12px 14px;margin-bottom:10px}
+    .th-in{background:var(--surface)}
+    .th-out{background:#f2f7ff}
+    .th-draft{background:#fff8ec;border-color:#f0d9a8}
+    .th-role{font-size:11px;text-transform:uppercase;letter-spacing:.05em;color:var(--muted);font-weight:600;margin-bottom:4px}
+    .th-body{white-space:pre-wrap;line-height:1.5;color:var(--ink)}
+    .th-edit{width:100%;min-height:140px;padding:10px 12px;border:1px solid var(--line);border-radius:8px;font:inherit;font-size:14px;line-height:1.55;background:var(--surface);color:var(--ink);resize:vertical}
+    .th-actions{display:flex;gap:8px;justify-content:flex-end;margin-top:8px;align-items:center}
+    .th-msgtxt{font-size:12.5px;margin-right:auto}
+  </style>
+  <div class="page">
+    <div class="page-head"><h1>Inbox</h1><p>Email conversations ${esc(aName())} is handling. Drafts marked "Needs you" are waiting for your review before they send.</p></div>
+    <div class="card">
+      <div class="card-h"><h2>Conversations${needs?` <span class="hint">${needs} need you</span>`:''}</h2><button class="btn sm" id="cv-refresh">Refresh</button></div>
+      <div id="cv-list">${rows.length?rows.map(convRow).join(""):`<div class="empty">${I.inbox}<div>No email conversations yet. When a customer emails, ${esc(aName())} will draft a reply here for you.</div></div>`}</div>
+    </div>
+  </div>`;
+  $("#cv-refresh").onclick=async()=>{ const b=$("#cv-refresh"); b.disabled=true; b.textContent="\u2026"; await loadConversations(); pageConversations(); };
+  document.querySelectorAll('#cv-list [data-conv]').forEach(el=>el.onclick=()=>{ state.openConvId=el.dataset.conv; renderThread(); });
+}
+function convRow(c){
+  return `<div class="cv-item" data-conv="${c.id}">
+    <div><div class="cv-who">${esc(c.customer_name||c.customer_identifier||'Customer')}</div>
+      <div class="cv-meta">${esc(c.customer_identifier||'')}</div></div>
+    <div class="cv-right">${convStatusBadge(c.status)}<div class="cv-meta">${c.last_inbound_at?fmtWhen(c.last_inbound_at):''}</div></div>
+  </div>`;
+}
+async function renderThread(){
+  const c=(state.conversations||[]).find(x=>x.id===state.openConvId);
+  if(!c){ state.openConvId=null; return pageConversations(); }
+  const { data:msgs } = await db.from('conversation_messages').select('*').eq('conversation_id',c.id).order('created_at',{ascending:true});
+  state.threadMsgs = msgs||[];
+  const draft = [...state.threadMsgs].reverse().find(m=>m.direction==='outbound' && m.status==='queued');
+  const rowsHtml = state.threadMsgs.map(m=>{
+    if(m.direction==='outbound' && m.status==='queued') return '';
+    const role = m.direction==='inbound'?'Customer':(m.actor==='staff'?'You':aName());
+    const cls = m.direction==='inbound'?'th-in':'th-out';
+    return `<div class="th-msg ${cls}"><div class="th-role">${esc(role)}${m.subject?' \u00b7 '+esc(m.subject):''}</div><div class="th-body">${esc(m.body||'')}</div></div>`;
+  }).join("");
+  const draftHtml = draft ? `
+    <div class="th-msg th-draft">
+      <div class="th-role">${esc(aName())}'s draft \u2014 review before sending</div>
+      <textarea class="th-edit" id="th-draft">${esc(draft.body||'')}</textarea>
+      <div class="th-actions"><span class="th-msgtxt" id="th-msg"></span>
+        <button class="btn sm" data-act="discard">Discard</button>
+        <button class="btn sm primary" data-act="send" data-mid="${draft.id}">Approve & send</button>
+      </div>
+    </div>` : `
+    <div class="th-msg th-out">
+      <div class="th-role">Reply as ${esc(aName())}</div>
+      <textarea class="th-edit" id="th-draft" placeholder="Type a reply to send to ${esc(c.customer_identifier||'the customer')}\u2026"></textarea>
+      <div class="th-actions"><span class="th-msgtxt" id="th-msg"></span>
+        <button class="btn sm primary" data-act="sendnew">Send</button>
+      </div>
+    </div>`;
+  $("#page").innerHTML=`
+  <style>
+    .th-msg{border:1px solid var(--line);border-radius:10px;padding:12px 14px;margin-bottom:10px}
+    .th-in{background:var(--surface)} .th-out{background:#f2f7ff} .th-draft{background:#fff8ec;border-color:#f0d9a8}
+    .th-role{font-size:11px;text-transform:uppercase;letter-spacing:.05em;color:var(--muted);font-weight:600;margin-bottom:4px}
+    .th-body{white-space:pre-wrap;line-height:1.5;color:var(--ink)}
+    .th-edit{width:100%;min-height:140px;padding:10px 12px;border:1px solid var(--line);border-radius:8px;font:inherit;font-size:14px;line-height:1.55;background:var(--surface);color:var(--ink);resize:vertical}
+    .th-actions{display:flex;gap:8px;justify-content:flex-end;margin-top:8px;align-items:center}
+    .th-msgtxt{font-size:12.5px;margin-right:auto}
+  </style>
+  <div class="page">
+    <div class="page-head"><button class="btn sm" id="th-back">\u2190 Inbox</button>
+      <h1 style="margin-top:10px">${esc(c.customer_name||c.customer_identifier||'Customer')}</h1>
+      <p>${esc(c.customer_identifier||'')}</p></div>
+    <div class="card">${rowsHtml}${draftHtml}</div>
+  </div>`;
+  $("#th-back").onclick=()=>{ state.openConvId=null; pageConversations(); };
+  bindThreadActions(c);
+}
+function bindThreadActions(c){
+  const msg=$("#th-msg");
+  const send=async(mid)=>{
+    const ta=$("#th-draft"); const bodyText=ta?ta.value.trim():"";
+    if(!bodyText){ if(msg){msg.style.color='var(--danger)';msg.textContent='Nothing to send.';} return; }
+    const btns=document.querySelectorAll('.th-actions .btn'); btns.forEach(b=>b.disabled=true);
+    if(msg){ msg.style.color='var(--muted)'; msg.textContent='Sending\u2026'; }
+    try{
+      const payload = mid ? { message_id:mid, body:bodyText } : { conversation_id:c.id, body:bodyText };
+      const { data, error }=await db.functions.invoke("email-send",{ body:payload });
+      if(error || !data || !data.ok){ throw new Error((data&&data.error)||(error&&error.message)||'send failed'); }
+      await loadConversations(); state.openConvId=c.id; renderThread();
+    }catch(e){ btns.forEach(b=>b.disabled=false); if(msg){msg.style.color='var(--danger)';msg.textContent='Could not send. '+(e.message||'');} }
+  };
+  const sBtn=document.querySelector('[data-act="send"]'); if(sBtn) sBtn.onclick=()=>send(sBtn.dataset.mid);
+  const nBtn=document.querySelector('[data-act="sendnew"]'); if(nBtn) nBtn.onclick=()=>send(null);
+  const dBtn=document.querySelector('[data-act="discard"]');
+  if(dBtn) dBtn.onclick=async()=>{
+    const draft=[...state.threadMsgs].reverse().find(m=>m.direction==='outbound'&&m.status==='queued');
+    if(!draft) return;
+    dBtn.disabled=true;
+    await db.from('conversation_messages').update({status:'failed'}).eq('id',draft.id);
+    await db.from('conversations').update({status:'active'}).eq('id',c.id);
+    await loadConversations(); state.openConvId=c.id; renderThread();
+  };
+}
 async function loadGaps(){
   const { data } = await db.from('knowledge_gaps').select('*').eq('account_id', state.account.id).eq('status','open').order('times_asked',{ascending:false}).order('updated_at',{ascending:false});
   state.gaps = data || [];
