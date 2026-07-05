@@ -1070,6 +1070,19 @@ async function saveAlertEmail(){
   else if(msg){ msg.style.color='var(--danger)'; msg.textContent='Could not save. Try again.'; }
   btn.disabled=false; btn.textContent=error?"Error — retry":"Saved ✓"; setTimeout(()=>btn.textContent=o,1300);
 }
+async function saveScheduling(){
+  const enEl=$("#sched-enabled"), autoEl=$("#sched-auto"), msg=$("#sched-msg"), btn=$("#sched-save");
+  if(!enEl) return;
+  btn.disabled=true; const o=btn.textContent; btn.textContent="Saving…";
+  const settings = Object.assign({}, state.account.settings||{}, { scheduling_enabled: !!enEl.checked, scheduling_auto_send: autoEl?!!autoEl.checked:true });
+  const { error } = await db.from('accounts').update({settings}).eq('id',state.account.id);
+  if(!error){
+    state.account.settings=settings;
+    if(msg){ msg.style.color='var(--muted)'; msg.textContent = enEl.checked ? ((autoEl&&autoEl.checked) ? aName()+' will propose times and book automatically over email.' : aName()+' will propose times and confirm, but each booking waits for your approval.') : aName()+' will pass email booking requests to you.'; }
+  }
+  else if(msg){ msg.style.color='var(--danger)'; msg.textContent='Could not save. Try again.'; }
+  btn.disabled=false; btn.textContent=error?"Error — retry":"Saved ✓"; setTimeout(()=>btn.textContent=o,1300);
+}
 async function saveTransfer(){
   const msg=$("#xfer-msg"), btn=$("#xfer-save"), numEl=$("#xfer-num"), enEl=$("#xfer-on");
   if(!state.assistantId){ if(msg){ msg.style.color='var(--danger)'; msg.textContent='Set up your assistant first, then add a transfer number.'; } return; }
@@ -1180,6 +1193,14 @@ function pageSettings(){
       <div id="alert-msg" style="font-size:12.5px;color:var(--muted);margin-top:8px"></div>
     </div>
 
+    ${(ac.settings&&ac.settings.messaging_enabled)?`
+    <div class="card"><div class="card-h"><h2>Email scheduling</h2><button class="btn sm" id="sched-save">Save</button></div>
+      <p style="font-size:13px;color:var(--muted);margin-bottom:12px">Controls how ${esc(aName())} handles booking requests that arrive by email. She only offers real open times from your booking hours and appointment types, re-checks the slot when the customer replies, and never double books.</p>
+      <label style="display:flex;align-items:flex-start;gap:10px;margin:0 0 14px;cursor:pointer;font-size:13.5px;color:var(--ink)"><input type="checkbox" id="sched-enabled" style="margin-top:3px" ${(!ac.settings||ac.settings.scheduling_enabled!==false)?'checked':''}><span>Let ${esc(aName())} handle scheduling over email<span style="display:block;font-weight:400;color:var(--muted);font-size:11.5px;margin-top:2px">When on, she proposes open times and books appointments by email. When off, she passes booking requests to you instead.</span></span></label>
+      <label id="sched-auto-row" style="display:flex;align-items:flex-start;gap:10px;margin:0;cursor:pointer;font-size:13.5px;color:var(--ink)"><input type="checkbox" id="sched-auto" style="margin-top:3px" ${(!ac.settings||ac.settings.scheduling_auto_send!==false)?'checked':''}><span>Book automatically without my approval<span style="display:block;font-weight:400;color:var(--muted);font-size:11.5px;margin-top:2px">When on, she books the time as soon as the customer replies, like she does on calls, and sends you a heads up. When off, she still proposes and confirms, but each booking waits for your approve by reply. This is separate from the email auto reply setting above.</span></span></label>
+      <div id="sched-msg" style="font-size:12.5px;color:var(--muted);margin-top:8px"></div>
+    </div>`:''}
+
     ${!isPro ? `
     <div class="card"><div class="card-h"><h2>Call transfer</h2><button class="btn sm" id="xfer-save">Save</button></div>
       <p style="font-size:13px;color:var(--muted);margin-bottom:12px">When a caller asks for a person during your live transfer hours, set on the Schedule page, ${esc(aName())} can transfer the live call to this number. Use full international format, for example +18175551234.</p>
@@ -1230,6 +1251,8 @@ function pageSettings(){
   $("#set-biz-save").onclick=saveBusiness;
   $("#tz-save").onclick=saveTimezone;
   { const ae=$("#alert-save"); if(ae) ae.onclick=saveAlertEmail; }
+  { const ss=$("#sched-save"); if(ss) ss.onclick=saveScheduling; }
+  { const se=$("#sched-enabled"), sr=$("#sched-auto-row"); if(se&&sr){ const upd=()=>{ sr.style.opacity=se.checked?'1':'.45'; const a=$("#sched-auto"); if(a) a.disabled=!se.checked; }; se.addEventListener('change',upd); upd(); } }
   { const xs=$("#xfer-save"); if(xs) xs.onclick=saveTransfer; }
   if(isPro){
     state._dir = (state.assistant.routing&&Array.isArray(state.assistant.routing.directory)) ? JSON.parse(JSON.stringify(state.assistant.routing.directory)) : [];
