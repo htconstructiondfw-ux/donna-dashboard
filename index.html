@@ -367,7 +367,8 @@ function renderApp(){
   const navConfig=[["assistant","Assistant",I.bot],["schedule","Schedule",I.cal],["types","Appointment types",I.tag],["knowledge","Knowledge",I.book],["settings","Settings",I.gear]];
   const navActivity=[["calls","Calls",I.phone],["appointments","Appointments",I.appt],["messages","Messages",I.inbox],["contacts","Contacts",I.users],["gaps","Questions",I.book],["conversations","Inbox",I.inbox]];
   const soon=[["billing","Billing",I.card]];
-  const navBtn=n=>`<button class="nav-item ${state.view===n[0]?'active':''}" data-v="${n[0]}">${n[2]}<span>${n[1]}</span>${n[0]==='messages'&&unreadCount()?`<span class="tag unread">${unreadCount()}</span>`:''}</button>`;
+  const navCount=v=>{ if(v==='messages') return unreadCount(); if(v==='conversations') return (state.conversations||[]).filter(c=>c.status==='awaiting_staff').length; if(v==='gaps') return (state.gaps||[]).length; return 0; };
+  const navBtn=n=>{ const _c=navCount(n[0]); return `<button class="nav-item ${state.view===n[0]?'active':''}" data-v="${n[0]}">${n[2]}<span>${n[1]}</span>${_c?`<span class="tag unread">${_c}</span>`:''}</button>`; };
   const initials=(state.owner.name||"O").split(" ").map(w=>w[0]).slice(0,2).join("").toUpperCase();
   document.title=`${aName()} — Dashboard`;
   document.getElementById("root").innerHTML = `
@@ -816,7 +817,7 @@ function pageGaps(){
     .g-msg{font-size:12.5px;margin-left:auto}
   </style>
   <div class="page">
-    <div class="page-head"><h1>Open questions</h1><p>Questions callers asked that ${esc(aName())} could not answer. Answer one and it goes straight into her knowledge base, so she handles it herself on every call after.</p></div>
+    <div class="page-head"><h1>Open questions</h1><p>Questions phone callers asked that ${esc(aName())} could not answer on a call. Answer one and it goes straight into her knowledge base, so she handles it on every call after. (Email questions are handled in the Inbox, not here.)</p></div>
     <div class="card">
       <div class="card-h"><h2>Needs an answer${rows.length?` <span class="hint">${rows.length}</span>`:''}</h2><button class="btn sm" id="g-refresh">Refresh</button></div>
       <div id="g-list">${rows.length?rows.map(gapHTML).join(""):`<div class="empty">${I.book}<div>No open questions yet. When a caller asks something ${esc(aName())} can't answer, it appears here for you to answer once.</div></div>`}</div>
@@ -1056,13 +1057,14 @@ async function saveAlertEmail(){
   const msg=$("#alert-msg"), btn=$("#alert-save");
   const email=inp.value.trim();
   const escInp=$("#esc-email"); const escEmail=escInp?escInp.value.trim():"";
+  const autoEl=$("#auto-send"); const autoSend=autoEl?!!autoEl.checked:undefined;
   const emailRe=/^[^@\s]+@[^@\s]+\.[^@\s]+$/;
   if(escInp && escEmail && !emailRe.test(escEmail)){ if(msg){msg.style.color='var(--danger)';msg.textContent='The escalation inbox is not a valid email address.';} return; }
   if(escInp && escEmail && email && escEmail.toLowerCase()===email.toLowerCase()){ if(msg){msg.style.color='var(--danger)';msg.textContent='The escalation inbox must be different from the general inbox, since '+aName()+' answers the general inbox.';} return; }
   if(email && !/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)){ if(msg){msg.style.color='var(--danger)';msg.textContent='That does not look like a valid email address.';} return; }
   if(msg){ msg.style.color='var(--muted)'; msg.textContent=''; }
   btn.disabled=true; const o=btn.textContent; btn.textContent="Saving…";
-  const settings = Object.assign({}, state.account.settings||{}, Object.assign({alert_email:email}, escInp?{escalation_email:escEmail}:{}));
+  const settings = Object.assign({}, state.account.settings||{}, Object.assign({alert_email:email}, escInp?{escalation_email:escEmail}:{}, autoEl?{email_auto_send:autoSend}:{}));
   const { error } = await db.from('accounts').update({settings}).eq('id',state.account.id);
   if(!error){ state.account.settings=settings; if(msg){ msg.style.color='var(--muted)'; msg.textContent=email?('Messages will be emailed to '+email+'.'):'General inbox cleared.'; } }
   else if(msg){ msg.style.color='var(--danger)'; msg.textContent='Could not save. Try again.'; }
@@ -1174,7 +1176,7 @@ function pageSettings(){
     <div class="card"><div class="card-h"><h2>Message alerts</h2><button class="btn sm" id="alert-save">Save</button></div>
       <p style="font-size:13px;color:var(--muted);margin-bottom:12px">When ${esc(aName())} takes a message, it is emailed here. If a caller asks for someone by name, that person is emailed directly and this inbox is copied. Use an address you actually check.</p>
       <div class="field" style="max-width:340px;margin:0"><label class="lab">General inbox email</label><input class="inp" id="alert-email" type="email" placeholder="you@yourcompany.com" value="${esc((ac.settings&&ac.settings.alert_email)||'')}"></div>
-      ${(ac.settings&&ac.settings.messaging_enabled)?`<div class="field" style="max-width:340px;margin:14px 0 0"><label class="lab">Escalation inbox <span style="display:block;font-weight:400;color:var(--muted);font-size:11.5px;margin-top:2px">When email is on, ${esc(aName())} sends questions she cannot answer and replies to review here. Must be a different address from the general inbox, which ${esc(aName())} answers.</span></label><input class="inp" id="esc-email" type="email" placeholder="you@yourcompany.com" value="${esc((ac.settings&&ac.settings.escalation_email)||'')}"></div>`:''}
+      ${(ac.settings&&ac.settings.messaging_enabled)?`<div class="field" style="max-width:340px;margin:14px 0 0"><label class="lab">Escalation inbox <span style="display:block;font-weight:400;color:var(--muted);font-size:11.5px;margin-top:2px">When email is on, ${esc(aName())} sends questions she cannot answer and replies to review here. Must be a different address from the general inbox, which ${esc(aName())} answers.</span></label><input class="inp" id="esc-email" type="email" placeholder="you@yourcompany.com" value="${esc((ac.settings&&ac.settings.escalation_email)||'')}"></div><label style="display:flex;align-items:flex-start;gap:10px;margin:16px 0 0;cursor:pointer;font-size:13.5px;color:var(--ink)"><input type="checkbox" id="auto-send" style="margin-top:3px" ${(ac.settings&&ac.settings.email_auto_send)?'checked':''}><span>Let ${esc(aName())} send confident replies automatically<span style="display:block;font-weight:400;color:var(--muted);font-size:11.5px;margin-top:2px">When on, ${esc(aName())} sends email answers she is confident about without waiting, and still escalates anything she is unsure about. When off, every reply waits for your approval.</span></span></label>`:''}
       <div id="alert-msg" style="font-size:12.5px;color:var(--muted);margin-top:8px"></div>
     </div>
 
