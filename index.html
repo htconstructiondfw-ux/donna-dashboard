@@ -1746,11 +1746,14 @@ async function loadCalendarOptions(st){
       if(msg) msg.textContent="Could not load your calendar list right now. "+aName()+" is using your current calendar.";
       return;
     }
-    const cur = data.current || st.calendar_id || "";
+    const acct=(data.account_email||"").toLowerCase();
+    const cur = data.current || "";
     const hasCur = data.calendars.some(c=>c.id===cur);
-    sel.innerHTML = data.calendars.map(c=>`<option value="${esc(c.id)}" ${((cur&&c.id===cur)||(!cur&&c.primary))?"selected":""}>${esc(c.name)}${c.primary?" (default)":""}</option>`).join("");
-    if(cur && !hasCur){ const o=document.createElement("option"); o.value=cur; o.textContent=cur+" (current)"; o.selected=true; sel.insertBefore(o, sel.firstChild); }
+    const optLabel=(c)=>{ let l=c.name||"Calendar"; if(c.primary) l+=" (default)"; if(c.owner && c.owner.toLowerCase()!==acct) l+=" — "+c.owner; return l; };
+    sel.innerHTML = data.calendars.map(c=>`<option value="${esc(c.id)}" ${((cur&&c.id===cur)||(!cur&&c.primary))?"selected":""}>${esc(optLabel(c))}</option>`).join("");
+    if(cur && !hasCur){ const o=document.createElement("option"); o.value=cur; o.textContent="Current selection"; o.selected=true; sel.insertBefore(o, sel.firstChild); }
     sel.disabled=false;
+    if(msg){ msg.style.color="var(--muted)"; msg.textContent = data.account_email ? ((data.provider==="microsoft"?"Outlook":"Google")+" account: "+data.account_email) : ("Choose which calendar "+aName()+" reads and books on."); }
     sel.onchange=async()=>{
       const id=sel.value; if(!id) return;
       sel.disabled=true; if(msg){ msg.style.color="var(--muted)"; msg.textContent="Saving…"; }
