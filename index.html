@@ -1426,13 +1426,14 @@ function pageKnowledge(){
           <button class="btn" id="iv-cancel">Cancel</button>
         </div>
       </div>
+      <div id="iv-docs" style="margin-top:4px"></div>
     </div>
     <div class="card">
       <div class="card-h"><h2>Documents</h2><span class="hint">Word, Excel, text PDF</span></div>
-      <p style="font-size:12.5px;color:var(--muted);margin-bottom:12px">Upload a price list, service menu, or policy doc and ${esc(aName())} reads it into her knowledge for you to review. Word (.docx), Excel (.xlsx), CSV, plain text, and text-based PDFs work today. Scans and photos need OCR, which is coming soon — for those, type the details into Add knowledge above. Google Docs or Sheets: use File &rsaquo; Download as Word or Excel, then upload that.</p>
+      <p style="font-size:12.5px;color:var(--muted);margin-bottom:12px">Upload one or several files at once — a price list, service menu, or policy doc — and ${esc(aName())} reads them into her knowledge for you to review. Word (.docx), Excel (.xlsx), CSV, plain text, and text-based PDFs work today. Scans and photos need OCR, which is coming soon — for those, type the details into Add knowledge above. Google Docs or Sheets: use File &rsaquo; Download as Word or Excel, then upload that.</p>
       <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap">
-        <label class="btn primary" style="position:relative;overflow:hidden">Choose a file
-          <input type="file" id="kb-file" accept=".pdf,.doc,.docx,.xls,.xlsx,.csv,.txt" style="position:absolute;inset:0;opacity:0;cursor:pointer">
+        <label class="btn primary" style="position:relative;overflow:hidden">Choose files
+          <input type="file" id="kb-file" multiple accept=".pdf,.doc,.docx,.xls,.xlsx,.csv,.txt" style="position:absolute;inset:0;opacity:0;cursor:pointer">
         </label>
         <span id="kb-up-msg" style="font-size:12.5px;color:var(--muted)"></span>
       </div>
@@ -1441,12 +1442,12 @@ function pageKnowledge(){
   </div>`;
   $("#kb-save").onclick=saveKnowledge;
   $("#kb-cancel").onclick=()=>{ state.kbEdit=null; resetKbForm(); };
-  $("#kb-refresh").onclick=async()=>{ const b=$("#kb-refresh"); b.disabled=true; b.textContent="…"; await loadKnowledge(); paintKbList(); await loadDocuments(); paintDocs(); b.disabled=false; b.textContent="Refresh"; };
+  $("#kb-refresh").onclick=async()=>{ const b=$("#kb-refresh"); b.disabled=true; b.textContent="…"; await loadKnowledge(); paintKbList(); await loadDocuments(); refreshDocViews(); b.disabled=false; b.textContent="Refresh"; };
   $("#kb-file").onchange=handleFileUpload;
   $("#kb-url-go").onclick=importWebsite;
   ivInitCard();
   loadKnowledge().then(paintKbList);
-  loadDocuments().then(paintDocs);
+  loadDocuments().then(refreshDocViews);
 }
 function resetKbForm(){
   const t=$("#kb-title"); if(!t) return;
@@ -1533,101 +1534,85 @@ async function extractText(file){
   throw new Error("Unsupported file type.");
 }
 async function handleFileUpload(e){
-  const file=e.target.files&&e.target.files[0]; const msg=$("#kb-up-msg");
+  const files=Array.from(e.target.files||[]); const msg=$("#kb-up-msg");
   e.target.value="";
-  if(!file||!msg) return;
-  const ext=(file.name.split('.').pop()||'').toLowerCase();
-  if(KB_EXT_IMG.includes(ext)){ msg.style.color="var(--danger)"; msg.textContent="Images and scans need OCR, which isn't supported yet. Type the details into Add knowledge for now."; return; }
-  if(!KB_EXT_OK.includes(ext)){ msg.style.color="var(--danger)"; msg.textContent="That file type isn't supported."; return; }
-  msg.style.color="var(--muted)"; msg.textContent="Reading "+file.name+"…";
-  let text="";
-  try{ text=((await extractText(file))||"").trim(); }
-  catch(err){ msg.style.color="var(--danger)"; msg.textContent=err.message||"Couldn't read that file."; return; }
-  if(text.length<20){
-    msg.style.color="var(--danger)";
-    msg.textContent = ext==='pdf'
-      ? "This PDF looks like a scan (no readable text). OCR is coming soon — for now type the key details into Add knowledge."
-      : "Couldn't find any text in that file.";
-    return;
+  if(!files.length||!msg) return;
+  let done=0, added=0, failed=0;
+  for(const file of files){
+    const ext=(file.name.split('.').pop()||'').toLowerCase();
+    msg.style.color="var(--muted)"; msg.textContent=files.length>1?("Reading "+file.name+" ("+(done+1)+"/"+files.length+")…"):("Reading "+file.name+"…");
+    if(KB_EXT_IMG.includes(ext)||!KB_EXT_OK.includes(ext)){ failed++; done++; continue; }
+    let text="";
+    try{ text=((await extractText(file))||"").trim(); }catch(err){ failed++; done++; continue; }
+    if(text.length<20){ failed++; done++; continue; }
+    msg.textContent="Teaching "+aName()+" from "+file.name+(files.length>1?(" ("+(done+1)+"/"+files.length+")…"):"…");
+    try{
+      const { data, error }=await db.functions.invoke("knowledge-ingest-document",{ body:{ filename:file.name, text } });
+      if(error||!data||!data.ok) failed++; else added++;
+    }catch(err){ failed++; }
+    done++;
   }
-  msg.textContent="Teaching "+aName()+" from "+file.name+"…";
-  try{
-    const { data, error }=await db.functions.invoke("knowledge-ingest-document",{ body:{ filename:file.name, text } });
-    if(error || !data || !data.ok){ msg.style.color="var(--danger)"; msg.textContent=(data&&(data.message||data.error))||(error&&error.message)||"Couldn't save that document."; return; }
-    msg.style.color="var(--ok)"; msg.textContent="Added "+file.name+" — "+data.chunks+" passage"+(data.chunks===1?"":"s")+" to review below.";
-    await loadDocuments(); paintDocs();
-  }catch(err){ msg.style.color="var(--danger)"; msg.textContent="Couldn't save that document."; }
+  await loadDocuments(); refreshDocViews();
+  if(added){ msg.style.color="var(--ok)"; msg.textContent="Added "+added+" file"+(added===1?"":"s")+" to review below"+(failed?(", "+failed+" skipped"):"")+"."; }
+  else { msg.style.color="var(--danger)"; msg.textContent="Couldn't read "+failed+" file"+(failed===1?"":"s")+". Word, Excel, CSV, text, and text PDFs work; scans and photos need OCR."; }
 }
-function paintDocs(){
-  const el=$("#kb-docs"); if(!el) return;
-  const docs=state.documents||[]; const stats=state.docStats||{}; const pass=state.docPassages||{};
-  if(!state.docOpen) state.docOpen=new Set();
-  if(!docs.length){ el.innerHTML=`<div style="font-size:12.5px;color:var(--muted-2)">Nothing uploaded or imported yet.</div>`; return; }
-  let pendingDocs=0; docs.forEach(d=>{ const s=stats[d.id]||{total:0,approved:0}; if(s.total>s.approved) pendingDocs++; });
-  const bar = pendingDocs>1 ? `<div style="display:flex;justify-content:flex-end;margin-bottom:8px"><button class="btn sm primary" id="kb-approve-all">Approve all (${pendingDocs})</button></div>` : "";
+function docCardHtml(d){
+  const stats=state.docStats||{}; const pass=state.docPassages||{};
   const pill=(bg,fg,txt)=>`<span style="display:inline-block;font-size:11px;font-weight:600;padding:2px 9px;border-radius:999px;background:${bg};color:${fg}">${txt}</span>`;
-  el.innerHTML = bar + docs.map(d=>{
-    const s=stats[d.id]||{total:0,approved:0}; const pending=s.total-s.approved;
-    let status;
-    if(s.total===0) status=`<span style="font-size:12px;color:var(--muted-2)">processing…</span>`;
-    else if(pending>0) status=pill("var(--signal-soft)","var(--site)","Pending review · "+s.total+" passage"+(s.total===1?"":"s"));
-    else status=pill("#e7f5ee","var(--ok)","Live · "+s.total+" passage"+(s.total===1?"":"s"));
-    const open=state.docOpen.has(d.id);
-    const viewBtn = s.total>0 ? `<button class="btn sm" data-docview="${d.id}">${open?"Hide":"View"}</button>` : "";
-    const approveBtn = pending>0 ? `<button class="btn sm primary" data-docok="${d.id}">Approve</button>` : "";
-    let passHtml="";
-    if(open){
-      const list=(pass[d.id]||[]);
-      const rows = list.length ? list.map(p=>{
-        const dot = p.approved
-          ? `<span style="color:var(--ok);font-size:11px;font-weight:600">Live</span>`
-          : `<span style="color:var(--site);font-size:11px;font-weight:600">Pending</span>`;
-        return `<div style="display:flex;align-items:flex-start;gap:10px">
-          <div style="flex:1;min-width:0">
-            <div style="font-weight:600;font-size:12.5px;margin-bottom:2px">${esc(p.title||"(untitled)")} <span style="margin-left:6px">${dot}</span></div>
-            <div style="font-size:12.5px;color:var(--muted)">${esc(p.content)}</div>
-          </div>
-          <button class="btn sm" data-passdel="${p.id}">Delete</button>
-        </div>`;
-      }).join("") : `<div style="font-size:12px;color:var(--muted-2)">No passages.</div>`;
-      const footer = pending>0 ? `<div style="display:flex;justify-content:flex-end;margin-top:4px"><button class="btn sm primary" data-docok="${d.id}">Approve ${pending} passage${pending===1?"":"s"}</button></div>` : "";
-      passHtml = `<div style="margin-top:10px;border-top:1px solid var(--line-2);padding-top:10px;display:flex;flex-direction:column;gap:11px">`+rows+footer+`</div>`;
-    }
-    return `<div class="block-item" style="display:block">
-      <div style="display:flex;align-items:flex-start;gap:10px;flex-wrap:wrap">
-        <div style="flex:1;min-width:150px">
-          <div style="font-weight:600;font-size:13.5px;margin-bottom:4px">${esc(d.filename)}</div>
-          <div>${status}</div>
-        </div>
-        <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">
-          ${viewBtn}
-          ${approveBtn}
-          <button class="btn sm" data-docdel="${d.id}">Delete</button>
-        </div>
-      </div>
-      ${passHtml}
-    </div>`;
-  }).join("");
-  const aa=$("#kb-approve-all"); if(aa) aa.onclick=approveAllDocs;
+  const s=stats[d.id]||{total:0,approved:0}; const pending=s.total-s.approved;
+  let status;
+  if(s.total===0) status=`<span style="font-size:12px;color:var(--muted-2)">processing…</span>`;
+  else if(pending>0) status=pill("var(--signal-soft)","var(--site)","Pending review · "+s.total+" passage"+(s.total===1?"":"s"));
+  else status=pill("#e7f5ee","var(--ok)","Live · "+s.total+" passage"+(s.total===1?"":"s"));
+  const open=state.docOpen&&state.docOpen.has(d.id);
+  const viewBtn = s.total>0 ? `<button class="btn sm" data-docview="${d.id}">${open?"Hide":"View"}</button>` : "";
+  const approveBtn = pending>0 ? `<button class="btn sm primary" data-docok="${d.id}">Approve</button>` : "";
+  let passHtml="";
+  if(open){
+    const list=(pass[d.id]||[]);
+    const rows = list.length ? list.map(p=>{
+      const dot = p.approved ? `<span style="color:var(--ok);font-size:11px;font-weight:600">Live</span>` : `<span style="color:var(--site);font-size:11px;font-weight:600">Pending</span>`;
+      return `<div style="display:flex;align-items:flex-start;gap:10px"><div style="flex:1;min-width:0"><div style="font-weight:600;font-size:12.5px;margin-bottom:2px">${esc(p.title||"(untitled)")} <span style="margin-left:6px">${dot}</span></div><div style="font-size:12.5px;color:var(--muted)">${esc(p.content)}</div></div><button class="btn sm" data-passdel="${p.id}">Delete</button></div>`;
+    }).join("") : `<div style="font-size:12px;color:var(--muted-2)">No passages.</div>`;
+    const footer = pending>0 ? `<div style="display:flex;justify-content:flex-end;margin-top:4px"><button class="btn sm primary" data-docok="${d.id}">Approve ${pending} passage${pending===1?"":"s"}</button></div>` : "";
+    passHtml = `<div style="margin-top:10px;border-top:1px solid var(--line-2);padding-top:10px;display:flex;flex-direction:column;gap:11px">`+rows+footer+`</div>`;
+  }
+  return `<div class="block-item" style="display:block"><div style="display:flex;align-items:flex-start;gap:10px;flex-wrap:wrap"><div style="flex:1;min-width:150px"><div style="font-weight:600;font-size:13.5px;margin-bottom:4px">${esc(d.filename)}</div><div>${status}</div></div><div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">${viewBtn}${approveBtn}<button class="btn sm" data-docdel="${d.id}">Delete</button></div></div>${passHtml}</div>`;
+}
+function renderDocSection(el, docs, allId, emptyTxt){
+  if(!el) return;
+  if(!state.docOpen) state.docOpen=new Set();
+  if(!docs.length){ el.innerHTML=`<div style="font-size:12.5px;color:var(--muted-2)">${emptyTxt}</div>`; return; }
+  const stats=state.docStats||{};
+  let pendingDocs=0; docs.forEach(d=>{ const s=stats[d.id]||{total:0,approved:0}; if(s.total>s.approved) pendingDocs++; });
+  const bar = pendingDocs>1 ? `<div style="display:flex;justify-content:flex-end;margin-bottom:8px"><button class="btn sm primary" id="${allId}">Approve all (${pendingDocs})</button></div>` : "";
+  el.innerHTML = bar + docs.map(docCardHtml).join("");
+  const aa=$("#"+allId); if(aa) aa.onclick=()=>approveDocsIn(docs);
   el.querySelectorAll("[data-docview]").forEach(b=>b.onclick=()=>toggleDoc(b.dataset.docview));
   el.querySelectorAll("[data-docok]").forEach(b=>b.onclick=()=>approveDocument(b.dataset.docok));
   el.querySelectorAll("[data-docdel]").forEach(b=>b.onclick=()=>deleteDocument(b.dataset.docdel));
   el.querySelectorAll("[data-passdel]").forEach(b=>b.onclick=()=>deletePassage(b.dataset.passdel));
 }
-function toggleDoc(id){ if(!state.docOpen) state.docOpen=new Set(); if(state.docOpen.has(id)) state.docOpen.delete(id); else state.docOpen.add(id); paintDocs(); }
+function splitDocs(){ const all=state.documents||[]; return { uploads: all.filter(d=>d.doc_type!=='interview'), interviews: all.filter(d=>d.doc_type==='interview') }; }
+function paintDocs(){ const el=$("#kb-docs"); if(!el) return; renderDocSection(el, splitDocs().uploads, "kb-approve-all", "Nothing uploaded or imported yet."); }
+function paintIvDocs(){ const el=$("#iv-docs"); if(!el) return; const ivs=splitDocs().interviews; if(!ivs.length){ el.innerHTML=""; return; } el.innerHTML=`<div style="font-weight:600;font-size:12.5px;margin:2px 0 8px;padding-top:12px;border-top:1px solid var(--line-2)">From your voice setup — review and approve</div><div id="iv-docs-list"></div>`; renderDocSection($("#iv-docs-list"), ivs, "iv-approve-all", ""); }
+function refreshDocViews(){ paintDocs(); paintIvDocs(); }
+function toggleDoc(id){ if(!state.docOpen) state.docOpen=new Set(); if(state.docOpen.has(id)) state.docOpen.delete(id); else state.docOpen.add(id); refreshDocViews(); }
 async function deletePassage(id){
   if(!confirm("Delete this passage? "+aName()+" will no longer use it.")) return;
   const { error }=await db.from('knowledge_entries').delete().eq('id',id);
-  if(!error){ await loadDocuments(); paintDocs(); }
+  if(!error){ await loadDocuments(); refreshDocViews(); }
 }
 async function approveDocument(id){
   const { error }=await db.from('knowledge_entries').update({approved:true}).eq('document_id',id).eq('approved',false);
-  if(!error){ await loadDocuments(); paintDocs(); }
+  if(!error){ await loadDocuments(); refreshDocViews(); }
 }
-async function approveAllDocs(){
-  if(!confirm(aName()+" will start using everything pending with real callers. Continue?")) return;
-  const { error }=await db.from('knowledge_entries').update({approved:true}).eq('source','document').eq('approved',false);
-  if(!error){ await loadDocuments(); paintDocs(); }
+async function approveDocsIn(docs){
+  if(!docs||!docs.length) return;
+  if(!confirm(aName()+" will start using everything pending here with real callers. Continue?")) return;
+  const ids=docs.map(d=>d.id);
+  const { error }=await db.from('knowledge_entries').update({approved:true}).in('document_id',ids).eq('approved',false);
+  if(!error){ await loadDocuments(); refreshDocViews(); }
 }
 async function importWebsite(){
   const inp=$("#kb-url"), msg=$("#kb-url-msg"), btn=$("#kb-url-go");
@@ -1758,8 +1743,8 @@ async function ivFinish(cancel){
   try{
     const { data, error }=await db.functions.invoke("interview-extract",{ body:{ languageName:(state.iv&&state.iv.langName)||"English", transcript:tr }});
     if(error || !data || !data.ok){ ivSetStatus((data&&(data.message||data.error))||(error&&error.message)||"Couldn't save the interview."); ivFinishing=false; return; }
-    ivSetStatus("Saved "+data.count+" item"+(data.count===1?"":"s")+". "+aName()+" won't use these on calls until you review and approve them in the Documents section below.");
-    await loadDocuments(); paintDocs();
+    ivSetStatus("Saved "+data.count+" item"+(data.count===1?"":"s")+". "+aName()+" won't use these on calls until you review and approve them in the Set up by voice card above.");
+    await loadDocuments(); refreshDocViews();
     setTimeout(ivReset, 7000);
   }catch(e){ ivSetStatus("Couldn't save the interview."); }
   ivFinishing=false;
@@ -1771,7 +1756,7 @@ async function deleteDocument(id){
   const d=(state.documents||[]).find(x=>x.id===id);
   if(!confirm("Delete "+(d?d.filename:"this document")+"? "+aName()+" will forget everything from it.")) return;
   const { error }=await db.from('documents').delete().eq('id',id);
-  if(!error){ state.documents=(state.documents||[]).filter(x=>x.id!==id); paintDocs(); }
+  if(!error){ state.documents=(state.documents||[]).filter(x=>x.id!==id); refreshDocViews(); }
 }
 
 /* ===================== CALENDAR CONNECT ===================== */
