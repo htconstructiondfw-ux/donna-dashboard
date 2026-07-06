@@ -381,7 +381,7 @@ function renderApp(){
       ${navActivity.map(navBtn).join("")}
       <div class="nav-label" id="run-label">Running ${esc(aName())}</div>
       ${soon.map(n=>`<button class="nav-item soon">${n[2]}<span>${n[1]}</span><span class="tag">soon</span></button>`).join("")}
-      <div class="side-foot"><b>${esc(state.owner.name)}</b>${esc(state.owner.title)} · Owner<br><button class="out" id="signout">Sign out</button></div>
+      <div class="side-foot"><b>${esc(state.owner.name)}</b>${esc(state.owner.title||"Owner")}<br><button class="out" id="signout">Sign out</button></div>
     </aside>
     <main class="main">
       <div class="topbar">
