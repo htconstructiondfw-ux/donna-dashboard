@@ -1736,6 +1736,32 @@ function calToast(){
   if(c==="error") return `<div style="margin-bottom:12px;font-size:13px;color:var(--danger)">Could not connect that calendar. Please try again.</div>`;
   return "";
 }
+async function loadCalendarOptions(st){
+  const sel=$("#cal-select"); const msg=$("#cal-select-msg"); if(!sel) return;
+  try{
+    const { data, error } = await db.functions.invoke("donna-calendars", { body:{ action:"list" } });
+    if(error || !data || !data.ok || !Array.isArray(data.calendars) || !data.calendars.length){
+      sel.innerHTML=`<option value="${esc(st.calendar_id||"")}">${esc(st.calendar_id||"primary")}</option>`;
+      sel.disabled=true;
+      if(msg) msg.textContent="Could not load your calendar list right now. "+aName()+" is using your current calendar.";
+      return;
+    }
+    const cur = data.current || st.calendar_id || "";
+    const hasCur = data.calendars.some(c=>c.id===cur);
+    sel.innerHTML = data.calendars.map(c=>`<option value="${esc(c.id)}" ${((cur&&c.id===cur)||(!cur&&c.primary))?"selected":""}>${esc(c.name)}${c.primary?" (default)":""}</option>`).join("");
+    if(cur && !hasCur){ const o=document.createElement("option"); o.value=cur; o.textContent=cur+" (current)"; o.selected=true; sel.insertBefore(o, sel.firstChild); }
+    sel.disabled=false;
+    sel.onchange=async()=>{
+      const id=sel.value; if(!id) return;
+      sel.disabled=true; if(msg){ msg.style.color="var(--muted)"; msg.textContent="Saving…"; }
+      const { data:r, error:e2 } = await db.functions.invoke("donna-calendars", { body:{ action:"select", calendar_id:id } });
+      sel.disabled=false;
+      if(e2 || !r || !r.ok){ if(msg){ msg.style.color="var(--danger)"; msg.textContent="Could not save that calendar. Try again."; } return; }
+      const name=(sel.options[sel.selectedIndex]||{}).textContent||"that calendar";
+      if(msg){ msg.style.color="var(--ok)"; msg.textContent=aName()+" now reads and books on "+name+"."; }
+    };
+  }catch(_e){ if(msg) msg.textContent="Could not load your calendar list right now."; }
+}
 async function paintCalendarCard(){
   const el=$("#cal-card-body"); if(!el) return;
   const toast=calToast();
@@ -1747,15 +1773,17 @@ async function paintCalendarCard(){
     const otherCfg=cfg[other]||{};
     const switchBtn=otherCfg.configured?`<button class="btn sm cal-connect" data-pv="${other}">Switch to ${esc(CAL_PROVIDERS[other].label)}</button>`:"";
     el.innerHTML=toast+`
-      <div class="set-rows" style="margin-bottom:14px">
+      <div class="set-rows" style="margin-bottom:8px">
         <div class="set-row"><span class="k">Connected to</span><span class="v">${esc(label)}</span></div>
-        <div class="set-row"><span class="k">Calendar</span><span class="v">${esc(st.calendar_id||"primary")}</span></div>
+        <div class="set-row"><span class="k">Calendar</span><span class="v"><select id="cal-select" style="font:inherit;color:inherit;background:transparent;border:1px solid var(--line,#d8dee9);border-radius:8px;padding:4px 8px;max-width:230px"><option value="">Loading…</option></select></span></div>
       </div>
+      <div id="cal-select-msg" style="font-size:12px;color:var(--muted);margin-bottom:12px">Choose which ${esc(label)} calendar ${esc(aName())} reads and books on.</div>
       <p style="font-size:12.5px;color:var(--muted);margin-bottom:12px">${esc(aName())} checks this calendar before offering times, so she never books over something already on it, and adds new bookings here automatically.</p>
       <div style="display:flex;gap:10px;flex-wrap:wrap"><button class="btn sm" id="cal-disconnect">Disconnect</button>${switchBtn}</div>
       ${switchBtn?`<p style="font-size:11.5px;color:var(--muted-2);margin-top:10px">Switching replaces your current calendar — ${esc(label)} will be disconnected automatically.</p>`:""}`;
     $("#cal-disconnect").onclick=(e)=>disconnectCalendar(e.currentTarget);
     el.querySelectorAll(".cal-connect").forEach(b=>b.onclick=()=>connectCalendar(b.dataset.pv));
+    loadCalendarOptions(st);
   } else {
     const opts=["google","microsoft"].map(pv=>{
       const c=cfg[pv]||{}; const lab=CAL_PROVIDERS[pv].label;
