@@ -1063,7 +1063,7 @@ const TZS = [
 function tzLabel(tz){ const f=TZS.find(t=>t[0]===tz); return f?f[1]:tz; }
 async function loadAppointments(){
   const { data } = await db.from('appointments').select('*').eq('account_id', state.account.id).order('starts_at',{ascending:true});
-  state.appointments = (data||[]).map(a=>({ id:a.id, title:a.title, status:a.status, mode:a.mode, start:a.starts_at, end:a.ends_at, notes:a.notes||"", language:a.language||null }));
+  state.appointments = (data||[]).map(a=>({ id:a.id, title:a.title, status:a.status, mode:a.mode, start:a.starts_at, end:a.ends_at, notes:a.notes||"", language:a.language||null, location:a.location_address||null, meetingUrl:a.meeting_url||null }));
 }
 function fmtAppt(iso, withDate=true){
   const tz=state.account.timezone;
@@ -1090,8 +1090,17 @@ function renderAppts(){
 }
 function apptHTML(a){
   const cancelled=a.status==='cancelled';
+  const modeLbl={phone:'Phone',virtual:'Video',in_person:'On-site'}[a.mode]||'';
+  let detail='';
+  if(modeLbl){
+    let extra='';
+    if(a.mode==='in_person'&&a.location) extra=` · ${esc(a.location)}`;
+    else if(a.mode==='virtual'&&a.meetingUrl) extra=` · <a href="${esc(a.meetingUrl)}" target="_blank" rel="noopener">Join link</a>`;
+    detail=`<div class="m-text" style="opacity:.85">${modeLbl}${extra}</div>`;
+  }
   return `<div class="m-item ${cancelled?'done':''}">
     <div class="m-top"><span class="m-who">${esc(a.title||'Consultation')}${langBadge(a.language)}</span><span class="m-when">${esc(fmtAppt(a.start))}${a.end?` – ${esc(fmtAppt(a.end,false))}`:''}</span></div>
+    ${detail}
     ${a.notes?`<div class="m-text">${esc(a.notes)}</div>`:''}
     <div class="m-actions"><span class="appt-status s-${a.status}">${esc(a.status)}</span>${cancelled?'':`<button class="btn sm" data-cancel="${a.id}" style="margin-left:10px">Cancel</button>`}</div>
   </div>`;
