@@ -1121,6 +1121,21 @@ async function saveAlertEmail(){
   else if(msg){ msg.style.color='var(--danger)'; msg.textContent='Could not save. Try again.'; }
   btn.disabled=false; btn.textContent=error?"Error — retry":"Saved ✓"; setTimeout(()=>btn.textContent=o,1300);
 }
+async function saveReminders(){
+  const modeEl=$("#rem-mode"), timeEl=$("#rem-time"), msg=$("#rem-msg"), btn=$("#rem-save");
+  if(!modeEl) return;
+  btn.disabled=true; const o=btn.textContent; btn.textContent="Saving…";
+  const mode=modeEl.value; const time=(timeEl&&timeEl.value)||"18:00";
+  const reminders = mode==="off" ? {mode:"off"} : {mode, time};
+  const settings = Object.assign({}, state.account.settings||{}, { reminders });
+  const { error } = await db.from('accounts').update({settings}).eq('id',state.account.id);
+  if(!error){
+    state.account.settings=settings;
+    if(msg){ msg.style.color='var(--muted)'; msg.textContent = mode==="off" ? "Reminders are off." : (aName()+" will remind customers "+(mode==="day_before"?"the day before":"the morning of")+" at "+time+", by email."); }
+  }
+  else if(msg){ msg.style.color='var(--danger)'; msg.textContent='Could not save. Try again.'; }
+  btn.disabled=false; btn.textContent=error?"Error — retry":"Saved ✓"; setTimeout(()=>btn.textContent=o,1300);
+}
 async function saveScheduling(){
   const enEl=$("#sched-enabled"), autoEl=$("#sched-auto"), msg=$("#sched-msg"), btn=$("#sched-save");
   if(!enEl) return;
@@ -1276,6 +1291,16 @@ function pageSettings(){
       <div id="cal-card-body"></div>
     </div>
 
+    <div class="card"><div class="card-h"><h2>Appointment reminders</h2><button class="btn sm" id="rem-save">Save</button></div>
+      <p style="font-size:13px;color:var(--muted);margin-bottom:12px">Email customers a reminder before their appointment, to the address they gave when booking. It includes the video link or the address, and ${esc(aName())} checks the calendar first so a rescheduled time is reflected.</p>
+      ${(()=>{ const rem=(ac.settings&&ac.settings.reminders)||{mode:"off"}; const t=esc(rem.time||"18:00"); const opt=(v,l)=>`<option value="${v}" ${rem.mode===v?"selected":""}>${l}</option>`; return `
+      <div class="grid-2">
+        <div class="field" style="margin:0"><label class="lab">When to remind</label><select class="inp" id="rem-mode">${opt("off","Off")}${opt("day_before","The day before")}${opt("morning_of","The morning of")}</select></div>
+        <div class="field" id="rem-time-field" style="margin:0${rem.mode==="off"?";opacity:.45":""}"><label class="lab">Time</label><input class="inp" id="rem-time" type="time" value="${t}"></div>
+      </div>`; })()}
+      <div id="rem-msg" style="font-size:12.5px;color:var(--muted);margin-top:8px"></div>
+    </div>
+
     <div class="card"><div class="card-h"><h2>Login &amp; password</h2></div>
       <div class="set-rows" style="margin-bottom:14px">
         <div class="set-row"><span class="k">Your login</span><span class="v">${esc(state.owner.email)}</span></div>
@@ -1303,6 +1328,7 @@ function pageSettings(){
   $("#tz-save").onclick=saveTimezone;
   { const ae=$("#alert-save"); if(ae) ae.onclick=saveAlertEmail; }
   { const ss=$("#sched-save"); if(ss) ss.onclick=saveScheduling; }
+  { const rs=$("#rem-save"); if(rs) rs.onclick=saveReminders; const rm=$("#rem-mode"); if(rm){ const upd=()=>{ const f=$("#rem-time-field"); if(f) f.style.opacity=rm.value==="off"?".45":"1"; const ri=$("#rem-time"); if(ri) ri.disabled=rm.value==="off"; }; rm.addEventListener("change",upd); upd(); } }
   { const se=$("#sched-enabled"), sr=$("#sched-auto-row"); if(se&&sr){ const upd=()=>{ sr.style.opacity=se.checked?'1':'.45'; const a=$("#sched-auto"); if(a) a.disabled=!se.checked; }; se.addEventListener('change',upd); upd(); } }
   { const xs=$("#xfer-save"); if(xs) xs.onclick=saveTransfer; }
   if(isPro){
