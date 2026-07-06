@@ -602,17 +602,68 @@ function pageTypes(){
       <div class="field"><label class="switch"><input type="checkbox" id="t-travel"><span class="track"></span><span class="txt">Reserve travel time<small>Auto-on for in-person — drive time is checked before booking.</small></span></label></div>
       <div style="margin-top:8px"><button class="btn primary" id="t-add">+ Add type</button></div>
     </div>
+    <div class="card">
+      <div class="card-h"><h2>Video meetings</h2><span class="hint">for virtual types</span></div>
+      <div id="video-card-body"></div>
+    </div>
   </div>`;
   const modeSel=$("#t-mode"), travel=$("#t-travel");
   modeSel.onchange=()=>{ travel.checked = modeSel.value==="in_person"; };
   $("#t-add").onclick=addType;
   bindTypeRemovers();
+  paintVideoCard();
+}
+async function paintVideoCard(){
+  const el=$("#video-card-body"); if(!el) return;
+  el.innerHTML=`<p style="font-size:13px;color:var(--muted)">Checking…</p>`;
+  let vp=null;
+  try{ const r=await db.functions.invoke("donna-video",{body:{action:"status"}}); if(r.data&&r.data.ok) vp=r.data.video_provider; }catch(_e){}
+  state.videoProvider=vp;
+  if(vp){
+    const label=vp.provider==="microsoft"?"Microsoft Teams":"Google Meet";
+    el.innerHTML=`
+      <div style="display:flex;justify-content:space-between;align-items:center;gap:10px">
+        <div><div style="font-weight:600">${esc(label)}</div>${vp.external_account?`<div style="font-size:11.5px;color:var(--muted)">${esc(vp.external_account)}</div>`:""}<div style="font-size:11.5px;color:var(--ok);margin-top:2px">Verified · ${esc(aName())} uses this for video bookings</div></div>
+        <button class="btn sm" id="vid-change">Change</button>
+      </div>`;
+    $("#vid-change").onclick=async()=>{ try{ await db.functions.invoke("donna-video",{body:{action:"clear"}}); }catch(_e){} paintVideoCard(); };
+  } else {
+    el.innerHTML=`
+      <p style="font-size:12.5px;color:var(--muted);margin-bottom:10px">Verify a video provider to offer virtual appointments. ${esc(aName())} uses it to create the meeting link for every video booking. Google Meet works with any Google account; Microsoft Teams needs a business Microsoft 365 account.</p>
+      <div id="vid-msg" style="font-size:12.5px;color:var(--muted);margin-bottom:10px"></div>
+      <div style="display:flex;gap:10px;flex-wrap:wrap">
+        <button class="btn sm" id="vid-google">Verify Google Meet</button>
+        <button class="btn sm" id="vid-ms">Verify Microsoft Teams</button>
+      </div>`;
+    $("#vid-google").onclick=()=>verifyVideo("google");
+    $("#vid-ms").onclick=()=>verifyVideo("microsoft");
+  }
+}
+async function verifyVideo(provider){
+  const msg=$("#vid-msg"); const setMsg=(t,c)=>{ if(msg){ msg.style.color=c||"var(--muted)"; msg.textContent=t; } };
+  const gb=$("#vid-google"), mb=$("#vid-ms"); if(gb) gb.disabled=true; if(mb) mb.disabled=true;
+  setMsg("Verifying…");
+  let r=null; try{ r=(await db.functions.invoke("donna-video",{body:{action:"verify",provider}})).data; }catch(_e){}
+  if(gb) gb.disabled=false; if(mb) mb.disabled=false;
+  if(r&&r.ok){ setMsg("Verified.","var(--ok)"); paintVideoCard(); return; }
+  const reason=r&&r.reason;
+  const pname=provider==="microsoft"?"Microsoft":"Google";
+  if(reason==="not_connected"){ setMsg(pname+" isn't connected yet. Opening the sign-in — approve access, then come back and click Verify again.","var(--muted)"); connectCalendar(provider); return; }
+  if(reason==="teams_unavailable"){ setMsg("That Microsoft account can't create Teams meetings. Teams needs a business Microsoft 365 account. Use Google Meet, or a business Microsoft account.","var(--danger)"); return; }
+  if(reason==="auth_failed"){ setMsg("Please reconnect "+pname+" and try again.","var(--danger)"); connectCalendar(provider); return; }
+  setMsg("Couldn't verify "+pname+". Try again.","var(--danger)");
 }
 function typeHTML(t){ const lbl={phone:"Phone",virtual:"Virtual",in_person:"In person"}[t.mode]; const icon={phone:I.phone,virtual:I.vid,in_person:I.pin}[t.mode]; return `<div class="type-item"><span class="ic ${t.mode}">${icon}</span><span class="nm">${esc(t.name)}<small>${t.dur} min${t.after?` · ${t.after} min buffer`:""}${t.travel?" · travel reserved":""}</small></span><span class="mode">${lbl}</span><button class="rm" data-id="${t.id||''}" title="Remove" style="margin-left:12px;background:none;border:none;color:var(--muted-2);font-size:13px">✕</button></div>`; }
 function bindTypeRemovers(){ document.querySelectorAll("#types .rm").forEach(b=>b.onclick=()=>removeType(b.dataset.id)); }
 async function addType(){
   const name=$("#t-name").value.trim(); if(!name){ const b=$("#t-add"); const o=b.textContent; b.textContent="Name it first"; setTimeout(()=>b.textContent=o,1100); return; }
-  const row={ account_id:state.account.id, name, mode:$("#t-mode").value, default_duration_min:+$("#t-dur").value||30, buffer_before_min:0, buffer_after_min:+$("#t-after").value||0, requires_travel:$("#t-travel").checked };
+  const mode=$("#t-mode").value;
+  if(mode==="virtual"){
+    let vp=state.videoProvider;
+    if(!vp){ try{ const r=await db.functions.invoke("donna-video",{body:{action:"status"}}); if(r.data&&r.data.ok) vp=r.data.video_provider; }catch(_e){} state.videoProvider=vp; }
+    if(!vp){ const b=$("#t-add"); const o=b.textContent; b.textContent="Verify a video provider first"; setTimeout(()=>b.textContent=o,1600); const m=$("#vid-msg"); if(m){ m.style.color="var(--danger)"; m.textContent="Verify Google Meet or Microsoft Teams below before adding a virtual type."; } return; }
+  }
+  const row={ account_id:state.account.id, name, mode, default_duration_min:+$("#t-dur").value||30, buffer_before_min:0, buffer_after_min:+$("#t-after").value||0, requires_travel:$("#t-travel").checked };
   const { data, error } = await db.from('appointment_types').insert(row).select().single();
   if(!error && data){ state.types.push({id:data.id,name:data.name,mode:data.mode,dur:data.default_duration_min,before:data.buffer_before_min,after:data.buffer_after_min,travel:data.requires_travel}); pageTypes(); }
 }
@@ -1706,7 +1757,7 @@ const CAL_PROVIDERS = {
     extra:{ access_type:"offline", prompt:"consent" } },
   microsoft: { label:"Microsoft Outlook",
     authUrl:"https://login.microsoftonline.com/common/oauth2/v2.0/authorize",
-    scope:"offline_access https://graph.microsoft.com/Calendars.ReadWrite https://graph.microsoft.com/User.Read",
+    scope:"offline_access https://graph.microsoft.com/Calendars.ReadWrite https://graph.microsoft.com/User.Read https://graph.microsoft.com/OnlineMeetings.ReadWrite",
     callback: SUPABASE_URL + "/functions/v1/microsoft-oauth-callback",
     extra:{ response_mode:"query", prompt:"consent" } }
 };
