@@ -1060,7 +1060,7 @@ function fmtAppt(iso, withDate=true){
   const o = withDate ? {timeZone:tz, weekday:'short', month:'short', day:'numeric', hour:'numeric', minute:'2-digit'} : {timeZone:tz, hour:'numeric', minute:'2-digit'};
   return new Intl.DateTimeFormat('en-US', o).format(new Date(iso));
 }
-function pageAppointments(){
+function renderAppts(){
   const now=Date.now();
   const active = state.appointments.filter(a=>a.status!=='cancelled');
   const upcoming = active.filter(a=> new Date(a.end||a.start).getTime()>=now);
@@ -1075,8 +1075,12 @@ function pageAppointments(){
     ${past.length?`<div class="card"><div class="card-h"><h2>Past</h2><span class="hint">${past.length}</span></div><div>${card(past)}</div></div>`:''}
     ${cancelled.length?`<div class="card"><div class="card-h"><h2>Cancelled</h2><span class="hint">${cancelled.length}</span></div><div>${card(cancelled)}</div></div>`:''}
   </div>`;
-  $("#ap-refresh").onclick=async()=>{ const b=$("#ap-refresh"); b.disabled=true; b.textContent="…"; await loadAppointments(); pageAppointments(); };
+  $("#ap-refresh").onclick=async()=>{ const b=$("#ap-refresh"); b.disabled=true; b.textContent="…"; await loadAppointments(); renderAppts(); };
   bindApptActions();
+}
+function pageAppointments(){
+  renderAppts();
+  loadAppointments().then(()=>{ if(state.view==='appointments') renderAppts(); });
 }
 function apptHTML(a){
   const cancelled=a.status==='cancelled';
@@ -1088,11 +1092,16 @@ function apptHTML(a){
 }
 function bindApptActions(){
   document.querySelectorAll('#page [data-cancel]').forEach(b=>b.onclick=async()=>{
-    if(!confirm('Cancel this appointment?')) return;
-    const id=b.dataset.cancel; b.disabled=true;
-    const { error } = await db.from('appointments').update({status:'cancelled'}).eq('id',id);
-    if(!error){ const a=state.appointments.find(x=>x.id===id); if(a) a.status='cancelled'; pageAppointments(); }
-    else b.disabled=false;
+    if(!confirm('Cancel this appointment? This removes it from your calendar, and emails the customer if one is on file.')) return;
+    const id=b.dataset.cancel; b.disabled=true; b.textContent="…";
+    try{
+      const { data, error } = await db.functions.invoke('donna-cancel', { body: { appointment_id: id } });
+      if(error || !(data && data.ok)) throw new Error('cancel_failed');
+      await loadAppointments(); renderAppts();
+    }catch(e){
+      b.disabled=false; b.textContent="Cancel";
+      alert("Sorry, that cancellation didn't go through. Please try again.");
+    }
   });
 }
 async function saveTimezone(){
