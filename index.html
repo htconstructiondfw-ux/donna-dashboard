@@ -1701,12 +1701,12 @@ async function deleteDocument(id){
 const CAL_PROVIDERS = {
   google: { label:"Google Calendar",
     authUrl:"https://accounts.google.com/o/oauth2/v2/auth",
-    scope:"https://www.googleapis.com/auth/calendar.events https://www.googleapis.com/auth/calendar.freebusy",
+    scope:"https://www.googleapis.com/auth/calendar.events https://www.googleapis.com/auth/calendar.freebusy https://www.googleapis.com/auth/calendar.calendarlist.readonly",
     callback: SUPABASE_URL + "/functions/v1/google-oauth-callback",
     extra:{ access_type:"offline", prompt:"consent" } },
   microsoft: { label:"Microsoft Outlook",
     authUrl:"https://login.microsoftonline.com/common/oauth2/v2.0/authorize",
-    scope:"offline_access https://graph.microsoft.com/Calendars.ReadWrite",
+    scope:"offline_access https://graph.microsoft.com/Calendars.ReadWrite https://graph.microsoft.com/User.Read",
     callback: SUPABASE_URL + "/functions/v1/microsoft-oauth-callback",
     extra:{ response_mode:"query", prompt:"consent" } }
 };
