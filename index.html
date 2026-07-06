@@ -1778,7 +1778,9 @@ async function doSwitch(provider, calendar_id, ctl){
   if(conf.length){ txt+=` ${conf.length} overlap${conf.length===1?"s":""} something already on the new calendar and ${conf.length===1?"was":"were"} still moved for you to review: `+conf.map(c=>c.title+" ("+c.when+")").join("; ")+"."; }
   const fail=s.failures||[];
   if(fail.length){ txt+=` ${fail.length} could not be moved and stayed on the old calendar.`; }
-  if(msg){ msg.style.color=conf.length?"var(--danger)":"var(--ok)"; msg.textContent=txt; }
+  const strand=s.stranded||[];
+  if(strand.length){ txt+=` ${strand.length} old cop${strand.length===1?"y":"ies"} could not be removed from the previous calendar, please delete ${strand.length===1?"it":"them"} there manually.`; }
+  if(msg){ msg.style.color=(conf.length||strand.length||fail.length)?"var(--danger)":"var(--ok)"; msg.textContent=txt; }
   setTimeout(()=>paintCalendarCard(), 1600);
 }
 async function paintCalendarCard(){
