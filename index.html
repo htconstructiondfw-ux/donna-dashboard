@@ -400,7 +400,17 @@ function renderPage(){
   teardownRealtime();
   document.querySelectorAll(".nav-item[data-v]").forEach(b=>b.classList.toggle("active",b.dataset.v===state.view));
   $(".crumbs").innerHTML=`${state.view==='settings'?'Account':(['messages','appointments','calls','contacts','gaps','conversations'].includes(state.view)?'Activity':'Configure')} · <b>${esc(({assistant:"Assistant",schedule:"Schedule",types:"Appointment types",messages:"Messages",appointments:"Appointments",settings:"Settings",calls:"Calls",knowledge:"Knowledge",contacts:"Contacts",gaps:"Open questions",conversations:"Inbox"})[state.view])}</b>`;
-  ({assistant:pageAssistant, schedule:pageSchedule, types:pageTypes, messages:pageMessages, appointments:pageAppointments, settings:pageSettings, calls:pageCalls, knowledge:pageKnowledge, contacts:pageContacts, gaps:pageGaps, conversations:pageConversations})[state.view]();
+  const PAGES={assistant:pageAssistant, schedule:pageSchedule, types:pageTypes, messages:pageMessages, appointments:renderAppts, settings:pageSettings, calls:pageCalls, knowledge:pageKnowledge, contacts:pageContacts, gaps:pageGaps, conversations:pageConversations};
+  const LOADERS={appointments:loadAppointments, messages:loadMessages, calls:loadCalls, contacts:loadContacts, gaps:loadGaps, conversations:loadConversations};
+  const v=state.view;
+  (PAGES[v]||(()=>{}))();
+  const ld=LOADERS[v];
+  if(ld){ ld().then(()=>{
+    if(state.view!==v) return;                         // user navigated away
+    if(v==='calls' && state.openCallId) return;         // don't clobber an open call
+    if(v==='conversations' && state.openConvId) return; // don't clobber an open thread
+    (PAGES[v]||(()=>{}))();
+  }).catch(()=>{}); }
 }
 
 /* ===================== ASSISTANT PAGE ===================== */
@@ -1077,10 +1087,6 @@ function renderAppts(){
   </div>`;
   $("#ap-refresh").onclick=async()=>{ const b=$("#ap-refresh"); b.disabled=true; b.textContent="…"; await loadAppointments(); renderAppts(); };
   bindApptActions();
-}
-function pageAppointments(){
-  renderAppts();
-  loadAppointments().then(()=>{ if(state.view==='appointments') renderAppts(); });
 }
 function apptHTML(a){
   const cancelled=a.status==='cancelled';
