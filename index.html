@@ -1645,11 +1645,11 @@ async function importWebsite(){
   btn.disabled=true; const o=btn.textContent; btn.textContent="Reading…"; msg.style.color="var(--muted)"; msg.textContent="Reading your site — this can take a few seconds…";
   try{
     const { data, error }=await db.functions.invoke("knowledge-ingest-website",{ body:{ url } });
-    if(error || !data || !data.ok){ msg.style.color="var(--danger)"; msg.textContent=(data&&(data.message||data.error))||(error&&error.message)||"Couldn't read that site."; btn.disabled=false; btn.textContent=o; return; }
+    if(error || !data || !data.ok){ msg.style.color="var(--danger)"; msg.textContent=(data&&(data.message||data.error))||"We couldn't read that site automatically. You can upload pages or type the details instead."; btn.disabled=false; btn.textContent=o; return; }
     msg.style.color="var(--ok)"; msg.textContent="Read "+data.pages+" page"+(data.pages===1?"":"s")+" → "+data.chunks+" passage"+(data.chunks===1?"":"s")+" to review below.";
     inp.value="";
     await loadDocuments(); paintDocs();
-  }catch(e){ msg.style.color="var(--danger)"; msg.textContent="Couldn't read that site."; }
+  }catch(e){ msg.style.color="var(--danger)"; msg.textContent="We couldn't read that site automatically. You can upload pages or type the details instead."; }
   btn.disabled=false; btn.textContent=o;
 }
 /* ---- voice interview ---- */
