@@ -189,7 +189,7 @@ const state = {
   account:null, owner:null, assistantId:null,
   assistant:{ name:DEFAULT_NAME, greetingLabel:"the office", voice:"warm-female", languages:["en"], number:"", recordingNotice:true, active:true, routing:{} },
   schedule: DAYS.map((_,i)=>({ working:{on:false,start:"08:00",end:"18:00"}, bookable:{on:false,start:"09:00",end:"15:00"} })),
-  blocks:[], types:[], messages:[], appointments:[], calls:[], contacts:[], gaps:[], conversations:[], openConvId:null, threadMsgs:[], openCallId:null, callTranscript:[], callsChannel:null, txChannel:null, view:"assistant", authMode:"signup"
+  blocks:[], types:[], messages:[], appointments:[], calls:[], openCallId:null, callTranscript:[], callsChannel:null, txChannel:null, view:"assistant", authMode:"signup"
 };
 const LANGS = [
   ["ar","Arabic"],["yue","Cantonese"],["nl","Dutch"],["en","English"],["fr","French"],
@@ -355,9 +355,6 @@ async function loadData(){
   await loadMessages();
   await loadAppointments();
   await loadCalls();
-  await loadContacts();
-  await loadGaps();
-  await loadConversations();
   return true;
 }
 
@@ -365,10 +362,9 @@ async function loadData(){
 function renderApp(){
   if(new URLSearchParams(location.search).get('calendar')) state.view='settings';
   const navConfig=[["assistant","Assistant",I.bot],["schedule","Schedule",I.cal],["types","Appointment types",I.tag],["knowledge","Knowledge",I.book],["settings","Settings",I.gear]];
-  const navActivity=[["calls","Calls",I.phone],["appointments","Appointments",I.appt],["messages","Messages",I.inbox],["contacts","Contacts",I.users],["gaps","Questions",I.book],["conversations","Inbox",I.inbox]];
+  const navActivity=[["calls","Calls",I.phone],["appointments","Appointments",I.appt],["messages","Messages",I.inbox],["contacts","Contacts",I.users]];
   const soon=[["billing","Billing",I.card]];
-  const navCount=v=>{ if(v==='messages') return unreadCount(); if(v==='conversations') return (state.conversations||[]).filter(c=>c.status==='awaiting_staff').length; if(v==='gaps') return (state.gaps||[]).length; return 0; };
-  const navBtn=n=>{ const _c=navCount(n[0]); return `<button class="nav-item ${state.view===n[0]?'active':''}" data-v="${n[0]}">${n[2]}<span>${n[1]}</span>${_c?`<span class="tag unread">${_c}</span>`:''}</button>`; };
+  const navBtn=n=>`<button class="nav-item ${state.view===n[0]?'active':''}" data-v="${n[0]}">${n[2]}<span>${n[1]}</span>${n[0]==='messages'&&unreadCount()?`<span class="tag unread">${unreadCount()}</span>`:''}</button>`;
   const initials=(state.owner.name||"O").split(" ").map(w=>w[0]).slice(0,2).join("").toUpperCase();
   document.title=`${aName()} — Dashboard`;
   document.getElementById("root").innerHTML = `
@@ -381,11 +377,11 @@ function renderApp(){
       ${navActivity.map(navBtn).join("")}
       <div class="nav-label" id="run-label">Running ${esc(aName())}</div>
       ${soon.map(n=>`<button class="nav-item soon">${n[2]}<span>${n[1]}</span><span class="tag">soon</span></button>`).join("")}
-      <div class="side-foot"><b>${esc(state.owner.name)}</b>${esc(state.owner.title||"Owner")}<br><button class="out" id="signout">Sign out</button></div>
+      <div class="side-foot"><b>${esc(state.owner.name)}</b>${esc(state.owner.title)} · Owner<br><button class="out" id="signout">Sign out</button></div>
     </aside>
     <main class="main">
       <div class="topbar">
-        <div class="crumbs">${state.view==='settings'?'Account':(['messages','appointments','calls','contacts','gaps','conversations'].includes(state.view)?'Activity':'Configure')} · <b>${esc(({assistant:"Assistant",schedule:"Schedule",types:"Appointment types",messages:"Messages",appointments:"Appointments",settings:"Settings",calls:"Calls",knowledge:"Knowledge",contacts:"Contacts",gaps:"Open questions",conversations:"Inbox"})[state.view])}</b></div>
+        <div class="crumbs">${state.view==='settings'?'Account':(['messages','appointments','calls','contacts'].includes(state.view)?'Activity':'Configure')} · <b>${esc(({assistant:"Assistant",schedule:"Schedule",types:"Appointment types",messages:"Messages",appointments:"Appointments",settings:"Settings",calls:"Calls",knowledge:"Knowledge",contacts:"Contacts"})[state.view])}</b></div>
         <div class="acct-chip"><span class="av">${initials}</span><div class="who"><b>${esc(state.account.company)}</b><span>${esc((state.account.status||'trial'))} · ${esc(state.account.plan||'starter')}</span></div></div>
       </div>
       <div id="page"></div>
@@ -399,23 +395,13 @@ function renderPage(){
   if('speechSynthesis' in window) window.speechSynthesis.cancel();
   teardownRealtime();
   document.querySelectorAll(".nav-item[data-v]").forEach(b=>b.classList.toggle("active",b.dataset.v===state.view));
-  $(".crumbs").innerHTML=`${state.view==='settings'?'Account':(['messages','appointments','calls','contacts','gaps','conversations'].includes(state.view)?'Activity':'Configure')} · <b>${esc(({assistant:"Assistant",schedule:"Schedule",types:"Appointment types",messages:"Messages",appointments:"Appointments",settings:"Settings",calls:"Calls",knowledge:"Knowledge",contacts:"Contacts",gaps:"Open questions",conversations:"Inbox"})[state.view])}</b>`;
-  const PAGES={assistant:pageAssistant, schedule:pageSchedule, types:pageTypes, messages:pageMessages, appointments:renderAppts, settings:pageSettings, calls:pageCalls, knowledge:pageKnowledge, contacts:pageContacts, gaps:pageGaps, conversations:pageConversations};
-  const LOADERS={appointments:loadAppointments, messages:loadMessages, calls:loadCalls, contacts:loadContacts, gaps:loadGaps, conversations:loadConversations};
-  const v=state.view;
-  (PAGES[v]||(()=>{}))();
-  const ld=LOADERS[v];
-  if(ld){ ld().then(()=>{
-    if(state.view!==v) return;                         // user navigated away
-    if(v==='calls' && state.openCallId) return;         // don't clobber an open call
-    if(v==='conversations' && state.openConvId) return; // don't clobber an open thread
-    (PAGES[v]||(()=>{}))();
-  }).catch(()=>{}); }
+  $(".crumbs").innerHTML=`${state.view==='settings'?'Account':(['messages','appointments','calls','contacts'].includes(state.view)?'Activity':'Configure')} · <b>${esc(({assistant:"Assistant",schedule:"Schedule",types:"Appointment types",messages:"Messages",appointments:"Appointments",settings:"Settings",calls:"Calls",knowledge:"Knowledge",contacts:"Contacts"})[state.view])}</b>`;
+  ({assistant:pageAssistant, schedule:pageSchedule, types:pageTypes, messages:pageMessages, appointments:pageAppointments, settings:pageSettings, calls:pageCalls, knowledge:pageKnowledge, contacts:pageContacts})[state.view]();
 }
 
 /* ===================== ASSISTANT PAGE ===================== */
-function greetingText(){ const a=state.assistant; let s=`Hello, this is <span class="v">${esc(a.name||DEFAULT_NAME)}</span> with ${esc(a.greetingLabel||"the office")}. `; if(a.recordingNotice) s+=`Just so you know, this call may be recorded for quality and training. `; const oq=((a.routing||{}).opening_question||"").trim(); return s+(oq?esc(oq):`How can I help you?`); }
-function greetingPlain(){ const a=state.assistant; let s=`Hello, this is ${a.name||DEFAULT_NAME} with ${a.greetingLabel||"the office"}. `; if(a.recordingNotice) s+=`Just so you know, this call may be recorded for quality and training. `; const oq=((a.routing||{}).opening_question||"").trim(); return s+(oq?oq:`How can I help you?`); }
+function greetingText(){ const a=state.assistant; let s=`Hello, this is <span class="v">${esc(a.name||DEFAULT_NAME)}</span> with ${esc(a.greetingLabel||"the office")}. `; if(a.recordingNotice) s+=`Just so you know, this call may be recorded for quality and training. `; return s+`How can I help you?`; }
+function greetingPlain(){ const a=state.assistant; let s=`Hello, this is ${a.name||DEFAULT_NAME} with ${a.greetingLabel||"the office"}. `; if(a.recordingNotice) s+=`Just so you know, this call may be recorded for quality and training. `; return s+`How can I help you?`; }
 function pickVoice(g){ const all=window.speechSynthesis.getVoices(); const en=all.filter(v=>/^en(-|_|$)/i.test(v.lang)); const pool=en.length?en:all; const f=/(female|samantha|victoria|zira|karen|moira|tessa|susan|fiona|serena|allison|ava|jenny|aria)/i; const m=/(daniel|alex|david|fred|aaron|thomas|oliver|arthur|gordon|guy|ryan)/i; const want=g==="female"?f:m; return pool.find(v=>want.test(v.name))||pool[0]||null; }
 function speakGreeting(btn){ if(!('speechSynthesis' in window))return; const lbl=btn.querySelector(".lbl"); if(window.speechSynthesis.speaking){window.speechSynthesis.cancel();return;} const u=new SpeechSynthesisUtterance(greetingPlain()); const v=pickVoice(state.assistant.voice.includes("female")?"female":"male"); if(v)u.voice=v; u.rate=1;u.pitch=1; u.onstart=()=>{btn.classList.add("speaking");lbl.textContent="Stop";}; u.onend=u.onerror=()=>{btn.classList.remove("speaking");lbl.textContent="Play greeting";}; window.speechSynthesis.speak(u); }
 
@@ -470,8 +456,6 @@ function pageAssistant(){
       <div class="card-h"><h2>Behavior</h2></div>
       <div class="field"><label class="switch"><input type="checkbox" id="a-rec" ${a.recordingNotice?'checked':''}><span class="track"></span><span class="txt">Recording notice<small>Says the call may be recorded. Leave on unless your lawyer clears otherwise.</small></span></label></div>
       <div class="field"><label class="switch"><input type="checkbox" id="a-active" ${a.active?'checked':''}><span class="track"></span><span class="txt">Answering calls<small>Turn off to pause; calls fall back to your line.</small></span></label></div>
-      <div class="field"><label class="lab">Special instructions <span class="sub">Extra rules for how ${esc(aName())} answers, one per line. She follows these on every call.</span></label><textarea class="inp" id="a-instr" rows="5" style="min-height:120px;resize:vertical;font-family:inherit;line-height:1.5;width:100%" placeholder="e.g. Always ask what city the caller is calling from.&#10;If they ask about pricing, tell them a specialist will follow up with a quote.">${esc(((a.routing||{}).custom_instructions)||"")}</textarea></div>
-      <div class="field"><label class="lab">Opening question <span class="sub">Optional. Spoken word-for-word at the end of the greeting, replacing "How can I help you?" Works on every call, in the exact words you type.</span></label><input class="inp" id="a-openq" placeholder='e.g. Before we get started, may I ask what city you are calling from?' value="${esc(((a.routing||{}).opening_question)||"")}"></div>
       <div style="margin-top:18px"><button class="btn primary" id="a-save">Save assistant</button></div>
     </div>
   </div>`;
@@ -491,8 +475,6 @@ function pageAssistant(){
   ["a-voice","a-rec","a-active"].forEach(id=>$("#"+id).onchange=sync);
   $("#a-langs").querySelectorAll(".chip").forEach(c=>c.onclick=()=>{ const l=c.dataset.l, on=c.getAttribute("aria-pressed")==="true"; if(on){a.languages=a.languages.filter(x=>x!==l);}else{a.languages.push(l);} c.setAttribute("aria-pressed",String(!on)); });
   $("#a-save").onclick=saveAssistant;
-  { const ie=$("#a-instr"); if(ie) ie.oninput=()=>{ state.assistant.routing=state.assistant.routing||{}; state.assistant.routing.custom_instructions=ie.value; }; }
-  { const oe=$("#a-openq"); if(oe) oe.oninput=()=>{ state.assistant.routing=state.assistant.routing||{}; state.assistant.routing.opening_question=oe.value; const sy=$("#say"); if(sy) sy.innerHTML=greetingText(); }; }
   async function runProvision(area, replace, btn, msg){
     if(area.length!==3){ msg.style.color="var(--danger)"; msg.textContent="Enter a 3-digit area code."; return; }
     btn.disabled=true; const o=btn.textContent; btn.textContent=replace?"Replacing…":"Getting a number…"; msg.style.color="var(--muted)"; msg.textContent="";
@@ -521,9 +503,7 @@ function pageAssistant(){
 }
 async function saveAssistant(){
   const a=state.assistant, btn=$("#a-save"); btn.disabled=true; const o=btn.textContent; btn.textContent="Saving…";
-  const instrEl=$("#a-instr"); const custom_instructions=instrEl?instrEl.value.trim():(((a.routing||{}).custom_instructions)||"");
-  const oqEl=$("#a-openq"); const opening_question=oqEl?oqEl.value.trim():(((a.routing||{}).opening_question)||"");
-  const routing=Object.assign({}, a.routing||{}, {recording_notice:a.recordingNotice, custom_instructions, opening_question});
+  const routing=Object.assign({}, a.routing||{}, {recording_notice:a.recordingNotice});
   const row={ assistant_name:a.name, greeting_label:a.greetingLabel, voice_id:a.voice, languages:a.languages, twilio_number:a.number||null, is_active:a.active, routing };
   let error;
   if(state.assistantId){ ({error}=await db.from('assistants').update(row).eq('id',state.assistantId)); }
@@ -612,68 +592,17 @@ function pageTypes(){
       <div class="field"><label class="switch"><input type="checkbox" id="t-travel"><span class="track"></span><span class="txt">Reserve travel time<small>Auto-on for in-person — drive time is checked before booking.</small></span></label></div>
       <div style="margin-top:8px"><button class="btn primary" id="t-add">+ Add type</button></div>
     </div>
-    <div class="card">
-      <div class="card-h"><h2>Video meetings</h2><span class="hint">for virtual types</span></div>
-      <div id="video-card-body"></div>
-    </div>
   </div>`;
   const modeSel=$("#t-mode"), travel=$("#t-travel");
   modeSel.onchange=()=>{ travel.checked = modeSel.value==="in_person"; };
   $("#t-add").onclick=addType;
   bindTypeRemovers();
-  paintVideoCard();
-}
-async function paintVideoCard(){
-  const el=$("#video-card-body"); if(!el) return;
-  el.innerHTML=`<p style="font-size:13px;color:var(--muted)">Checking…</p>`;
-  let vp=null;
-  try{ const r=await db.functions.invoke("donna-video",{body:{action:"status"}}); if(r.data&&r.data.ok) vp=r.data.video_provider; }catch(_e){}
-  state.videoProvider=vp;
-  if(vp){
-    const label=vp.provider==="microsoft"?"Microsoft Teams":"Google Meet";
-    el.innerHTML=`
-      <div style="display:flex;justify-content:space-between;align-items:center;gap:10px">
-        <div><div style="font-weight:600">${esc(label)}</div>${vp.external_account?`<div style="font-size:11.5px;color:var(--muted)">${esc(vp.external_account)}</div>`:""}<div style="font-size:11.5px;color:var(--ok);margin-top:2px">Verified · ${esc(aName())} uses this for video bookings</div></div>
-        <button class="btn sm" id="vid-change">Change</button>
-      </div>`;
-    $("#vid-change").onclick=async()=>{ try{ await db.functions.invoke("donna-video",{body:{action:"clear"}}); }catch(_e){} paintVideoCard(); };
-  } else {
-    el.innerHTML=`
-      <p style="font-size:12.5px;color:var(--muted);margin-bottom:10px">Verify a video provider to offer virtual appointments. ${esc(aName())} uses it to create the meeting link for every video booking. Google Meet works with any Google account; Microsoft Teams needs a business Microsoft 365 account.</p>
-      <div id="vid-msg" style="font-size:12.5px;color:var(--muted);margin-bottom:10px"></div>
-      <div style="display:flex;gap:10px;flex-wrap:wrap">
-        <button class="btn sm" id="vid-google">Verify Google Meet</button>
-        <button class="btn sm" id="vid-ms">Verify Microsoft Teams</button>
-      </div>`;
-    $("#vid-google").onclick=()=>verifyVideo("google");
-    $("#vid-ms").onclick=()=>verifyVideo("microsoft");
-  }
-}
-async function verifyVideo(provider){
-  const msg=$("#vid-msg"); const setMsg=(t,c)=>{ if(msg){ msg.style.color=c||"var(--muted)"; msg.textContent=t; } };
-  const gb=$("#vid-google"), mb=$("#vid-ms"); if(gb) gb.disabled=true; if(mb) mb.disabled=true;
-  setMsg("Verifying…");
-  let r=null; try{ r=(await db.functions.invoke("donna-video",{body:{action:"verify",provider}})).data; }catch(_e){}
-  if(gb) gb.disabled=false; if(mb) mb.disabled=false;
-  if(r&&r.ok){ setMsg("Verified.","var(--ok)"); paintVideoCard(); return; }
-  const reason=r&&r.reason;
-  const pname=provider==="microsoft"?"Microsoft":"Google";
-  if(reason==="not_connected"){ setMsg(pname+" isn't connected yet. Opening the sign-in — approve access, then come back and click Verify again.","var(--muted)"); connectCalendar(provider); return; }
-  if(reason==="teams_unavailable"){ setMsg("That Microsoft account can't create Teams meetings. Teams needs a business Microsoft 365 account. Use Google Meet, or a business Microsoft account.","var(--danger)"); return; }
-  if(reason==="auth_failed"){ setMsg("Please reconnect "+pname+" and try again.","var(--danger)"); connectCalendar(provider); return; }
-  setMsg("Couldn't verify "+pname+". Try again.","var(--danger)");
 }
 function typeHTML(t){ const lbl={phone:"Phone",virtual:"Virtual",in_person:"In person"}[t.mode]; const icon={phone:I.phone,virtual:I.vid,in_person:I.pin}[t.mode]; return `<div class="type-item"><span class="ic ${t.mode}">${icon}</span><span class="nm">${esc(t.name)}<small>${t.dur} min${t.after?` · ${t.after} min buffer`:""}${t.travel?" · travel reserved":""}</small></span><span class="mode">${lbl}</span><button class="rm" data-id="${t.id||''}" title="Remove" style="margin-left:12px;background:none;border:none;color:var(--muted-2);font-size:13px">✕</button></div>`; }
 function bindTypeRemovers(){ document.querySelectorAll("#types .rm").forEach(b=>b.onclick=()=>removeType(b.dataset.id)); }
 async function addType(){
   const name=$("#t-name").value.trim(); if(!name){ const b=$("#t-add"); const o=b.textContent; b.textContent="Name it first"; setTimeout(()=>b.textContent=o,1100); return; }
-  const mode=$("#t-mode").value;
-  if(mode==="virtual"){
-    let vp=state.videoProvider;
-    if(!vp){ try{ const r=await db.functions.invoke("donna-video",{body:{action:"status"}}); if(r.data&&r.data.ok) vp=r.data.video_provider; }catch(_e){} state.videoProvider=vp; }
-    if(!vp){ const b=$("#t-add"); const o=b.textContent; b.textContent="Verify a video provider first"; setTimeout(()=>b.textContent=o,1600); const m=$("#vid-msg"); if(m){ m.style.color="var(--danger)"; m.textContent="Verify Google Meet or Microsoft Teams below before adding a virtual type."; } return; }
-  }
-  const row={ account_id:state.account.id, name, mode, default_duration_min:+$("#t-dur").value||30, buffer_before_min:0, buffer_after_min:+$("#t-after").value||0, requires_travel:$("#t-travel").checked };
+  const row={ account_id:state.account.id, name, mode:$("#t-mode").value, default_duration_min:+$("#t-dur").value||30, buffer_before_min:0, buffer_after_min:+$("#t-after").value||0, requires_travel:$("#t-travel").checked };
   const { data, error } = await db.from('appointment_types').insert(row).select().single();
   if(!error && data){ state.types.push({id:data.id,name:data.name,mode:data.mode,dur:data.default_duration_min,before:data.buffer_before_min,after:data.buffer_after_min,travel:data.requires_travel}); pageTypes(); }
 }
@@ -738,318 +667,6 @@ function updateNavBadge(){
   else if(tag){ tag.remove(); }
 }
 
-/* ===================== CONTACTS PAGE ===================== */
-/* ===================== KNOWLEDGE GAPS (OPEN QUESTIONS) ===================== */
-/* ===================== CONVERSATIONS (EMAIL INBOX) ===================== */
-async function loadConversations(){
-  const { data } = await db.from('conversations').select('*').eq('account_id', state.account.id).eq('channel','email').order('updated_at',{ascending:false});
-  state.conversations = data || [];
-}
-function convStatusBadge(st){
-  if(st==='awaiting_staff') return '<span class="c-badge" style="background:#fff4e5;color:#9a5b00">Needs you</span>';
-  if(st==='closed') return '<span class="c-badge" style="background:#eef2f6;color:#667">Closed</span>';
-  if(st==='opted_out') return '<span class="c-badge" style="background:#fde8e8;color:#a12">Opted out</span>';
-  return '<span class="c-badge" style="background:#e7f4ee;color:#177245">Active</span>';
-}
-function pageConversations(){
-  if(state.openConvId){ return renderThread(); }
-  const rows = state.conversations||[];
-  const needs = rows.filter(r=>r.status==='awaiting_staff').length;
-  $("#page").innerHTML=`
-  <style>
-    .cv-item{display:flex;align-items:center;gap:12px;border:1px solid var(--line);border-radius:var(--r-sm);padding:12px 14px;margin-bottom:8px;background:var(--surface);cursor:pointer}
-    .cv-item:hover{border-color:var(--accent,#3b6)}
-    .cv-who{font-weight:600;color:var(--ink)}
-    .cv-meta{color:var(--muted);font-size:12.5px;margin-top:2px}
-    .cv-right{margin-left:auto;text-align:right}
-    .th-msg{border:1px solid var(--line);border-radius:10px;padding:12px 14px;margin-bottom:10px}
-    .th-in{background:var(--surface)}
-    .th-out{background:#f2f7ff}
-    .th-draft{background:#fff8ec;border-color:#f0d9a8}
-    .th-role{font-size:11px;text-transform:uppercase;letter-spacing:.05em;color:var(--muted);font-weight:600;margin-bottom:4px}
-    .th-body{white-space:pre-wrap;line-height:1.5;color:var(--ink)}
-    .th-edit{width:100%;min-height:140px;padding:10px 12px;border:1px solid var(--line);border-radius:8px;font:inherit;font-size:14px;line-height:1.55;background:var(--surface);color:var(--ink);resize:vertical}
-    .th-actions{display:flex;gap:8px;justify-content:flex-end;margin-top:8px;align-items:center}
-    .th-msgtxt{font-size:12.5px;margin-right:auto}
-  </style>
-  <div class="page">
-    <div class="page-head"><h1>Inbox</h1><p>Email conversations ${esc(aName())} is handling. Drafts marked "Needs you" are waiting for your review before they send.</p></div>
-    <div class="card">
-      <div class="card-h"><h2>Conversations${needs?` <span class="hint">${needs} need you</span>`:''}</h2><button class="btn sm" id="cv-refresh">Refresh</button></div>
-      <div id="cv-list">${rows.length?rows.map(convRow).join(""):`<div class="empty">${I.inbox}<div>No email conversations yet. When a customer emails, ${esc(aName())} will draft a reply here for you.</div></div>`}</div>
-    </div>
-  </div>`;
-  $("#cv-refresh").onclick=async()=>{ const b=$("#cv-refresh"); b.disabled=true; b.textContent="\u2026"; await loadConversations(); pageConversations(); };
-  document.querySelectorAll('#cv-list [data-conv]').forEach(el=>el.onclick=()=>{ state.openConvId=el.dataset.conv; renderThread(); });
-}
-function convRow(c){
-  return `<div class="cv-item" data-conv="${c.id}">
-    <div><div class="cv-who">${esc(c.customer_name||c.customer_identifier||'Customer')}</div>
-      <div class="cv-meta">${esc(c.customer_identifier||'')}</div></div>
-    <div class="cv-right">${convStatusBadge(c.status)}<div class="cv-meta">${c.last_inbound_at?fmtWhen(c.last_inbound_at):''}</div></div>
-  </div>`;
-}
-async function renderThread(){
-  const c=(state.conversations||[]).find(x=>x.id===state.openConvId);
-  if(!c){ state.openConvId=null; return pageConversations(); }
-  const { data:msgs } = await db.from('conversation_messages').select('*').eq('conversation_id',c.id).order('created_at',{ascending:true});
-  state.threadMsgs = msgs||[];
-  const draft = [...state.threadMsgs].reverse().find(m=>m.direction==='outbound' && m.status==='queued');
-  const rowsHtml = state.threadMsgs.map(m=>{
-    if(m.direction==='outbound' && m.status==='queued') return '';
-    const role = m.direction==='inbound'?'Customer':(m.actor==='staff'?'You':aName());
-    const cls = m.direction==='inbound'?'th-in':'th-out';
-    return `<div class="th-msg ${cls}"><div class="th-role">${esc(role)}${m.subject?' \u00b7 '+esc(m.subject):''}</div><div class="th-body">${esc(m.body||'')}</div></div>`;
-  }).join("");
-  const draftHtml = draft ? `
-    <div class="th-msg th-draft">
-      <div class="th-role">${esc(aName())}'s draft \u2014 review before sending</div>
-      <textarea class="th-edit" id="th-draft">${esc(draft.body||'')}</textarea>
-      <div class="th-actions"><span class="th-msgtxt" id="th-msg"></span>
-        <button class="btn sm" data-act="discard">Discard</button>
-        <button class="btn sm primary" data-act="send" data-mid="${draft.id}">Approve & send</button>
-      </div>
-    </div>` : `
-    <div class="th-msg th-out">
-      <div class="th-role">Reply as ${esc(aName())}</div>
-      <textarea class="th-edit" id="th-draft" placeholder="Type a reply to send to ${esc(c.customer_identifier||'the customer')}\u2026"></textarea>
-      <div class="th-actions"><span class="th-msgtxt" id="th-msg"></span>
-        <button class="btn sm primary" data-act="sendnew">Send</button>
-      </div>
-    </div>`;
-  $("#page").innerHTML=`
-  <style>
-    .th-msg{border:1px solid var(--line);border-radius:10px;padding:12px 14px;margin-bottom:10px}
-    .th-in{background:var(--surface)} .th-out{background:#f2f7ff} .th-draft{background:#fff8ec;border-color:#f0d9a8}
-    .th-role{font-size:11px;text-transform:uppercase;letter-spacing:.05em;color:var(--muted);font-weight:600;margin-bottom:4px}
-    .th-body{white-space:pre-wrap;line-height:1.5;color:var(--ink)}
-    .th-edit{width:100%;min-height:140px;padding:10px 12px;border:1px solid var(--line);border-radius:8px;font:inherit;font-size:14px;line-height:1.55;background:var(--surface);color:var(--ink);resize:vertical}
-    .th-actions{display:flex;gap:8px;justify-content:flex-end;margin-top:8px;align-items:center}
-    .th-msgtxt{font-size:12.5px;margin-right:auto}
-  </style>
-  <div class="page">
-    <div class="page-head"><button class="btn sm" id="th-back">\u2190 Inbox</button>
-      <h1 style="margin-top:10px">${esc(c.customer_name||c.customer_identifier||'Customer')}</h1>
-      <p>${esc(c.customer_identifier||'')}</p></div>
-    <div class="card">${rowsHtml}${draftHtml}</div>
-  </div>`;
-  $("#th-back").onclick=()=>{ state.openConvId=null; pageConversations(); };
-  bindThreadActions(c);
-}
-function bindThreadActions(c){
-  const msg=$("#th-msg");
-  const send=async(mid)=>{
-    const ta=$("#th-draft"); const bodyText=ta?ta.value.trim():"";
-    if(!bodyText){ if(msg){msg.style.color='var(--danger)';msg.textContent='Nothing to send.';} return; }
-    const btns=document.querySelectorAll('.th-actions .btn'); btns.forEach(b=>b.disabled=true);
-    if(msg){ msg.style.color='var(--muted)'; msg.textContent='Sending\u2026'; }
-    try{
-      const payload = mid ? { message_id:mid, body:bodyText } : { conversation_id:c.id, body:bodyText };
-      const { data, error }=await db.functions.invoke("email-send",{ body:payload });
-      if(error || !data || !data.ok){ throw new Error((data&&data.error)||(error&&error.message)||'send failed'); }
-      await loadConversations(); state.openConvId=c.id; renderThread();
-    }catch(e){ btns.forEach(b=>b.disabled=false); if(msg){msg.style.color='var(--danger)';msg.textContent='Could not send. '+(e.message||'');} }
-  };
-  const sBtn=document.querySelector('[data-act="send"]'); if(sBtn) sBtn.onclick=()=>send(sBtn.dataset.mid);
-  const nBtn=document.querySelector('[data-act="sendnew"]'); if(nBtn) nBtn.onclick=()=>send(null);
-  const dBtn=document.querySelector('[data-act="discard"]');
-  if(dBtn) dBtn.onclick=async()=>{
-    const draft=[...state.threadMsgs].reverse().find(m=>m.direction==='outbound'&&m.status==='queued');
-    if(!draft) return;
-    dBtn.disabled=true;
-    await db.from('conversation_messages').update({status:'failed'}).eq('id',draft.id);
-    await db.from('conversations').update({status:'active'}).eq('id',c.id);
-    await loadConversations(); state.openConvId=c.id; renderThread();
-  };
-}
-async function loadGaps(){
-  const { data } = await db.from('knowledge_gaps').select('*').eq('account_id', state.account.id).eq('status','open').order('times_asked',{ascending:false}).order('updated_at',{ascending:false});
-  state.gaps = data || [];
-}
-function pageGaps(){
-  const rows = state.gaps||[];
-  $("#page").innerHTML=`
-  <style>
-    .g-item{border:1px solid var(--line);border-radius:var(--r-sm);padding:14px 16px;margin-bottom:10px;background:var(--surface)}
-    .g-q{font-weight:600;font-size:15px;color:var(--ink)}
-    .g-meta{color:var(--muted);font-size:12.5px;margin-top:3px}
-    .g-ans{width:100%;margin-top:11px;padding:9px 11px;border:1px solid var(--line);border-radius:8px;font:inherit;font-size:14px;line-height:1.5;background:var(--surface);color:var(--ink);min-height:66px;resize:vertical}
-    .g-actions{display:flex;gap:8px;margin-top:9px;justify-content:flex-end;align-items:center}
-    .g-msg{font-size:12.5px;margin-left:auto}
-  </style>
-  <div class="page">
-    <div class="page-head"><h1>Open questions</h1><p>Questions phone callers asked that ${esc(aName())} could not answer on a call. Answer one and it goes straight into her knowledge base, so she handles it on every call after. (Email questions are handled in the Inbox, not here.)</p></div>
-    <div class="card">
-      <div class="card-h"><h2>Needs an answer${rows.length?` <span class="hint">${rows.length}</span>`:''}</h2><button class="btn sm" id="g-refresh">Refresh</button></div>
-      <div id="g-list">${rows.length?rows.map(gapHTML).join(""):`<div class="empty">${I.book}<div>No open questions yet. When a caller asks something ${esc(aName())} can't answer, it appears here for you to answer once.</div></div>`}</div>
-    </div>
-  </div>`;
-  $("#g-refresh").onclick=async()=>{ const b=$("#g-refresh"); b.disabled=true; b.textContent="\u2026"; await loadGaps(); pageGaps(); };
-  bindGapActions();
-}
-function gapHTML(g){
-  const n=g.times_asked||1;
-  return `<div class="g-item" data-id="${g.id}">
-    <div class="g-q">${esc(g.question)}</div>
-    <div class="g-meta">Asked ${n} time${n>1?'s':''}${g.updated_at?' \u00b7 last '+fmtWhen(g.updated_at):''}</div>
-    <textarea class="g-ans" data-a="${g.id}" placeholder="Type the answer ${esc(aName())} should give\u2026"></textarea>
-    <div class="g-actions"><span class="g-msg" id="g-msg-${g.id}"></span>
-      <button class="btn sm" data-act="dismiss" data-id="${g.id}">Dismiss</button>
-      <button class="btn sm primary" data-act="answer" data-id="${g.id}">Save answer</button>
-    </div>
-  </div>`;
-}
-function bindGapActions(){
-  document.querySelectorAll('#g-list [data-act]').forEach(b=>b.onclick=async()=>{
-    const id=b.dataset.id, act=b.dataset.act;
-    const g=(state.gaps||[]).find(x=>x.id===id); if(!g) return;
-    const msg=$("#g-msg-"+id);
-    if(act==='dismiss'){
-      b.disabled=true;
-      const { error }=await db.from('knowledge_gaps').update({status:'dismissed',updated_at:new Date().toISOString(),resolved_at:new Date().toISOString()}).eq('id',id);
-      if(!error){ state.gaps=(state.gaps||[]).filter(x=>x.id!==id); pageGaps(); } else { b.disabled=false; if(msg){msg.style.color='var(--danger)';msg.textContent='Could not dismiss.';} }
-      return;
-    }
-    if(act==='answer'){
-      const ta=document.querySelector('[data-a="'+id+'"]'); const answer=ta?ta.value.trim():"";
-      if(!answer){ if(msg){msg.style.color='var(--danger)';msg.textContent='Type an answer first.';} return; }
-      b.disabled=true; const o=b.textContent; b.textContent='Saving\u2026';
-      try{
-        const { data, error }=await db.functions.invoke("knowledge-upsert",{ body:{ title:g.question, category:'FAQ', content:answer } });
-        if(error || !data || !data.ok){ throw new Error((data&&data.error)||(error&&error.message)||'save failed'); }
-        await db.from('knowledge_gaps').update({status:'answered',answer,updated_at:new Date().toISOString(),resolved_at:new Date().toISOString()}).eq('id',id);
-        state.gaps=(state.gaps||[]).filter(x=>x.id!==id); pageGaps();
-      }catch(e){ b.disabled=false; b.textContent=o; if(msg){msg.style.color='var(--danger)';msg.textContent='Could not save. '+(e.message||'');} }
-      return;
-    }
-  });
-}
-async function loadContacts(){
-  const { data } = await db.from('contacts').select('*').eq('account_id', state.account.id).order('last_call_at',{ascending:false, nullsFirst:false});
-  state.contacts = (data||[]).map(c=>({
-    id:c.id, phone:c.phone||"", name:c.name||"", company:c.company||"", interest:c.interest||"",
-    language:c.language||"", listType:c.list_type||"normal", callCount:c.call_count||0,
-    lastCallAt:c.last_call_at||null, lastSummary:c.last_call_summary||"", notes:c.notes||"", memory:c.memory||""
-  }));
-}
-function contactMatch(c,q){
-  if(!q) return true; q=q.toLowerCase();
-  return (c.name||"").toLowerCase().includes(q) || (c.phone||"").toLowerCase().includes(q) ||
-         (c.company||"").toLowerCase().includes(q) || (c.interest||"").toLowerCase().includes(q);
-}
-function contactsListHTML(list){
-  return list.length ? list.map(contactHTML).join("")
-    : `<div class="empty">${I.users}<div>${state.contacts.length?"No matches.":"No contacts yet. When "+esc(aName())+" saves a caller, they'll appear here."}</div></div>`;
-}
-function pageContacts(){
-  const q = state._cq||"";
-  const list = state.contacts.filter(c=>contactMatch(c,q));
-  const total = state.contacts.length;
-  $("#page").innerHTML=`
-  <style>
-    .c-tools{display:flex;gap:10px;align-items:center;margin-bottom:14px}
-    .c-search{flex:1;max-width:360px;padding:9px 12px;border:1px solid var(--line);border-radius:var(--r-sm);font:inherit;font-size:14px;background:var(--surface);color:var(--ink)}
-    .c-item{border:1px solid var(--line);border-radius:var(--r-sm);padding:13px 15px;margin-bottom:9px;background:var(--surface)}
-    .c-item.vip{border-color:var(--signal-line);background:var(--signal-soft)}
-    .c-item.blocked{opacity:.7}
-    .c-top{display:flex;align-items:center;gap:9px;flex-wrap:wrap}
-    .c-name{font-weight:600;font-size:15px;color:var(--ink)}
-    .c-badge{font-size:10px;letter-spacing:.05em;text-transform:uppercase;padding:2px 7px;border-radius:20px;font-weight:600}
-    .c-badge.vip{background:var(--signal);color:#fff}
-    .c-badge.blocked{background:var(--danger);color:#fff}
-    .c-num{margin-left:auto;font-size:13.5px;color:var(--virtual);text-decoration:none;font-weight:500}
-    .c-meta{color:var(--muted);font-size:13px;margin-top:4px}
-    .c-meta b{color:var(--ink-2);font-weight:500}
-    .c-sum{color:var(--muted);font-size:12.5px;margin-top:6px;font-style:italic}
-    .c-actions{display:flex;gap:7px;margin-top:11px;flex-wrap:wrap}
-    .c-actions .btn.danger{color:var(--danger);border-color:#e7bcb2}
-    .c-edit{margin-top:12px;padding-top:12px;border-top:1px solid var(--line-2);display:none;grid-template-columns:1fr 1fr;gap:9px}
-    .c-edit.open{display:grid}
-    .c-edit label{font-size:11px;color:var(--muted);font-weight:600;text-transform:uppercase;letter-spacing:.05em;display:block;margin-bottom:3px}
-    .c-edit input,.c-edit textarea{width:100%;padding:8px 10px;border:1px solid var(--line);border-radius:7px;font:inherit;font-size:13.5px;background:var(--surface);color:var(--ink)}
-    .c-edit .full{grid-column:1 / -1}
-    .c-edit .save-row{grid-column:1 / -1;display:flex;gap:8px;justify-content:flex-end}
-  </style>
-  <div class="page">
-    <div class="page-head"><h1>Contacts</h1><p>The customer list ${esc(aName())} builds automatically. Every caller she saves shows up here with what she learned, so you can see who's calling, mark your regulars, or block a number.</p></div>
-    <div class="card">
-      <div class="card-h"><h2>People${total?` <span class="hint">${total}</span>`:''}</h2><button class="btn sm" id="c-refresh">Refresh</button></div>
-      <div class="c-tools"><input class="c-search" id="c-search" type="search" placeholder="Search name, number, company\u2026" value="${esc(q)}"></div>
-      <div id="c-list">${contactsListHTML(list)}</div>
-    </div>
-  </div>`;
-  const s=$("#c-search");
-  s.oninput=()=>{ state._cq=s.value; $("#c-list").innerHTML=contactsListHTML(state.contacts.filter(c=>contactMatch(c,s.value))); bindContactActions(); };
-  $("#c-refresh").onclick=async()=>{ const b=$("#c-refresh"); b.disabled=true; b.textContent="\u2026"; await loadContacts(); pageContacts(); };
-  bindContactActions();
-}
-function contactHTML(c){
-  const vip=c.listType==='whitelist', blocked=c.listType==='blacklist';
-  const tel=c.phone?c.phone.replace(/[^\d+]/g,''):"";
-  const meta=[]; if(c.company) meta.push(`<b>${esc(c.company)}</b>`); if(c.interest) meta.push(esc(c.interest));
-  const calls = c.callCount? `${c.callCount} call${c.callCount>1?'s':''}` : 'Not called yet';
-  const last = c.lastCallAt? ` \u00b7 last ${fmtWhen(c.lastCallAt)}` : '';
-  return `<div class="c-item ${vip?'vip':''} ${blocked?'blocked':''}" data-id="${c.id}">
-    <div class="c-top">
-      <span class="c-name">${esc(c.name||"Unknown caller")}</span>
-      ${vip?'<span class="c-badge vip">VIP</span>':''}${blocked?'<span class="c-badge blocked">Blocked</span>':''}
-      ${langBadge(c.language)}
-      ${c.phone?`<a class="c-num" href="tel:${esc(tel)}">${esc(c.phone)}</a>`:''}
-    </div>
-    ${meta.length?`<div class="c-meta">${meta.join(" \u00b7 ")}</div>`:''}
-    <div class="c-meta">${calls}${last}</div>
-    ${c.lastSummary?`<div class="c-sum">\u201c${esc(c.lastSummary)}\u201d</div>`:''}
-    ${c.memory?`<div class="c-sum" style="font-style:normal;color:var(--ink-2);line-height:1.5"><strong style="color:var(--muted);font-weight:600;font-size:10px;text-transform:uppercase;letter-spacing:.05em;margin-right:6px">Remembers</strong>${esc(c.memory)}</div>`:''}
-    <div class="c-actions">
-      <button class="btn sm" data-act="edit" data-id="${c.id}">Edit</button>
-      <button class="btn sm" data-act="vip" data-id="${c.id}">${vip?'Remove VIP':'Mark VIP'}</button>
-      <button class="btn sm" data-act="block" data-id="${c.id}">${blocked?'Unblock':'Block'}</button>
-      <button class="btn sm danger" data-act="del" data-id="${c.id}">Delete</button>
-    </div>
-    <div class="c-edit" id="c-edit-${c.id}">
-      <div><label>Name</label><input data-f="name" value="${esc(c.name)}"></div>
-      <div><label>Company</label><input data-f="company" value="${esc(c.company)}"></div>
-      <div class="full"><label>Interest</label><input data-f="interest" value="${esc(c.interest)}"></div>
-      <div><label>Language</label><input data-f="language" value="${esc(c.language)}"></div>
-      <div><label>Phone</label><input data-f="phone" value="${esc(c.phone)}"></div>
-      <div class="full"><label>Memory (auto, editable)</label><textarea data-f="memory" rows="3">${esc(c.memory)}</textarea></div>
-      <div class="full"><label>Notes</label><textarea data-f="notes" rows="2">${esc(c.notes)}</textarea></div>
-      <div class="save-row"><button class="btn sm" data-act="canceledit" data-id="${c.id}">Cancel</button><button class="btn sm primary" data-act="saveedit" data-id="${c.id}">Save</button></div>
-    </div>
-  </div>`;
-}
-function bindContactActions(){
-  document.querySelectorAll('#c-list [data-act]').forEach(b=>b.onclick=async()=>{
-    const id=b.dataset.id, act=b.dataset.act;
-    const c=state.contacts.find(x=>x.id===id); if(!c && act!=='del') return;
-    if(act==='edit'){ const p=$("#c-edit-"+id); if(p) p.classList.toggle('open'); return; }
-    if(act==='canceledit'){ const p=$("#c-edit-"+id); if(p) p.classList.remove('open'); return; }
-    if(act==='saveedit'){
-      const wrap=$("#c-edit-"+id); const g=f=>{ const el=wrap.querySelector('[data-f="'+f+'"]'); return el?el.value.trim():""; };
-      const patch={ name:g('name')||null, company:g('company')||null, interest:g('interest')||null, language:g('language')||null, phone:g('phone')||c.phone, notes:g('notes')||null, memory:g('memory')||null, updated_at:new Date().toISOString() };
-      b.disabled=true; b.textContent="\u2026";
-      const { error } = await db.from('contacts').update(patch).eq('id', id);
-      if(!error){ Object.assign(c,{name:patch.name||"",company:patch.company||"",interest:patch.interest||"",language:patch.language||"",phone:patch.phone||"",notes:patch.notes||""}); pageContacts(); }
-      else { b.disabled=false; b.textContent="Save"; alert("Could not save: "+error.message); }
-      return;
-    }
-    if(act==='vip'||act==='block'){
-      const target = act==='vip' ? (c.listType==='whitelist'?'normal':'whitelist') : (c.listType==='blacklist'?'normal':'blacklist');
-      b.disabled=true;
-      const { error } = await db.from('contacts').update({ list_type:target, updated_at:new Date().toISOString() }).eq('id', id);
-      if(!error){ c.listType=target; pageContacts(); } else { b.disabled=false; alert("Could not update: "+error.message); }
-      return;
-    }
-    if(act==='del'){
-      if(!confirm("Delete this contact? "+aName()+" will treat them as a brand-new caller next time.")) return;
-      b.disabled=true;
-      const { error } = await db.from('contacts').delete().eq('id', id);
-      if(!error){ state.contacts=state.contacts.filter(x=>x.id!==id); pageContacts(); } else { b.disabled=false; alert("Could not delete: "+error.message); }
-      return;
-    }
-  });
-}
-
 /* ===================== APPOINTMENTS PAGE ===================== */
 const TZS = [
   ["America/New_York","Eastern (New York)"],
@@ -1063,14 +680,14 @@ const TZS = [
 function tzLabel(tz){ const f=TZS.find(t=>t[0]===tz); return f?f[1]:tz; }
 async function loadAppointments(){
   const { data } = await db.from('appointments').select('*').eq('account_id', state.account.id).order('starts_at',{ascending:true});
-  state.appointments = (data||[]).map(a=>({ id:a.id, title:a.title, status:a.status, mode:a.mode, start:a.starts_at, end:a.ends_at, notes:a.notes||"", language:a.language||null, location:a.location_address||null, meetingUrl:a.meeting_url||null }));
+  state.appointments = (data||[]).map(a=>({ id:a.id, title:a.title, status:a.status, mode:a.mode, start:a.starts_at, end:a.ends_at, notes:a.notes||"", language:a.language||null }));
 }
 function fmtAppt(iso, withDate=true){
   const tz=state.account.timezone;
   const o = withDate ? {timeZone:tz, weekday:'short', month:'short', day:'numeric', hour:'numeric', minute:'2-digit'} : {timeZone:tz, hour:'numeric', minute:'2-digit'};
   return new Intl.DateTimeFormat('en-US', o).format(new Date(iso));
 }
-function renderAppts(){
+function pageAppointments(){
   const now=Date.now();
   const active = state.appointments.filter(a=>a.status!=='cancelled');
   const upcoming = active.filter(a=> new Date(a.end||a.start).getTime()>=now);
@@ -1085,38 +702,24 @@ function renderAppts(){
     ${past.length?`<div class="card"><div class="card-h"><h2>Past</h2><span class="hint">${past.length}</span></div><div>${card(past)}</div></div>`:''}
     ${cancelled.length?`<div class="card"><div class="card-h"><h2>Cancelled</h2><span class="hint">${cancelled.length}</span></div><div>${card(cancelled)}</div></div>`:''}
   </div>`;
-  $("#ap-refresh").onclick=async()=>{ const b=$("#ap-refresh"); b.disabled=true; b.textContent="…"; await loadAppointments(); renderAppts(); };
+  $("#ap-refresh").onclick=async()=>{ const b=$("#ap-refresh"); b.disabled=true; b.textContent="…"; await loadAppointments(); pageAppointments(); };
   bindApptActions();
 }
 function apptHTML(a){
   const cancelled=a.status==='cancelled';
-  const modeLbl={phone:'Phone',virtual:'Video',in_person:'On-site'}[a.mode]||'';
-  let detail='';
-  if(modeLbl){
-    let extra='';
-    if(a.mode==='in_person'&&a.location) extra=` · ${esc(a.location)}`;
-    else if(a.mode==='virtual'&&a.meetingUrl) extra=` · <a href="${esc(a.meetingUrl)}" target="_blank" rel="noopener">Join link</a>`;
-    detail=`<div class="m-text" style="opacity:.85">${modeLbl}${extra}</div>`;
-  }
   return `<div class="m-item ${cancelled?'done':''}">
     <div class="m-top"><span class="m-who">${esc(a.title||'Consultation')}${langBadge(a.language)}</span><span class="m-when">${esc(fmtAppt(a.start))}${a.end?` – ${esc(fmtAppt(a.end,false))}`:''}</span></div>
-    ${detail}
     ${a.notes?`<div class="m-text">${esc(a.notes)}</div>`:''}
     <div class="m-actions"><span class="appt-status s-${a.status}">${esc(a.status)}</span>${cancelled?'':`<button class="btn sm" data-cancel="${a.id}" style="margin-left:10px">Cancel</button>`}</div>
   </div>`;
 }
 function bindApptActions(){
   document.querySelectorAll('#page [data-cancel]').forEach(b=>b.onclick=async()=>{
-    if(!confirm('Cancel this appointment? This removes it from your calendar, and emails the customer if one is on file.')) return;
-    const id=b.dataset.cancel; b.disabled=true; b.textContent="…";
-    try{
-      const { data, error } = await db.functions.invoke('donna-cancel', { body: { appointment_id: id } });
-      if(error || !(data && data.ok)) throw new Error('cancel_failed');
-      await loadAppointments(); renderAppts();
-    }catch(e){
-      b.disabled=false; b.textContent="Cancel";
-      alert("Sorry, that cancellation didn't go through. Please try again.");
-    }
+    if(!confirm('Cancel this appointment?')) return;
+    const id=b.dataset.cancel; b.disabled=true;
+    const { error } = await db.from('appointments').update({status:'cancelled'}).eq('id',id);
+    if(!error){ const a=state.appointments.find(x=>x.id===id); if(a) a.status='cancelled'; pageAppointments(); }
+    else b.disabled=false;
   });
 }
 async function saveTimezone(){
@@ -1131,45 +734,12 @@ async function saveAlertEmail(){
   const inp=$("#alert-email"); if(!inp) return;
   const msg=$("#alert-msg"), btn=$("#alert-save");
   const email=inp.value.trim();
-  const escInp=$("#esc-email"); const escEmail=escInp?escInp.value.trim():"";
-  const autoEl=$("#auto-send"); const autoSend=autoEl?!!autoEl.checked:undefined;
-  const emailRe=/^[^@\s]+@[^@\s]+\.[^@\s]+$/;
-  if(escInp && escEmail && !emailRe.test(escEmail)){ if(msg){msg.style.color='var(--danger)';msg.textContent='The escalation inbox is not a valid email address.';} return; }
-  if(escInp && escEmail && email && escEmail.toLowerCase()===email.toLowerCase()){ if(msg){msg.style.color='var(--danger)';msg.textContent='The escalation inbox must be different from the general inbox, since '+aName()+' answers the general inbox.';} return; }
   if(email && !/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)){ if(msg){msg.style.color='var(--danger)';msg.textContent='That does not look like a valid email address.';} return; }
   if(msg){ msg.style.color='var(--muted)'; msg.textContent=''; }
   btn.disabled=true; const o=btn.textContent; btn.textContent="Saving…";
-  const settings = Object.assign({}, state.account.settings||{}, Object.assign({alert_email:email}, escInp?{escalation_email:escEmail}:{}, autoEl?{email_auto_send:autoSend}:{}));
+  const settings = Object.assign({}, state.account.settings||{}, {alert_email:email});
   const { error } = await db.from('accounts').update({settings}).eq('id',state.account.id);
   if(!error){ state.account.settings=settings; if(msg){ msg.style.color='var(--muted)'; msg.textContent=email?('Messages will be emailed to '+email+'.'):'General inbox cleared.'; } }
-  else if(msg){ msg.style.color='var(--danger)'; msg.textContent='Could not save. Try again.'; }
-  btn.disabled=false; btn.textContent=error?"Error — retry":"Saved ✓"; setTimeout(()=>btn.textContent=o,1300);
-}
-async function saveReminders(){
-  const modeEl=$("#rem-mode"), timeEl=$("#rem-time"), msg=$("#rem-msg"), btn=$("#rem-save");
-  if(!modeEl) return;
-  btn.disabled=true; const o=btn.textContent; btn.textContent="Saving…";
-  const mode=modeEl.value; const time=(timeEl&&timeEl.value)||"18:00";
-  const reminders = mode==="off" ? {mode:"off"} : {mode, time};
-  const settings = Object.assign({}, state.account.settings||{}, { reminders });
-  const { error } = await db.from('accounts').update({settings}).eq('id',state.account.id);
-  if(!error){
-    state.account.settings=settings;
-    if(msg){ msg.style.color='var(--muted)'; msg.textContent = mode==="off" ? "Reminders are off." : (aName()+" will remind customers "+(mode==="day_before"?"the day before":"the morning of")+" at "+time+", by email."); }
-  }
-  else if(msg){ msg.style.color='var(--danger)'; msg.textContent='Could not save. Try again.'; }
-  btn.disabled=false; btn.textContent=error?"Error — retry":"Saved ✓"; setTimeout(()=>btn.textContent=o,1300);
-}
-async function saveScheduling(){
-  const enEl=$("#sched-enabled"), autoEl=$("#sched-auto"), msg=$("#sched-msg"), btn=$("#sched-save");
-  if(!enEl) return;
-  btn.disabled=true; const o=btn.textContent; btn.textContent="Saving…";
-  const settings = Object.assign({}, state.account.settings||{}, { scheduling_enabled: !!enEl.checked, scheduling_auto_send: autoEl?!!autoEl.checked:true });
-  const { error } = await db.from('accounts').update({settings}).eq('id',state.account.id);
-  if(!error){
-    state.account.settings=settings;
-    if(msg){ msg.style.color='var(--muted)'; msg.textContent = enEl.checked ? ((autoEl&&autoEl.checked) ? aName()+' will propose times and book automatically over email.' : aName()+' will propose times and confirm, but each booking waits for your approval.') : aName()+' will pass email booking requests to you.'; }
-  }
   else if(msg){ msg.style.color='var(--danger)'; msg.textContent='Could not save. Try again.'; }
   btn.disabled=false; btn.textContent=error?"Error — retry":"Saved ✓"; setTimeout(()=>btn.textContent=o,1300);
 }
@@ -1255,6 +825,235 @@ async function saveDirectory(){
   else { msg.style.color='var(--danger)'; msg.textContent='Could not save. Try again.'; }
   btn.disabled=false; btn.textContent=error?"Error — retry":"Saved ✓"; setTimeout(()=>btn.textContent=o,1300);
 }
+/* ===================== CONTACTS PAGE ===================== */
+function ctNormPhone(raw){
+  let s=String(raw||"").trim(); if(!s) return "";
+  const plus=s.startsWith('+'); const d=s.replace(/[^0-9]/g,'');
+  if(plus) return d?('+'+d):"";
+  if(d.length===10) return '+1'+d;
+  if(d.length===11 && d[0]==='1') return '+'+d;
+  return d?('+'+d):"";
+}
+function ctSpeak(text){
+  if(!('speechSynthesis' in window) || !text) return;
+  try{ window.speechSynthesis.cancel(); const u=new SpeechSynthesisUtterance(String(text)); u.rate=.95; u.pitch=1; window.speechSynthesis.speak(u); }catch(e){}
+}
+function ctGuessSpoken(name){
+  const n=String(name||'').trim(); if(!n) return '';
+  const first=n.split(/\s+/)[0]||'';
+  return first.replace(/^[^\p{L}]+|[^\p{L}]+$/gu,'') || first;
+}
+function ctModal(inner){
+  const ov=document.createElement('div'); ov.className='modal-ov';
+  ov.style.cssText='position:fixed;inset:0;background:rgba(19,36,61,.45);display:flex;align-items:flex-start;justify-content:center;padding:38px 16px;z-index:9999;overflow:auto';
+  ov.innerHTML=`<div style="background:#fff;border-radius:14px;padding:22px;max-width:470px;width:100%;box-shadow:0 24px 70px rgba(0,0,0,.28)">${inner}</div>`;
+  ov.onclick=e=>{ if(e.target===ov) ctClose(ov); };
+  document.body.appendChild(ov); return ov;
+}
+function ctClose(m){ if(m&&m.parentNode) m.parentNode.removeChild(m); }
+function ctSrcBadge(s){
+  const map={donna:['Added by '+aName(),'#13243d'],import:['Imported','#1f6f8b'],manual:['Added manually','#5d6e8c']};
+  const x=map[s]; return x?`<span style="font-size:10px;background:${x[1]};color:#fff;padding:1px 7px;border-radius:9px">${x[0]}</span>`:'';
+}
+async function pageContacts(){
+  $("#page").innerHTML=`
+  <div class="page">
+    <div class="page-head"><h1>Contacts</h1><p>People ${esc(aName())} knows. She adds callers automatically, and you can add, import, or export contacts here. ${esc(aName())} always greets people by their first name.</p></div>
+    <div class="card">
+      <div class="card-h"><h2>Your contacts</h2>
+        <div style="display:flex;gap:8px">
+          <button class="btn sm" id="ct-add">+ Add</button>
+          <button class="btn sm" id="ct-import">Import</button>
+          <button class="btn sm" id="ct-export">Export</button>
+        </div>
+      </div>
+      <input class="inp" id="ct-search" placeholder="Search name, phone, company, label..." style="margin-bottom:14px;max-width:360px">
+      <div id="ct-list"><p style="color:var(--muted)">Loading...</p></div>
+    </div>
+  </div>`;
+  $("#ct-add").onclick=()=>ctForm(null);
+  $("#ct-import").onclick=ctImport;
+  $("#ct-export").onclick=ctExport;
+  $("#ct-search").oninput=ctRenderList;
+  await ctLoad();
+}
+async function ctLoad(){
+  const { data, error } = await db.from('contacts')
+    .select('id,name,preferred_name,pronunciation,label,phone,email,company,interest,language,source,notes,updated_at')
+    .eq('account_id', state.account.id).order('updated_at',{ascending:false});
+  state.contacts = error ? [] : (data||[]);
+  ctRenderList();
+}
+function ctRenderList(){
+  const box=$("#ct-list"); if(!box) return;
+  const q=(($("#ct-search")||{}).value||"").toLowerCase().trim();
+  let rows=state.contacts||[];
+  if(q) rows=rows.filter(c=>[c.name,c.preferred_name,c.label,c.phone,c.email,c.company,c.interest].some(v=>String(v||"").toLowerCase().includes(q)));
+  const total=(state.contacts||[]).length;
+  if(!rows.length){ box.innerHTML=`<p style="color:var(--muted-2);font-size:13px">${total?'No matches.':esc(aName())+' will add callers automatically. You can also add or import contacts above.'}</p>`; return; }
+  box.innerHTML=`<div style="font-size:11.5px;color:var(--muted-2);margin-bottom:8px">${rows.length}${q?' of '+total:''} contact${rows.length===1?'':'s'}</div>`+rows.map(c=>`
+    <div style="display:grid;grid-template-columns:1.4fr 1fr 1.2fr auto;gap:12px;align-items:center;padding:10px 0;border-bottom:1px solid var(--line)">
+      <div><b>${esc(c.name||c.preferred_name||'Unknown')}</b>${c.label?` <span style="color:var(--muted-2);font-size:12px">(${esc(c.label)})</span>`:''}<div style="font-size:11px;color:var(--muted-2);margin-top:2px">${ctSrcBadge(c.source)} ${c.company?esc(c.company):''}</div></div>
+      <div style="font-size:13px">${esc(c.phone||'')}</div>
+      <div style="font-size:13px;color:var(--muted)">${esc(c.interest||'')}</div>
+      <div><button class="btn sm ct-edit" data-id="${c.id}">Edit</button></div>
+    </div>`).join("");
+  box.querySelectorAll('.ct-edit').forEach(b=>b.onclick=()=>ctForm(b.dataset.id));
+}
+function ctForm(id){
+  const c = id ? (state.contacts.find(x=>x.id===id)||{}) : {};
+  const m=ctModal(`
+    <h2 style="font-size:17px;margin-bottom:14px">${id?'Edit contact':'Add contact'}</h2>
+    <div class="field"><label class="lab">Name</label><input class="inp" id="cf-name" value="${esc(c.name||'')}" placeholder="Full name"></div>
+    <div class="field"><label class="lab">Name ${esc(aName())} uses <span class="sub">the first name she says out loud</span></label><input class="inp" id="cf-pref" value="${esc(c.preferred_name||'')}" placeholder="fills from first name"></div>
+    <div class="field"><label class="lab">How ${esc(aName())} says it <span class="sub">optional, spell it how it sounds for tricky names</span></label><div style="display:flex;gap:8px"><input class="inp" id="cf-pron" value="${esc(c.pronunciation||'')}" placeholder="e.g., twong-ahn" style="flex:1"><button class="btn sm" id="cf-play" type="button">Preview</button></div></div>
+    <div class="field"><label class="lab">Label <span class="sub">private note, never spoken</span></label><input class="inp" id="cf-label" value="${esc(c.label||'')}" placeholder="e.g., sugar water"></div>
+    <div class="field"><label class="lab">Phone</label><input class="inp" id="cf-phone" value="${esc(c.phone||'')}" placeholder="+18175551234"></div>
+    <div class="field"><label class="lab">Email</label><input class="inp" id="cf-email" value="${esc(c.email||'')}"></div>
+    <div class="field"><label class="lab">Business / company</label><input class="inp" id="cf-company" value="${esc(c.company||'')}"></div>
+    <div class="field"><label class="lab">Interest</label><input class="inp" id="cf-interest" value="${esc(c.interest||'')}" placeholder="what they want"></div>
+    <div class="field"><label class="lab">Language</label><input class="inp" id="cf-lang" value="${esc(c.language||'')}" placeholder="English"></div>
+    <div id="cf-msg" style="font-size:12.5px;color:var(--danger);min-height:16px"></div>
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-top:6px">
+      <div>${id?`<button class="btn sm" id="cf-del" style="color:var(--danger);border-color:var(--danger)">Delete</button>`:''}</div>
+      <div style="display:flex;gap:8px"><button class="btn sm" id="cf-cancel">Cancel</button><button class="btn sm primary" id="cf-save">Save</button></div>
+    </div>`);
+  $("#cf-name").onblur=()=>{ const p=$("#cf-pref"); if(!p.value.trim()){ p.value=ctGuessSpoken($("#cf-name").value); } };
+  $("#cf-play").onclick=()=>ctSpeak($("#cf-pron").value.trim() || $("#cf-pref").value.trim() || ($("#cf-name").value.trim().split(/\s+/)[0]||''));
+  $("#cf-cancel").onclick=()=>ctClose(m);
+  const del=$("#cf-del"); if(del) del.onclick=async()=>{ if(!confirm('Delete this contact?'))return; await db.from('contacts').delete().eq('id',id); ctClose(m); await ctLoad(); };
+  $("#cf-save").onclick=async()=>{
+    const name=$("#cf-name").value.trim();
+    const phoneRaw=$("#cf-phone").value.trim(); const phone=ctNormPhone(phoneRaw);
+    const email=$("#cf-email").value.trim(); const msg=$("#cf-msg");
+    if(!name && !phone){ msg.textContent='Add at least a name or a phone number.'; return; }
+    if(phoneRaw && !/^\+[1-9]\d{6,14}$/.test(phone)){ msg.textContent='Enter the phone in full format, like +18175551234.'; return; }
+    if(email && !/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)){ msg.textContent='Check the email address.'; return; }
+    const pref=$("#cf-pref").value.trim() || (name.split(/\s+/)[0]||'') || null;
+    const row={ account_id:state.account.id, name:name||null, preferred_name:pref, label:$("#cf-label").value.trim()||null,
+      pronunciation:$("#cf-pron").value.trim()||null,
+      phone:phone||null, email:email||null, company:$("#cf-company").value.trim()||null,
+      interest:$("#cf-interest").value.trim()||null, language:$("#cf-lang").value.trim()||null, updated_at:new Date().toISOString() };
+    let res;
+    if(id){ res=await db.from('contacts').update(row).eq('id',id); }
+    else { row.source='manual'; row.list_type='normal';
+      res = phone ? await db.from('contacts').upsert(row,{onConflict:'account_id,phone'}) : await db.from('contacts').insert(row); }
+    if(res.error){ msg.textContent='Could not save. '+(res.error.message||''); return; }
+    ctClose(m); await ctLoad();
+  };
+}
+function ctCsvRows(text){
+  const rows=[]; let row=[], cur='', q=false;
+  text=text.replace(/\r\n/g,'\n').replace(/\r/g,'\n');
+  for(let i=0;i<text.length;i++){ const ch=text[i];
+    if(q){ if(ch==='"'){ if(text[i+1]==='"'){cur+='"';i++;} else q=false; } else cur+=ch; }
+    else { if(ch==='"') q=true; else if(ch===','){ row.push(cur); cur=''; } else if(ch==='\n'){ row.push(cur); rows.push(row); row=[]; cur=''; } else cur+=ch; } }
+  if(cur.length||row.length){ row.push(cur); rows.push(row); }
+  return rows.filter(r=>r.some(c=>String(c).trim().length));
+}
+function ctParseCSV(text){
+  const rows=ctCsvRows(text); if(rows.length<2) return [];
+  const H=rows[0].map(h=>h.trim().toLowerCase());
+  const find=(names)=>{ for(const n of names){ const i=H.indexOf(n); if(i>=0) return i; } for(let i=0;i<H.length;i++){ if(names.some(n=>H[i].includes(n))) return i; } return -1; };
+  const iName=find(['name','full name','display name']);
+  const iFirst=find(['first name','given name']);
+  const iLast=find(['last name','family name','surname']);
+  const iPhone=find(['phone 1 - value','mobile phone','mobile','phone number','phone','tel']);
+  const iEmail=find(['e-mail 1 - value','email address','e-mail address','email','e-mail']);
+  const iCo=find(['organization 1 - name','company','organization','organisation']);
+  const out=[];
+  for(let r=1;r<rows.length;r++){ const row=rows[r];
+    let name=iName>=0?(row[iName]||'').trim():'';
+    if(!name){ const fn=iFirst>=0?(row[iFirst]||'').trim():''; const ln=iLast>=0?(row[iLast]||'').trim():''; name=(fn+' '+ln).trim(); }
+    const phone=iPhone>=0?(row[iPhone]||'').trim():'';
+    const email=iEmail>=0?(row[iEmail]||'').trim():'';
+    const company=iCo>=0?(row[iCo]||'').trim():'';
+    if(name||phone||email) out.push({name,phone,email,company}); }
+  return out;
+}
+function ctParseVCF(text){
+  const cards=text.split(/BEGIN:VCARD/i).slice(1);
+  return cards.map(card=>{
+    const body=card.split(/END:VCARD/i)[0];
+    const lines=body.split(/\n/).map(l=>l.trim()).filter(Boolean);
+    let name='',phone='',email='',company='';
+    for(const line of lines){ const up=line.toUpperCase(); const val=line.substring(line.indexOf(':')+1).trim();
+      if(up.startsWith('FN:')||up.startsWith('FN;')) name=val;
+      else if((up.startsWith('N:')||up.startsWith('N;')) && !name){ const p=val.split(';'); name=((p[1]||'')+' '+(p[0]||'')).trim(); }
+      else if(up.includes('TEL') && !phone) phone=val;
+      else if(up.includes('EMAIL') && !email) email=val;
+      else if(up.startsWith('ORG') && !company) company=val.split(';')[0].trim(); }
+    return {name,phone,email,company};
+  }).filter(x=>x.name||x.phone);
+}
+function ctImport(){
+  let parsed=[];
+  const m=ctModal(`
+    <h2 style="font-size:17px;margin-bottom:6px">Import contacts</h2>
+    <p style="font-size:12.5px;color:var(--muted);margin-bottom:12px">Upload a CSV or vCard (.vcf) exported from Google, Outlook, iCloud, or your phone. You choose which ones to bring in. Duplicates are matched by phone number.</p>
+    <input type="file" id="imp-file" accept=".csv,.vcf,.vcard,text/csv,text/vcard" style="margin-bottom:12px;font-size:13px">
+    <div id="imp-body"></div>
+    <div id="imp-msg" style="font-size:12.5px;color:var(--danger);min-height:16px"></div>
+    <div style="display:flex;gap:8px;justify-content:flex-end;margin-top:6px"><button class="btn sm" id="imp-cancel">Cancel</button><button class="btn sm primary" id="imp-do" disabled>Import selected</button></div>`);
+  $("#imp-cancel").onclick=()=>ctClose(m);
+  $("#imp-file").onchange=async(e)=>{
+    const f=e.target.files[0]; if(!f) return; const text=await f.text();
+    parsed = (/\.(vcf|vcard)$/i.test(f.name)||/BEGIN:VCARD/i.test(text)) ? ctParseVCF(text) : ctParseCSV(text);
+    if(!parsed.length){ $("#imp-body").innerHTML='<p style="color:var(--danger);font-size:13px">No contacts found in that file.</p>'; $("#imp-do").disabled=true; return; }
+    $("#imp-body").innerHTML=`<div style="display:flex;justify-content:space-between;font-size:12px;color:var(--muted);margin-bottom:6px"><span>${parsed.length} found</span><label style="cursor:pointer"><input type="checkbox" id="imp-all" checked> Select all</label></div>
+      <div style="font-size:11px;color:var(--muted-2);margin-bottom:4px">Check the name ${esc(aName())} will say for each. Edit any that look off.</div>
+      <div style="max-height:260px;overflow:auto;border:1px solid var(--line);border-radius:8px;padding:8px">${parsed.map((p,i)=>`<div style="display:flex;gap:8px;align-items:center;padding:4px 0;font-size:13px"><input type="checkbox" class="imp-ck" data-i="${i}" checked><span style="flex:1;min-width:0"><b>${esc(p.name||'(no name)')}</b> ${p.phone?esc(ctNormPhone(p.phone)):'(no phone)'}${p.company?' · '+esc(p.company):''}</span><span style="font-size:10.5px;color:var(--muted-2)">says</span><input class="imp-spoken" data-i="${i}" value="${esc(ctGuessSpoken(p.name))}" title="Name Donna says out loud" style="width:96px;padding:5px 8px;font-size:12.5px;border:1px solid var(--line);border-radius:6px;background:#fbfcfe"></div>`).join("")}</div>`;
+    $("#imp-do").disabled=false;
+    $("#imp-all").onchange=(ev)=>document.querySelectorAll('.imp-ck').forEach(ck=>ck.checked=ev.target.checked);
+  };
+  $("#imp-do").onclick=async()=>{
+    const spoken={}; document.querySelectorAll('.imp-spoken').forEach(inp=>{ spoken[inp.dataset.i]=inp.value.trim(); });
+    const picks=[...document.querySelectorAll('.imp-ck')].filter(ck=>ck.checked).map(ck=>({p:parsed[+ck.dataset.i], spoken:spoken[ck.dataset.i]}));
+    if(!picks.length){ $("#imp-msg").textContent='Select at least one contact.'; return; }
+    const rows=picks.map(({p,spoken})=>{ const nm=(p.name||'').trim(); const ph=ctNormPhone(p.phone);
+      return { account_id:state.account.id, name:nm||null, preferred_name:(spoken||ctGuessSpoken(nm)||null), phone:ph||null,
+        email:(p.email||'').trim()||null, company:(p.company||'').trim()||null, source:'import', list_type:'normal', updated_at:new Date().toISOString() }; });
+    const withPhone=rows.filter(r=>r.phone), noPhone=rows.filter(r=>!r.phone);
+    const btn=$("#imp-do"); btn.disabled=true; btn.textContent='Importing...'; let err=null;
+    if(withPhone.length){ const r=await db.from('contacts').upsert(withPhone,{onConflict:'account_id,phone'}); if(r.error) err=r.error; }
+    if(!err && noPhone.length){ const r=await db.from('contacts').insert(noPhone); if(r.error) err=r.error; }
+    if(err){ $("#imp-msg").textContent='Import error: '+(err.message||''); btn.disabled=false; btn.textContent='Import selected'; return; }
+    ctClose(m); await ctLoad();
+  };
+}
+function ctVCard(c){
+  const nm=(c.name||c.preferred_name||'').trim();
+  const parts=nm.split(/\s+/); const last=parts.length>1?parts[parts.length-1]:''; const first=parts.length>1?parts.slice(0,-1).join(' '):nm;
+  let v='BEGIN:VCARD\nVERSION:3.0\n';
+  v+=`N:${last};${first};;;\n`; v+=`FN:${nm}\n`;
+  if(c.phone) v+=`TEL;TYPE=CELL:${c.phone}\n`;
+  if(c.email) v+=`EMAIL:${c.email}\n`;
+  if(c.company) v+=`ORG:${c.company}\n`;
+  const note=[c.interest?('Interest: '+c.interest):'', c.label?('Note: '+c.label):''].filter(Boolean).join(' | ');
+  if(note) v+=`NOTE:${note.replace(/[\n\r]/g,' ')}\n`;
+  v+='END:VCARD'; return v;
+}
+function ctExport(){
+  const rows=state.contacts||[];
+  if(!rows.length){ ctModal(`<h2 style="font-size:17px">Export contacts</h2><p style="font-size:13px;color:var(--muted);margin:12px 0">No contacts to export yet.</p><div style="text-align:right"><button class="btn sm" onclick="this.closest('.modal-ov').remove()">Close</button></div>`); return; }
+  const m=ctModal(`
+    <h2 style="font-size:17px;margin-bottom:6px">Export contacts</h2>
+    <p style="font-size:12.5px;color:var(--muted);margin-bottom:10px">All selected by default. Uncheck any you don't want, then download a vCard to import into your phone or contacts app.</p>
+    <div style="display:flex;justify-content:space-between;font-size:12px;color:var(--muted);margin-bottom:6px"><span>${rows.length} contacts</span><label style="cursor:pointer"><input type="checkbox" id="exp-all" checked> Select all</label></div>
+    <div style="max-height:300px;overflow:auto;border:1px solid var(--line);border-radius:8px;padding:8px">${rows.map((c,i)=>`<label style="display:flex;gap:8px;align-items:center;padding:3px 0;font-size:13px"><input type="checkbox" class="exp-ck" data-i="${i}" checked><span><b>${esc(c.name||c.preferred_name||'Unknown')}</b> ${esc(c.phone||'')} ${ctSrcBadge(c.source)}</span></label>`).join("")}</div>
+    <div style="display:flex;gap:8px;justify-content:flex-end;margin-top:10px"><button class="btn sm" id="exp-cancel">Cancel</button><button class="btn sm primary" id="exp-do">Download vCard</button></div>`);
+  $("#exp-all").onchange=(e)=>document.querySelectorAll('.exp-ck').forEach(ck=>ck.checked=e.target.checked);
+  $("#exp-cancel").onclick=()=>ctClose(m);
+  $("#exp-do").onclick=()=>{
+    const picks=[...document.querySelectorAll('.exp-ck')].filter(ck=>ck.checked).map(ck=>rows[+ck.dataset.i]);
+    if(!picks.length) return;
+    const vcf=picks.map(ctVCard).join('\n');
+    const blob=new Blob([vcf],{type:'text/vcard'}); const url=URL.createObjectURL(blob);
+    const a=document.createElement('a'); a.href=url; a.download='donna-contacts.vcf'; document.body.appendChild(a); a.click(); a.remove(); URL.revokeObjectURL(url);
+    ctClose(m);
+  };
+}
+
 function pageSettings(){
   const ac=state.account;
   const xfer=(state.assistant&&state.assistant.routing&&state.assistant.routing.transfer)||{};
@@ -1279,17 +1078,8 @@ function pageSettings(){
     <div class="card"><div class="card-h"><h2>Message alerts</h2><button class="btn sm" id="alert-save">Save</button></div>
       <p style="font-size:13px;color:var(--muted);margin-bottom:12px">When ${esc(aName())} takes a message, it is emailed here. If a caller asks for someone by name, that person is emailed directly and this inbox is copied. Use an address you actually check.</p>
       <div class="field" style="max-width:340px;margin:0"><label class="lab">General inbox email</label><input class="inp" id="alert-email" type="email" placeholder="you@yourcompany.com" value="${esc((ac.settings&&ac.settings.alert_email)||'')}"></div>
-      ${(ac.settings&&ac.settings.messaging_enabled)?`<div class="field" style="max-width:340px;margin:14px 0 0"><label class="lab">Escalation inbox <span style="display:block;font-weight:400;color:var(--muted);font-size:11.5px;margin-top:2px">When email is on, ${esc(aName())} sends questions she cannot answer and replies to review here. Must be a different address from the general inbox, which ${esc(aName())} answers.</span></label><input class="inp" id="esc-email" type="email" placeholder="you@yourcompany.com" value="${esc((ac.settings&&ac.settings.escalation_email)||'')}"></div><label style="display:flex;align-items:flex-start;gap:10px;margin:16px 0 0;cursor:pointer;font-size:13.5px;color:var(--ink)"><input type="checkbox" id="auto-send" style="margin-top:3px" ${(ac.settings&&ac.settings.email_auto_send)?'checked':''}><span>Let ${esc(aName())} send confident replies automatically<span style="display:block;font-weight:400;color:var(--muted);font-size:11.5px;margin-top:2px">When on, ${esc(aName())} sends email answers she is confident about without waiting, and still escalates anything she is unsure about. When off, every reply waits for your approval.</span></span></label>`:''}
       <div id="alert-msg" style="font-size:12.5px;color:var(--muted);margin-top:8px"></div>
     </div>
-
-    ${(ac.settings&&ac.settings.messaging_enabled)?`
-    <div class="card"><div class="card-h"><h2>Email scheduling</h2><button class="btn sm" id="sched-save">Save</button></div>
-      <p style="font-size:13px;color:var(--muted);margin-bottom:12px">Controls how ${esc(aName())} handles booking requests that arrive by email. She only offers real open times from your booking hours and appointment types, re-checks the slot when the customer replies, and never double books.</p>
-      <label style="display:flex;align-items:flex-start;gap:10px;margin:0 0 14px;cursor:pointer;font-size:13.5px;color:var(--ink)"><input type="checkbox" id="sched-enabled" style="margin-top:3px" ${(!ac.settings||ac.settings.scheduling_enabled!==false)?'checked':''}><span>Let ${esc(aName())} handle scheduling over email<span style="display:block;font-weight:400;color:var(--muted);font-size:11.5px;margin-top:2px">When on, she proposes open times and books appointments by email. When off, she passes booking requests to you instead.</span></span></label>
-      <label id="sched-auto-row" style="display:flex;align-items:flex-start;gap:10px;margin:0;cursor:pointer;font-size:13.5px;color:var(--ink)"><input type="checkbox" id="sched-auto" style="margin-top:3px" ${(!ac.settings||ac.settings.scheduling_auto_send!==false)?'checked':''}><span>Book automatically without my approval<span style="display:block;font-weight:400;color:var(--muted);font-size:11.5px;margin-top:2px">When on, she books the time as soon as the customer replies, like she does on calls, and sends you a heads up. When off, she still proposes and confirms, but each booking waits for your approve by reply. This is separate from the email auto reply setting above.</span></span></label>
-      <div id="sched-msg" style="font-size:12.5px;color:var(--muted);margin-top:8px"></div>
-    </div>`:''}
 
     ${!isPro ? `
     <div class="card"><div class="card-h"><h2>Call transfer</h2><button class="btn sm" id="xfer-save">Save</button></div>
@@ -1311,18 +1101,8 @@ function pageSettings(){
       <p style="font-size:13px;color:var(--muted)">Route callers to multiple people by name, and cascade through your team in order until someone answers. Available on the Pro plan. You are on ${esc(ac.plan||'starter')}.</p>
     </div>`}
 
-    <div class="card"><div class="card-h"><h2>Calendar</h2><span class="hint">Availability + booking</span></div>
+    <div class="card"><div class="card-h"><h2>Calendar</h2><span class="hint">Two-way sync</span></div>
       <div id="cal-card-body"></div>
-    </div>
-
-    <div class="card"><div class="card-h"><h2>Appointment reminders</h2><button class="btn sm" id="rem-save">Save</button></div>
-      <p style="font-size:13px;color:var(--muted);margin-bottom:12px">Email customers a reminder before their appointment, to the address they gave when booking. It includes the video link or the address, and ${esc(aName())} checks the calendar first so a rescheduled time is reflected.</p>
-      ${(()=>{ const rem=(ac.settings&&ac.settings.reminders)||{mode:"off"}; const t=esc(rem.time||"18:00"); const opt=(v,l)=>`<option value="${v}" ${rem.mode===v?"selected":""}>${l}</option>`; return `
-      <div class="grid-2">
-        <div class="field" style="margin:0"><label class="lab">When to remind</label><select class="inp" id="rem-mode">${opt("off","Off")}${opt("day_before","The day before")}${opt("morning_of","The morning of")}</select></div>
-        <div class="field" id="rem-time-field" style="margin:0${rem.mode==="off"?";opacity:.45":""}"><label class="lab">Time</label><input class="inp" id="rem-time" type="time" value="${t}"></div>
-      </div>`; })()}
-      <div id="rem-msg" style="font-size:12.5px;color:var(--muted);margin-top:8px"></div>
     </div>
 
     <div class="card"><div class="card-h"><h2>Login &amp; password</h2></div>
@@ -1351,9 +1131,6 @@ function pageSettings(){
   $("#set-biz-save").onclick=saveBusiness;
   $("#tz-save").onclick=saveTimezone;
   { const ae=$("#alert-save"); if(ae) ae.onclick=saveAlertEmail; }
-  { const ss=$("#sched-save"); if(ss) ss.onclick=saveScheduling; }
-  { const rs=$("#rem-save"); if(rs) rs.onclick=saveReminders; const rm=$("#rem-mode"); if(rm){ const upd=()=>{ const f=$("#rem-time-field"); if(f) f.style.opacity=rm.value==="off"?".45":"1"; const ri=$("#rem-time"); if(ri) ri.disabled=rm.value==="off"; }; rm.addEventListener("change",upd); upd(); } }
-  { const se=$("#sched-enabled"), sr=$("#sched-auto-row"); if(se&&sr){ const upd=()=>{ sr.style.opacity=se.checked?'1':'.45'; const a=$("#sched-auto"); if(a) a.disabled=!se.checked; }; se.addEventListener('change',upd); upd(); } }
   { const xs=$("#xfer-save"); if(xs) xs.onclick=saveTransfer; }
   if(isPro){
     state._dir = (state.assistant.routing&&Array.isArray(state.assistant.routing.directory)) ? JSON.parse(JSON.stringify(state.assistant.routing.directory)) : [];
@@ -1450,14 +1227,13 @@ function pageKnowledge(){
           <button class="btn" id="iv-cancel">Cancel</button>
         </div>
       </div>
-      <div id="iv-docs" style="margin-top:4px"></div>
     </div>
     <div class="card">
       <div class="card-h"><h2>Documents</h2><span class="hint">Word, Excel, text PDF</span></div>
-      <p style="font-size:12.5px;color:var(--muted);margin-bottom:12px">Upload one or several files at once — a price list, service menu, or policy doc — and ${esc(aName())} reads them into her knowledge for you to review. Word (.docx), Excel (.xlsx), CSV, plain text, and text-based PDFs work today. Scans and photos need OCR, which is coming soon — for those, type the details into Add knowledge above. Google Docs or Sheets: use File &rsaquo; Download as Word or Excel, then upload that.</p>
+      <p style="font-size:12.5px;color:var(--muted);margin-bottom:12px">Upload a price list, service menu, or policy doc and ${esc(aName())} reads it into her knowledge for you to review. Word (.docx), Excel (.xlsx), CSV, plain text, and text-based PDFs work today. Scans and photos need OCR, which is coming soon — for those, type the details into Add knowledge above. Google Docs or Sheets: use File &rsaquo; Download as Word or Excel, then upload that.</p>
       <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap">
-        <label class="btn primary" style="position:relative;overflow:hidden">Choose files
-          <input type="file" id="kb-file" multiple accept=".pdf,.doc,.docx,.xls,.xlsx,.csv,.txt" style="position:absolute;inset:0;opacity:0;cursor:pointer">
+        <label class="btn primary" style="position:relative;overflow:hidden">Choose a file
+          <input type="file" id="kb-file" accept=".pdf,.doc,.docx,.xls,.xlsx,.csv,.txt" style="position:absolute;inset:0;opacity:0;cursor:pointer">
         </label>
         <span id="kb-up-msg" style="font-size:12.5px;color:var(--muted)"></span>
       </div>
@@ -1466,12 +1242,12 @@ function pageKnowledge(){
   </div>`;
   $("#kb-save").onclick=saveKnowledge;
   $("#kb-cancel").onclick=()=>{ state.kbEdit=null; resetKbForm(); };
-  $("#kb-refresh").onclick=async()=>{ const b=$("#kb-refresh"); b.disabled=true; b.textContent="…"; await loadKnowledge(); paintKbList(); await loadDocuments(); refreshDocViews(); b.disabled=false; b.textContent="Refresh"; };
+  $("#kb-refresh").onclick=async()=>{ const b=$("#kb-refresh"); b.disabled=true; b.textContent="…"; await loadKnowledge(); paintKbList(); await loadDocuments(); paintDocs(); b.disabled=false; b.textContent="Refresh"; };
   $("#kb-file").onchange=handleFileUpload;
   $("#kb-url-go").onclick=importWebsite;
   ivInitCard();
   loadKnowledge().then(paintKbList);
-  loadDocuments().then(refreshDocViews);
+  loadDocuments().then(paintDocs);
 }
 function resetKbForm(){
   const t=$("#kb-title"); if(!t) return;
@@ -1558,85 +1334,101 @@ async function extractText(file){
   throw new Error("Unsupported file type.");
 }
 async function handleFileUpload(e){
-  const files=Array.from(e.target.files||[]); const msg=$("#kb-up-msg");
+  const file=e.target.files&&e.target.files[0]; const msg=$("#kb-up-msg");
   e.target.value="";
-  if(!files.length||!msg) return;
-  let done=0, added=0, failed=0;
-  for(const file of files){
-    const ext=(file.name.split('.').pop()||'').toLowerCase();
-    msg.style.color="var(--muted)"; msg.textContent=files.length>1?("Reading "+file.name+" ("+(done+1)+"/"+files.length+")…"):("Reading "+file.name+"…");
-    if(KB_EXT_IMG.includes(ext)||!KB_EXT_OK.includes(ext)){ failed++; done++; continue; }
-    let text="";
-    try{ text=((await extractText(file))||"").trim(); }catch(err){ failed++; done++; continue; }
-    if(text.length<20){ failed++; done++; continue; }
-    msg.textContent="Teaching "+aName()+" from "+file.name+(files.length>1?(" ("+(done+1)+"/"+files.length+")…"):"…");
-    try{
-      const { data, error }=await db.functions.invoke("knowledge-ingest-document",{ body:{ filename:file.name, text } });
-      if(error||!data||!data.ok) failed++; else added++;
-    }catch(err){ failed++; }
-    done++;
+  if(!file||!msg) return;
+  const ext=(file.name.split('.').pop()||'').toLowerCase();
+  if(KB_EXT_IMG.includes(ext)){ msg.style.color="var(--danger)"; msg.textContent="Images and scans need OCR, which isn't supported yet. Type the details into Add knowledge for now."; return; }
+  if(!KB_EXT_OK.includes(ext)){ msg.style.color="var(--danger)"; msg.textContent="That file type isn't supported."; return; }
+  msg.style.color="var(--muted)"; msg.textContent="Reading "+file.name+"…";
+  let text="";
+  try{ text=((await extractText(file))||"").trim(); }
+  catch(err){ msg.style.color="var(--danger)"; msg.textContent=err.message||"Couldn't read that file."; return; }
+  if(text.length<20){
+    msg.style.color="var(--danger)";
+    msg.textContent = ext==='pdf'
+      ? "This PDF looks like a scan (no readable text). OCR is coming soon — for now type the key details into Add knowledge."
+      : "Couldn't find any text in that file.";
+    return;
   }
-  await loadDocuments(); refreshDocViews();
-  if(added){ msg.style.color="var(--ok)"; msg.textContent="Added "+added+" file"+(added===1?"":"s")+" to review below"+(failed?(", "+failed+" skipped"):"")+"."; }
-  else { msg.style.color="var(--danger)"; msg.textContent="Couldn't read "+failed+" file"+(failed===1?"":"s")+". Word, Excel, CSV, text, and text PDFs work; scans and photos need OCR."; }
+  msg.textContent="Teaching "+aName()+" from "+file.name+"…";
+  try{
+    const { data, error }=await db.functions.invoke("knowledge-ingest-document",{ body:{ filename:file.name, text } });
+    if(error || !data || !data.ok){ msg.style.color="var(--danger)"; msg.textContent=(data&&(data.message||data.error))||(error&&error.message)||"Couldn't save that document."; return; }
+    msg.style.color="var(--ok)"; msg.textContent="Added "+file.name+" — "+data.chunks+" passage"+(data.chunks===1?"":"s")+" to review below.";
+    await loadDocuments(); paintDocs();
+  }catch(err){ msg.style.color="var(--danger)"; msg.textContent="Couldn't save that document."; }
 }
-function docCardHtml(d){
-  const stats=state.docStats||{}; const pass=state.docPassages||{};
-  const pill=(bg,fg,txt)=>`<span style="display:inline-block;font-size:11px;font-weight:600;padding:2px 9px;border-radius:999px;background:${bg};color:${fg}">${txt}</span>`;
-  const s=stats[d.id]||{total:0,approved:0}; const pending=s.total-s.approved;
-  let status;
-  if(s.total===0) status=`<span style="font-size:12px;color:var(--muted-2)">processing…</span>`;
-  else if(pending>0) status=pill("var(--signal-soft)","var(--site)","Pending review · "+s.total+" passage"+(s.total===1?"":"s"));
-  else status=pill("#e7f5ee","var(--ok)","Live · "+s.total+" passage"+(s.total===1?"":"s"));
-  const open=state.docOpen&&state.docOpen.has(d.id);
-  const viewBtn = s.total>0 ? `<button class="btn sm" data-docview="${d.id}">${open?"Hide":"View"}</button>` : "";
-  const approveBtn = pending>0 ? `<button class="btn sm primary" data-docok="${d.id}">Approve</button>` : "";
-  let passHtml="";
-  if(open){
-    const list=(pass[d.id]||[]);
-    const rows = list.length ? list.map(p=>{
-      const dot = p.approved ? `<span style="color:var(--ok);font-size:11px;font-weight:600">Live</span>` : `<span style="color:var(--site);font-size:11px;font-weight:600">Pending</span>`;
-      return `<div style="display:flex;align-items:flex-start;gap:10px"><div style="flex:1;min-width:0"><div style="font-weight:600;font-size:12.5px;margin-bottom:2px">${esc(p.title||"(untitled)")} <span style="margin-left:6px">${dot}</span></div><div style="font-size:12.5px;color:var(--muted)">${esc(p.content)}</div></div><button class="btn sm" data-passdel="${p.id}">Delete</button></div>`;
-    }).join("") : `<div style="font-size:12px;color:var(--muted-2)">No passages.</div>`;
-    const footer = pending>0 ? `<div style="display:flex;justify-content:flex-end;margin-top:4px"><button class="btn sm primary" data-docok="${d.id}">Approve ${pending} passage${pending===1?"":"s"}</button></div>` : "";
-    passHtml = `<div style="margin-top:10px;border-top:1px solid var(--line-2);padding-top:10px;display:flex;flex-direction:column;gap:11px">`+rows+footer+`</div>`;
-  }
-  return `<div class="block-item" style="display:block"><div style="display:flex;align-items:flex-start;gap:10px;flex-wrap:wrap"><div style="flex:1;min-width:150px"><div style="font-weight:600;font-size:13.5px;margin-bottom:4px">${esc(d.filename)}</div><div>${status}</div></div><div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">${viewBtn}${approveBtn}<button class="btn sm" data-docdel="${d.id}">Delete</button></div></div>${passHtml}</div>`;
-}
-function renderDocSection(el, docs, allId, emptyTxt){
-  if(!el) return;
+function paintDocs(){
+  const el=$("#kb-docs"); if(!el) return;
+  const docs=state.documents||[]; const stats=state.docStats||{}; const pass=state.docPassages||{};
   if(!state.docOpen) state.docOpen=new Set();
-  if(!docs.length){ el.innerHTML=`<div style="font-size:12.5px;color:var(--muted-2)">${emptyTxt}</div>`; return; }
-  const stats=state.docStats||{};
+  if(!docs.length){ el.innerHTML=`<div style="font-size:12.5px;color:var(--muted-2)">Nothing uploaded or imported yet.</div>`; return; }
   let pendingDocs=0; docs.forEach(d=>{ const s=stats[d.id]||{total:0,approved:0}; if(s.total>s.approved) pendingDocs++; });
-  const bar = pendingDocs>1 ? `<div style="display:flex;justify-content:flex-end;margin-bottom:8px"><button class="btn sm primary" id="${allId}">Approve all (${pendingDocs})</button></div>` : "";
-  el.innerHTML = bar + docs.map(docCardHtml).join("");
-  const aa=$("#"+allId); if(aa) aa.onclick=()=>approveDocsIn(docs);
+  const bar = pendingDocs>1 ? `<div style="display:flex;justify-content:flex-end;margin-bottom:8px"><button class="btn sm primary" id="kb-approve-all">Approve all (${pendingDocs})</button></div>` : "";
+  const pill=(bg,fg,txt)=>`<span style="display:inline-block;font-size:11px;font-weight:600;padding:2px 9px;border-radius:999px;background:${bg};color:${fg}">${txt}</span>`;
+  el.innerHTML = bar + docs.map(d=>{
+    const s=stats[d.id]||{total:0,approved:0}; const pending=s.total-s.approved;
+    let status;
+    if(s.total===0) status=`<span style="font-size:12px;color:var(--muted-2)">processing…</span>`;
+    else if(pending>0) status=pill("var(--signal-soft)","var(--site)","Pending review · "+s.total+" passage"+(s.total===1?"":"s"));
+    else status=pill("#e7f5ee","var(--ok)","Live · "+s.total+" passage"+(s.total===1?"":"s"));
+    const open=state.docOpen.has(d.id);
+    const viewBtn = s.total>0 ? `<button class="btn sm" data-docview="${d.id}">${open?"Hide":"View"}</button>` : "";
+    const approveBtn = pending>0 ? `<button class="btn sm primary" data-docok="${d.id}">Approve</button>` : "";
+    let passHtml="";
+    if(open){
+      const list=(pass[d.id]||[]);
+      const rows = list.length ? list.map(p=>{
+        const dot = p.approved
+          ? `<span style="color:var(--ok);font-size:11px;font-weight:600">Live</span>`
+          : `<span style="color:var(--site);font-size:11px;font-weight:600">Pending</span>`;
+        return `<div style="display:flex;align-items:flex-start;gap:10px">
+          <div style="flex:1;min-width:0">
+            <div style="font-weight:600;font-size:12.5px;margin-bottom:2px">${esc(p.title||"(untitled)")} <span style="margin-left:6px">${dot}</span></div>
+            <div style="font-size:12.5px;color:var(--muted)">${esc(p.content)}</div>
+          </div>
+          <button class="btn sm" data-passdel="${p.id}">Delete</button>
+        </div>`;
+      }).join("") : `<div style="font-size:12px;color:var(--muted-2)">No passages.</div>`;
+      const footer = pending>0 ? `<div style="display:flex;justify-content:flex-end;margin-top:4px"><button class="btn sm primary" data-docok="${d.id}">Approve ${pending} passage${pending===1?"":"s"}</button></div>` : "";
+      passHtml = `<div style="margin-top:10px;border-top:1px solid var(--line-2);padding-top:10px;display:flex;flex-direction:column;gap:11px">`+rows+footer+`</div>`;
+    }
+    return `<div class="block-item" style="display:block">
+      <div style="display:flex;align-items:flex-start;gap:10px;flex-wrap:wrap">
+        <div style="flex:1;min-width:150px">
+          <div style="font-weight:600;font-size:13.5px;margin-bottom:4px">${esc(d.filename)}</div>
+          <div>${status}</div>
+        </div>
+        <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">
+          ${viewBtn}
+          ${approveBtn}
+          <button class="btn sm" data-docdel="${d.id}">Delete</button>
+        </div>
+      </div>
+      ${passHtml}
+    </div>`;
+  }).join("");
+  const aa=$("#kb-approve-all"); if(aa) aa.onclick=approveAllDocs;
   el.querySelectorAll("[data-docview]").forEach(b=>b.onclick=()=>toggleDoc(b.dataset.docview));
   el.querySelectorAll("[data-docok]").forEach(b=>b.onclick=()=>approveDocument(b.dataset.docok));
   el.querySelectorAll("[data-docdel]").forEach(b=>b.onclick=()=>deleteDocument(b.dataset.docdel));
   el.querySelectorAll("[data-passdel]").forEach(b=>b.onclick=()=>deletePassage(b.dataset.passdel));
 }
-function splitDocs(){ const all=state.documents||[]; return { uploads: all.filter(d=>d.doc_type!=='interview'), interviews: all.filter(d=>d.doc_type==='interview') }; }
-function paintDocs(){ const el=$("#kb-docs"); if(!el) return; renderDocSection(el, splitDocs().uploads, "kb-approve-all", "Nothing uploaded or imported yet."); }
-function paintIvDocs(){ const el=$("#iv-docs"); if(!el) return; const ivs=splitDocs().interviews; if(!ivs.length){ el.innerHTML=""; return; } el.innerHTML=`<div style="font-weight:600;font-size:12.5px;margin:2px 0 8px;padding-top:12px;border-top:1px solid var(--line-2)">From your voice setup — review and approve</div><div id="iv-docs-list"></div>`; renderDocSection($("#iv-docs-list"), ivs, "iv-approve-all", ""); }
-function refreshDocViews(){ paintDocs(); paintIvDocs(); }
-function toggleDoc(id){ if(!state.docOpen) state.docOpen=new Set(); if(state.docOpen.has(id)) state.docOpen.delete(id); else state.docOpen.add(id); refreshDocViews(); }
+function toggleDoc(id){ if(!state.docOpen) state.docOpen=new Set(); if(state.docOpen.has(id)) state.docOpen.delete(id); else state.docOpen.add(id); paintDocs(); }
 async function deletePassage(id){
   if(!confirm("Delete this passage? "+aName()+" will no longer use it.")) return;
   const { error }=await db.from('knowledge_entries').delete().eq('id',id);
-  if(!error){ await loadDocuments(); refreshDocViews(); }
+  if(!error){ await loadDocuments(); paintDocs(); }
 }
 async function approveDocument(id){
   const { error }=await db.from('knowledge_entries').update({approved:true}).eq('document_id',id).eq('approved',false);
-  if(!error){ await loadDocuments(); refreshDocViews(); }
+  if(!error){ await loadDocuments(); paintDocs(); }
 }
-async function approveDocsIn(docs){
-  if(!docs||!docs.length) return;
-  if(!confirm(aName()+" will start using everything pending here with real callers. Continue?")) return;
-  const ids=docs.map(d=>d.id);
-  const { error }=await db.from('knowledge_entries').update({approved:true}).in('document_id',ids).eq('approved',false);
-  if(!error){ await loadDocuments(); refreshDocViews(); }
+async function approveAllDocs(){
+  if(!confirm(aName()+" will start using everything pending with real callers. Continue?")) return;
+  const { error }=await db.from('knowledge_entries').update({approved:true}).eq('source','document').eq('approved',false);
+  if(!error){ await loadDocuments(); paintDocs(); }
 }
 async function importWebsite(){
   const inp=$("#kb-url"), msg=$("#kb-url-msg"), btn=$("#kb-url-go");
@@ -1645,11 +1437,11 @@ async function importWebsite(){
   btn.disabled=true; const o=btn.textContent; btn.textContent="Reading…"; msg.style.color="var(--muted)"; msg.textContent="Reading your site — this can take a few seconds…";
   try{
     const { data, error }=await db.functions.invoke("knowledge-ingest-website",{ body:{ url } });
-    if(error || !data || !data.ok){ msg.style.color="var(--danger)"; msg.textContent=(data&&(data.message||data.error))||"We couldn't read that site automatically. You can upload pages or type the details instead."; btn.disabled=false; btn.textContent=o; return; }
+    if(error || !data || !data.ok){ msg.style.color="var(--danger)"; msg.textContent=(data&&(data.message||data.error))||(error&&error.message)||"Couldn't read that site."; btn.disabled=false; btn.textContent=o; return; }
     msg.style.color="var(--ok)"; msg.textContent="Read "+data.pages+" page"+(data.pages===1?"":"s")+" → "+data.chunks+" passage"+(data.chunks===1?"":"s")+" to review below.";
     inp.value="";
     await loadDocuments(); paintDocs();
-  }catch(e){ msg.style.color="var(--danger)"; msg.textContent="We couldn't read that site automatically. You can upload pages or type the details instead."; }
+  }catch(e){ msg.style.color="var(--danger)"; msg.textContent="Couldn't read that site."; }
   btn.disabled=false; btn.textContent=o;
 }
 /* ---- voice interview ---- */
@@ -1767,8 +1559,8 @@ async function ivFinish(cancel){
   try{
     const { data, error }=await db.functions.invoke("interview-extract",{ body:{ languageName:(state.iv&&state.iv.langName)||"English", transcript:tr }});
     if(error || !data || !data.ok){ ivSetStatus((data&&(data.message||data.error))||(error&&error.message)||"Couldn't save the interview."); ivFinishing=false; return; }
-    ivSetStatus("Saved "+data.count+" item"+(data.count===1?"":"s")+". "+aName()+" won't use these on calls until you review and approve them in the Set up by voice card above.");
-    await loadDocuments(); refreshDocViews();
+    ivSetStatus("Saved "+data.count+" item"+(data.count===1?"":"s")+". "+aName()+" won't use these on calls until you review and approve them in the Documents section below.");
+    await loadDocuments(); paintDocs();
     setTimeout(ivReset, 7000);
   }catch(e){ ivSetStatus("Couldn't save the interview."); }
   ivFinishing=false;
@@ -1780,19 +1572,19 @@ async function deleteDocument(id){
   const d=(state.documents||[]).find(x=>x.id===id);
   if(!confirm("Delete "+(d?d.filename:"this document")+"? "+aName()+" will forget everything from it.")) return;
   const { error }=await db.from('documents').delete().eq('id',id);
-  if(!error){ state.documents=(state.documents||[]).filter(x=>x.id!==id); refreshDocViews(); }
+  if(!error){ state.documents=(state.documents||[]).filter(x=>x.id!==id); paintDocs(); }
 }
 
 /* ===================== CALENDAR CONNECT ===================== */
 const CAL_PROVIDERS = {
   google: { label:"Google Calendar",
     authUrl:"https://accounts.google.com/o/oauth2/v2/auth",
-    scope:"https://www.googleapis.com/auth/calendar.events https://www.googleapis.com/auth/calendar.freebusy https://www.googleapis.com/auth/calendar.calendarlist.readonly",
+    scope:"https://www.googleapis.com/auth/calendar.events https://www.googleapis.com/auth/calendar.freebusy",
     callback: SUPABASE_URL + "/functions/v1/google-oauth-callback",
     extra:{ access_type:"offline", prompt:"consent" } },
   microsoft: { label:"Microsoft Outlook",
     authUrl:"https://login.microsoftonline.com/common/oauth2/v2.0/authorize",
-    scope:"offline_access https://graph.microsoft.com/Calendars.ReadWrite https://graph.microsoft.com/User.Read https://graph.microsoft.com/OnlineMeetings.ReadWrite",
+    scope:"offline_access https://graph.microsoft.com/Calendars.ReadWrite",
     callback: SUPABASE_URL + "/functions/v1/microsoft-oauth-callback",
     extra:{ response_mode:"query", prompt:"consent" } }
 };
@@ -1822,94 +1614,26 @@ function calToast(){
   if(c==="error") return `<div style="margin-bottom:12px;font-size:13px;color:var(--danger)">Could not connect that calendar. Please try again.</div>`;
   return "";
 }
-async function loadCalendarOptions(st){
-  const sel=$("#cal-select"); const msg=$("#cal-select-msg"); if(!sel) return;
-  try{
-    const { data, error } = await db.functions.invoke("donna-calendars", { body:{ action:"list" } });
-    if(error || !data || !data.ok || !Array.isArray(data.calendars) || !data.calendars.length){
-      sel.innerHTML=`<option value="${esc(st.calendar_id||"")}">${esc(st.calendar_id||"primary")}</option>`;
-      sel.disabled=true;
-      if(msg) msg.textContent="Could not load your calendar list right now. "+aName()+" is using your current calendar.";
-      return;
-    }
-    const acct=(data.account_email||"").toLowerCase();
-    const cur = data.current || "";
-    const hasCur = data.calendars.some(c=>c.id===cur);
-    const optLabel=(c)=>{ let l=c.name||"Calendar"; if(c.primary) l+=" (default)"; if(c.owner && c.owner.toLowerCase()!==acct) l+=" — "+c.owner; return l; };
-    sel.innerHTML = data.calendars.map(c=>`<option value="${esc(c.id)}" ${((cur&&c.id===cur)||(!cur&&c.primary))?"selected":""}>${esc(optLabel(c))}</option>`).join("");
-    if(cur && !hasCur){ const o=document.createElement("option"); o.value=cur; o.textContent="Current selection"; o.selected=true; sel.insertBefore(o, sel.firstChild); }
-    sel.disabled=false;
-    if(msg){ msg.style.color="var(--muted)"; msg.textContent = data.account_email ? ((data.provider==="microsoft"?"Outlook":"Google")+" account: "+data.account_email) : ("Choose which calendar "+aName()+" reads and books on."); }
-    sel.onchange=async()=>{
-      const id=sel.value; if(!id) return;
-      sel.disabled=true; if(msg){ msg.style.color="var(--muted)"; msg.textContent="Saving…"; }
-      const { data:r, error:e2 } = await db.functions.invoke("donna-calendars", { body:{ action:"select", calendar_id:id } });
-      sel.disabled=false;
-      if(e2 || !r || !r.ok){ if(msg){ msg.style.color="var(--danger)"; msg.textContent="Could not save that calendar. Try again."; } return; }
-      const name=(sel.options[sel.selectedIndex]||{}).textContent||"that calendar";
-      if(msg){ msg.style.color="var(--ok)"; msg.textContent=aName()+" now reads and books on "+name+"."; }
-    };
-  }catch(_e){ if(msg) msg.textContent="Could not load your calendar list right now."; }
-}
-async function doSwitch(connectionId, calendar_id, ctl){
-  const msg=$("#cal-move-msg");
-  if(ctl) ctl.disabled=true;
-  if(msg){ msg.style.color="var(--muted)"; msg.textContent="Switching and moving upcoming appointments…"; }
-  const body={action:"switch", connection_id:connectionId}; if(calendar_id) body.calendar_id=calendar_id;
-  const { data, error } = await db.functions.invoke("donna-calendars", { body });
-  if(error || !data || !data.ok){ if(msg){ msg.style.color="var(--danger)"; msg.textContent="Could not switch. Please try again."; } if(ctl) ctl.disabled=false; return; }
-  const s=data.summary||{moved:0,conflicts:[],failures:[],stranded:[]};
-  let txt=`Switched. Moved ${s.moved||0} upcoming appointment${s.moved===1?"":"s"}.`;
-  const conf=s.conflicts||[];
-  if(conf.length){ txt+=` ${conf.length} overlap${conf.length===1?"s":""} something already on the new calendar and ${conf.length===1?"was":"were"} still moved for you to review: `+conf.map(c=>c.title+" ("+c.when+")").join("; ")+"."; }
-  const fail=s.failures||[];
-  if(fail.length){ txt+=` ${fail.length} could not be moved and stayed on the old calendar.`; }
-  const strand=s.stranded||[];
-  if(strand.length){ txt+=` ${strand.length} old cop${strand.length===1?"y":"ies"} could not be removed from the previous calendar, please delete ${strand.length===1?"it":"them"} there manually.`; }
-  if(msg){ msg.style.color=(conf.length||strand.length||fail.length)?"var(--danger)":"var(--ok)"; msg.textContent=txt; }
-  setTimeout(()=>paintCalendarCard(), 1600);
-}
-async function doRemove(connectionId, isActive, lbl){
-  if(!confirm("Remove "+lbl+" from "+aName()+"?"+(isActive?" It is the active calendar, so Donna will have no calendar until you make another one active.":"")+" The login is deleted here; events already on that calendar stay where they are.")) return;
-  const { data, error } = await db.functions.invoke("donna-calendars", { body:{ action:"remove", connection_id:connectionId } });
-  if(error || !data || !data.ok){ alert("Could not remove that account. Please try again."); return; }
-  paintCalendarCard();
-}
 async function paintCalendarCard(){
   const el=$("#cal-card-body"); if(!el) return;
   const toast=calToast();
   el.innerHTML=toast+`<p style="font-size:13px;color:var(--muted)">Checking connection…</p>`;
-  const cfg=await calConfig();
-  let data=null;
-  try{ const r=await db.functions.invoke("donna-calendars",{body:{action:"accounts"}}); data=r.data; }catch(_e){}
-  const accounts=(data&&data.ok&&Array.isArray(data.accounts))?data.accounts:[];
-  if(accounts.length){
-    const provLabel=p=>p==="microsoft"?"Microsoft Outlook":"Google Calendar";
-    const activeId=data.active_id;
-    const calendars=Array.isArray(data.calendars)?data.calendars:[];
-    const current=data.current||"";
-    const rows=accounts.map(a=>{
-      const email=a.email?`<div style="font-size:11.5px;color:var(--muted)">${esc(a.email)}</div>`:"";
-      const btn=a.active
-        ? `<span style="font-size:11px;font-weight:600;color:var(--ok);border:1px solid var(--ok);border-radius:999px;padding:2px 10px">Active</span>`
-        : `<button class="btn sm cal-switch" data-id="${esc(a.id)}">Make active</button>`;
-      const rm=`<button class="cal-remove" data-id="${esc(a.id)}" data-active="${a.active?1:0}" data-lbl="${esc(provLabel(a.provider))}" title="Remove this account" style="border:none;background:none;color:var(--muted);cursor:pointer;font-size:18px;line-height:1;padding:4px">×</button>`;
-      return `<div style="display:flex;justify-content:space-between;align-items:center;gap:10px;padding:10px 0;border-bottom:1px solid var(--line,#eee)"><div><div style="font-weight:600">${esc(provLabel(a.provider))}</div>${email}</div><div style="display:flex;align-items:center;gap:8px">${btn}${rm}</div></div>`;
-    }).join("");
-    const calPicker=calendars.length>1?`<div style="margin-top:12px"><div style="font-size:12px;color:var(--muted);margin-bottom:4px">Calendar on the active account</div><select id="cal-within" style="font:inherit;color:inherit;background:transparent;border:1px solid var(--line,#d8dee9);border-radius:8px;padding:6px 10px;max-width:260px">${calendars.map(c=>`<option value="${esc(c.id)}" ${c.id===current?"selected":""}>${esc(c.name)}${c.primary?" (default)":""}</option>`).join("")}</select></div>`:"";
-    const connectBtns=["google","microsoft"].map(pv=>{ const c=cfg[pv]||{}; return c.configured?`<button class="btn sm cal-connect" data-pv="${pv}">Connect a ${pv==="microsoft"?"Microsoft":"Google"} account</button>`:""; }).filter(Boolean).join(" ");
+  const [st,cfg]=await Promise.all([calStatus(), calConfig()]);
+  if(st&&st.connected){
+    const label=st.provider==="microsoft"?"Microsoft Outlook":"Google Calendar";
+    const other=st.provider==="microsoft"?"google":"microsoft";
+    const otherCfg=cfg[other]||{};
+    const switchBtn=otherCfg.configured?`<button class="btn sm cal-connect" data-pv="${other}">Switch to ${esc(CAL_PROVIDERS[other].label)}</button>`:"";
     el.innerHTML=toast+`
-      <div>${rows}</div>
-      ${calPicker}
-      <div id="cal-move-msg" style="font-size:12.5px;color:var(--muted);margin-top:12px"></div>
-      <p style="font-size:12.5px;color:var(--muted);margin-top:12px">${esc(aName())} reads busy times from and books onto the active calendar only. Switching moves your upcoming appointments to it and flags anything that overlaps.</p>
-      <div style="display:flex;gap:10px;flex-wrap:wrap;margin-top:8px">${connectBtns}<button class="btn sm" id="cal-off">Turn off calendar sync</button></div>
-      <p style="font-size:11.5px;color:var(--muted-2);margin-top:8px">Turning off sync stops reading and writing your outside calendar. ${esc(aName())} still books and saves every appointment here in the dashboard.</p>`;
-    el.querySelectorAll(".cal-switch").forEach(b=>b.onclick=()=>doSwitch(b.dataset.id, null, b));
-    el.querySelectorAll(".cal-remove").forEach(b=>b.onclick=()=>doRemove(b.dataset.id, b.dataset.active==="1", b.dataset.lbl));
-    const within=$("#cal-within"); if(within) within.onchange=()=>doSwitch(activeId, within.value, within);
+      <div class="set-rows" style="margin-bottom:14px">
+        <div class="set-row"><span class="k">Connected to</span><span class="v">${esc(label)}</span></div>
+        <div class="set-row"><span class="k">Calendar</span><span class="v">${esc(st.calendar_id||"primary")}</span></div>
+      </div>
+      <p style="font-size:12.5px;color:var(--muted);margin-bottom:12px">${esc(aName())} checks this calendar before offering times, so she never books over something already on it, and adds new bookings here automatically.</p>
+      <div style="display:flex;gap:10px;flex-wrap:wrap"><button class="btn sm" id="cal-disconnect">Disconnect</button>${switchBtn}</div>
+      ${switchBtn?`<p style="font-size:11.5px;color:var(--muted-2);margin-top:10px">Switching replaces your current calendar — ${esc(label)} will be disconnected automatically.</p>`:""}`;
+    $("#cal-disconnect").onclick=(e)=>disconnectCalendar(e.currentTarget);
     el.querySelectorAll(".cal-connect").forEach(b=>b.onclick=()=>connectCalendar(b.dataset.pv));
-    const off=$("#cal-off"); if(off) off.onclick=(e)=>disconnectCalendar(e.currentTarget);
   } else {
     const opts=["google","microsoft"].map(pv=>{
       const c=cfg[pv]||{}; const lab=CAL_PROVIDERS[pv].label;
