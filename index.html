@@ -929,7 +929,8 @@ async function loadContacts(){
   state.contacts = (data||[]).map(c=>({
     id:c.id, phone:c.phone||"", name:c.name||"", company:c.company||"", interest:c.interest||"",
     language:c.language||"", listType:c.list_type||"normal", callCount:c.call_count||0,
-    lastCallAt:c.last_call_at||null, lastSummary:c.last_call_summary||"", notes:c.notes||"", memory:c.memory||""
+    lastCallAt:c.last_call_at||null, lastSummary:c.last_call_summary||"", notes:c.notes||"", memory:c.memory||"",
+    preferredName:c.preferred_name||"", pronunciation:c.pronunciation||""
   }));
 }
 function contactMatch(c,q){
@@ -941,6 +942,7 @@ function contactsListHTML(list){
   return list.length ? list.map(contactHTML).join("")
     : `<div class="empty">${I.users}<div>${state.contacts.length?"No matches.":"No contacts yet. When "+esc(aName())+" saves a caller, they'll appear here."}</div></div>`;
 }
+function ctSpeak(text){ if(!('speechSynthesis' in window)||!text) return; try{ window.speechSynthesis.cancel(); const u=new SpeechSynthesisUtterance(String(text)); u.rate=.95; window.speechSynthesis.speak(u); }catch(e){} }
 function pageContacts(){
   const q = state._cq||"";
   const list = state.contacts.filter(c=>contactMatch(c,q));
@@ -1008,6 +1010,8 @@ function contactHTML(c){
     </div>
     <div class="c-edit" id="c-edit-${c.id}">
       <div><label>Name</label><input data-f="name" value="${esc(c.name)}"></div>
+      <div><label>Name ${esc(aName())} says</label><input data-f="preferred_name" value="${esc(c.preferredName)}" placeholder="first name she says"></div>
+      <div class="full"><label>How ${esc(aName())} says it (spell it how it sounds)</label><div style="display:flex;gap:8px"><input data-f="pronunciation" value="${esc(c.pronunciation)}" placeholder="e.g., twong-ahn" style="flex:1"><button type="button" class="btn sm" data-act="say" data-id="${c.id}">Preview</button></div></div>
       <div><label>Company</label><input data-f="company" value="${esc(c.company)}"></div>
       <div class="full"><label>Interest</label><input data-f="interest" value="${esc(c.interest)}"></div>
       <div><label>Language</label><input data-f="language" value="${esc(c.language)}"></div>
@@ -1024,12 +1028,13 @@ function bindContactActions(){
     const c=state.contacts.find(x=>x.id===id); if(!c && act!=='del') return;
     if(act==='edit'){ const p=$("#c-edit-"+id); if(p) p.classList.toggle('open'); return; }
     if(act==='canceledit'){ const p=$("#c-edit-"+id); if(p) p.classList.remove('open'); return; }
+    if(act==='say'){ const w=$("#c-edit-"+id); if(!w) return; const gv=f=>{const el=w.querySelector('[data-f="'+f+'"]');return el?el.value.trim():"";}; ctSpeak(gv('pronunciation')||gv('preferred_name')||(gv('name').split(/\s+/)[0]||'')); return; }
     if(act==='saveedit'){
       const wrap=$("#c-edit-"+id); const g=f=>{ const el=wrap.querySelector('[data-f="'+f+'"]'); return el?el.value.trim():""; };
-      const patch={ name:g('name')||null, company:g('company')||null, interest:g('interest')||null, language:g('language')||null, phone:g('phone')||c.phone, notes:g('notes')||null, memory:g('memory')||null, updated_at:new Date().toISOString() };
+      const patch={ name:g('name')||null, preferred_name:g('preferred_name')||null, pronunciation:g('pronunciation')||null, company:g('company')||null, interest:g('interest')||null, language:g('language')||null, phone:g('phone')||c.phone, notes:g('notes')||null, memory:g('memory')||null, updated_at:new Date().toISOString() };
       b.disabled=true; b.textContent="\u2026";
       const { error } = await db.from('contacts').update(patch).eq('id', id);
-      if(!error){ Object.assign(c,{name:patch.name||"",company:patch.company||"",interest:patch.interest||"",language:patch.language||"",phone:patch.phone||"",notes:patch.notes||""}); pageContacts(); }
+      if(!error){ Object.assign(c,{name:patch.name||"",preferredName:patch.preferred_name||"",pronunciation:patch.pronunciation||"",company:patch.company||"",interest:patch.interest||"",language:patch.language||"",phone:patch.phone||"",notes:patch.notes||""}); pageContacts(); }
       else { b.disabled=false; b.textContent="Save"; alert("Could not save: "+error.message); }
       return;
     }
