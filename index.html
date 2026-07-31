@@ -1162,6 +1162,20 @@ async function saveTimezone(){
   if(!error){ state.account.settings=settings; state.account.timezone=tz; }
   btn.disabled=false; btn.textContent=error?"Error — retry":"Saved ✓"; setTimeout(()=>btn.textContent=o,1300);
 }
+async function saveInbound(){
+  const inp=$("#inbound-addr"); if(!inp) return;
+  const msg=$("#inbound-msg"), btn=$("#inbound-save");
+  const addr=inp.value.trim();
+  const emailRe=/^[^@\s]+@[^@\s]+\.[^@\s]+$/;
+  if(addr && !emailRe.test(addr)){ if(msg){msg.style.color='var(--danger)';msg.textContent='That does not look like a valid email address.';} return; }
+  if(msg){ msg.style.color='var(--muted)'; msg.textContent=''; }
+  btn.disabled=true; const o=btn.textContent; btn.textContent="Saving\u2026";
+  const settings = Object.assign({}, state.account.settings||{}, { inbound_address:addr });
+  const { error } = await db.from('accounts').update({settings}).eq('id',state.account.id);
+  if(!error){ state.account.settings=settings; if(msg){ msg.style.color='var(--muted)'; msg.textContent=addr?('Forward your business email to '+addr+'.'):'Forwarding address cleared.'; } }
+  else if(msg){ msg.style.color='var(--danger)'; msg.textContent='Could not save. Try again.'; }
+  btn.disabled=false; btn.textContent=error?"Error \u2014 retry":"Saved \u2713"; setTimeout(()=>btn.textContent=o,1300);
+}
 async function saveAlertEmail(){
   const inp=$("#alert-email"); if(!inp) return;
   const msg=$("#alert-msg"), btn=$("#alert-save");
@@ -1319,6 +1333,22 @@ function pageSettings(){
     </div>
 
     ${(ac.settings&&ac.settings.messaging_enabled)?`
+    <div class="card"><div class="card-h"><h2>Email forwarding</h2><button class="btn sm" id="inbound-save">Save</button></div>
+      <p style="font-size:13px;color:var(--muted);margin-bottom:12px">For ${esc(aName())} to answer your email, forward your business inbox to your ${esc(aName())} address below. Customers keep emailing your normal address, and ${esc(aName())} replies from it. Your other addresses stay where they are, only what you forward reaches ${esc(aName())}.</p>
+      <div class="field" style="max-width:440px;margin:0"><label class="lab">Your ${esc(aName())} forwarding address <span style="display:block;font-weight:400;color:var(--muted);font-size:11.5px;margin-top:2px">Forward your business email to this address. It is unique to your account.</span></label>
+        <div style="display:flex;gap:8px;align-items:center"><input class="inp" id="inbound-addr" type="email" placeholder="yourname@inbound.resend.app" value="${esc((ac.settings&&ac.settings.inbound_address)||'')}" style="flex:1"><button type="button" class="btn sm" id="inbound-copy">Copy</button></div>
+      </div>
+      <div style="margin-top:14px;font-size:12.5px;color:var(--muted);line-height:1.75">
+        <div style="font-weight:600;color:var(--ink);margin-bottom:4px">How to turn on forwarding</div>
+        1. Sign in to the email account you want ${esc(aName())} to answer, for example info@yourcompany.com.<br>
+        2. Open its forwarding settings. In Outlook: Settings, then Mail, then Forwarding. In Gmail: Settings, then Forwarding and POP/IMAP.<br>
+        3. Add the forwarding address above and turn forwarding on. You can keep a copy in your own inbox if you want a record.<br>
+        4. Save, then send a test email to your business address and check the Conversations page to confirm ${esc(aName())} received it.
+      </div>
+      <div id="inbound-msg" style="font-size:12.5px;color:var(--muted);margin-top:8px"></div>
+    </div>`:''}
+
+    ${(ac.settings&&ac.settings.messaging_enabled)?`
     <div class="card"><div class="card-h"><h2>Email scheduling</h2><button class="btn sm" id="sched-save">Save</button></div>
       <p style="font-size:13px;color:var(--muted);margin-bottom:12px">Controls how ${esc(aName())} handles booking requests that arrive by email. She only offers real open times from your booking hours and appointment types, re-checks the slot when the customer replies, and never double books.</p>
       <label style="display:flex;align-items:flex-start;gap:10px;margin:0 0 14px;cursor:pointer;font-size:13.5px;color:var(--ink)"><input type="checkbox" id="sched-enabled" style="margin-top:3px" ${(!ac.settings||ac.settings.scheduling_enabled!==false)?'checked':''}><span>Let ${esc(aName())} handle scheduling over email<span style="display:block;font-weight:400;color:var(--muted);font-size:11.5px;margin-top:2px">When on, she proposes open times and books appointments by email. When off, she passes booking requests to you instead.</span></span></label>
@@ -1386,6 +1416,7 @@ function pageSettings(){
   $("#set-biz-save").onclick=saveBusiness;
   $("#tz-save").onclick=saveTimezone;
   { const ae=$("#alert-save"); if(ae) ae.onclick=saveAlertEmail; }
+  { const is=$("#inbound-save"); if(is) is.onclick=saveInbound; const ic=$("#inbound-copy"); if(ic) ic.onclick=()=>{ const a=$("#inbound-addr"); if(a&&a.value){ try{ navigator.clipboard&&navigator.clipboard.writeText(a.value.trim()); }catch(e){} const m=$("#inbound-msg"); if(m){ m.style.color='var(--muted)'; m.textContent='Copied.'; } } }; }
   { const ss=$("#sched-save"); if(ss) ss.onclick=saveScheduling; }
   { const rs=$("#rem-save"); if(rs) rs.onclick=saveReminders; const rm=$("#rem-mode"); if(rm){ const upd=()=>{ const f=$("#rem-time-field"); if(f) f.style.opacity=rm.value==="off"?".45":"1"; const ri=$("#rem-time"); if(ri) ri.disabled=rm.value==="off"; }; rm.addEventListener("change",upd); upd(); } }
   { const se=$("#sched-enabled"), sr=$("#sched-auto-row"); if(se&&sr){ const upd=()=>{ sr.style.opacity=se.checked?'1':'.45'; const a=$("#sched-auto"); if(a) a.disabled=!se.checked; }; se.addEventListener('change',upd); upd(); } }
