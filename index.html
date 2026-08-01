@@ -796,7 +796,7 @@ async function renderThread(){
   state.threadMsgs = msgs||[];
   const draft = [...state.threadMsgs].reverse().find(m=>m.direction==='outbound' && m.status==='queued');
   const rowsHtml = state.threadMsgs.map(m=>{
-    if(m.direction==='outbound' && m.status==='queued') return '';
+    if(m.direction==='outbound' && m.status!=='sent') return '';
     const role = m.direction==='inbound'?'Customer':(m.actor==='staff'?'You':aName());
     const cls = m.direction==='inbound'?'th-in':'th-out';
     return `<div class="th-msg ${cls}"><div class="th-role">${esc(role)}${m.subject?' \u00b7 '+esc(m.subject):''}</div><div class="th-body">${esc(m.body||'')}</div></div>`;
