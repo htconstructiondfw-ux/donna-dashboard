@@ -948,7 +948,7 @@ function ctSpeak(text){ if(!('speechSynthesis' in window)||!text) return; try{ w
 /* ===== Contacts: source labels, add, import, export ===== */
 const CI="width:100%;padding:8px 10px;border:1px solid var(--line);border-radius:7px;font:inherit;font-size:13.5px;background:var(--surface);color:var(--ink)";
 const CL="font-size:11px;color:var(--muted);font-weight:600;text-transform:uppercase;letter-spacing:.05em;display:block;margin-bottom:3px";
-function sourceLabel(sv){ const m={manual:"Added by hand", import:"Imported (CSV)", phone:"Imported (phone)", donna:"Saved by "+aName(), "called-in":"Saved by "+aName(), call:"Saved by "+aName()}; return m[String(sv||"").toLowerCase()]||""; }
+function sourceLabel(sv){ const m={manual:"Added by hand", import:"Imported (CSV)", phone:"Imported (phone)", email:"Emailed in", donna:"Saved by "+aName(), "called-in":"Saved by "+aName(), call:"Saved by "+aName()}; return m[String(sv||"").toLowerCase()]||""; }
 function normPhone(raw){ let d=String(raw||"").trim(); const plus=d[0]==='+'; d=d.replace(/\D/g,""); if(!d) return ""; if(plus) return "+"+d; if(d.length===10) return "+1"+d; if(d.length===11 && d[0]==='1') return "+"+d; return "+"+d; }
 function cleanSpoken(name){ const w=String(name||"").trim().split(/\s+/)[0]||""; return /^[\p{L}][\p{L}'\u2019-]{1,19}$/u.test(w)?w:""; }
 function ctField(lab,id,ph,full){ return '<div'+(full?' style="grid-column:1/-1"':'')+'><label style="'+CL+'">'+lab+'</label><input id="'+id+'" placeholder="'+(ph||'')+'" style="'+CI+'"></div>'; }
@@ -1000,6 +1000,15 @@ function pageContacts(){
     <div class="card">
       <div class="card-h"><h2>People${total?` <span class="hint">${total}</span>`:''}</h2><button class="btn sm" id="c-refresh">Refresh</button></div>
       <div class="c-tools"><input class="c-search" id="c-search" type="search" placeholder="Search name, number, company\u2026" value="${esc(q)}"><button class="btn sm" id="c-add">Add contact</button><button class="btn sm" id="c-import">Import</button><button class="btn sm" id="c-export">Export</button><input type="file" id="c-file" accept=".csv,.vcf,text/csv,text/vcard" style="display:none"></div>
+      <details class="c-help" style="margin:-4px 0 14px">
+        <summary style="cursor:pointer;font-size:12.5px;color:var(--muted);user-select:none">How import and export work</summary>
+        <div style="font-size:12.5px;color:var(--muted);line-height:1.7;margin-top:8px;padding:10px 12px;border:1px solid var(--line);border-radius:8px;background:var(--surface)">
+          <div style="font-weight:600;color:var(--ink);margin-bottom:2px">Import</div>
+          Tap <b>Import</b> and choose a file to bring people into your list. Two file types work: a spreadsheet saved as <b>CSV</b> (with a header row that includes columns like name, phone, email, or company), or a phone contact export as a <b>vCard</b> (a .vcf file). You'll see a checklist of everyone found, all checked; uncheck anyone you don't want, then add. ${esc(aName())} proposes a clean spoken first name for each, which you can fix later on the contact. Importing only adds people to your list here. It never emails or calls anyone, and numbers you already have are skipped so nothing gets overwritten.
+          <div style="font-weight:600;color:var(--ink);margin:10px 0 2px">Export</div>
+          Tap <b>Export</b> to save your contacts as a <b>vCard</b> (.vcf) file on your computer. You'll get a checklist, all selected; uncheck anyone to leave out, then download. It is just a file you keep. Nothing is sent anywhere and nothing syncs to Google or Microsoft.
+        </div>
+      </details>
       <div id="c-list">${contactsListHTML(list)}</div>
     </div>
   </div>`;
