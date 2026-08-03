@@ -1855,12 +1855,12 @@ const CAL_PROVIDERS = {
     authUrl:"https://accounts.google.com/o/oauth2/v2/auth",
     scope:"https://www.googleapis.com/auth/calendar.events https://www.googleapis.com/auth/calendar.freebusy https://www.googleapis.com/auth/calendar.calendarlist.readonly",
     callback: SUPABASE_URL + "/functions/v1/google-oauth-callback",
-    extra:{ access_type:"offline", prompt:"consent" } },
+    extra:{ access_type:"offline", prompt:"select_account consent" } },
   microsoft: { label:"Microsoft Outlook",
     authUrl:"https://login.microsoftonline.com/common/oauth2/v2.0/authorize",
     scope:"offline_access https://graph.microsoft.com/Calendars.ReadWrite https://graph.microsoft.com/User.Read https://graph.microsoft.com/OnlineMeetings.ReadWrite",
     callback: SUPABASE_URL + "/functions/v1/microsoft-oauth-callback",
-    extra:{ response_mode:"query", prompt:"consent" } }
+    extra:{ response_mode:"query", prompt:"select_account" } }
 };
 async function calStatus(){ try{ const {data}=await db.rpc("donna_calendar_status"); return (data&&data[0])||null; }catch(e){ return null; } }
 async function calConfig(){ try{ const {data}=await db.rpc("donna_calendar_oauth_config"); return data||{}; }catch(e){ return {}; } }
