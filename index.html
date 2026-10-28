@@ -2015,10 +2015,8 @@ function pageCalls(){
       <div class="card-h"><h2>Recent calls</h2><span class="calls-live"><span class="d"></span>Live</span></div>
       <div id="calls-list"></div>
     </div>
-    <div id="call-detail"></div>
   </div>`;
   paintCallsList();
-  paintCallDetail();
   subscribeCalls();
 }
 function paintCallsList(){
@@ -2037,19 +2035,29 @@ function callRowHTML(c){
   const body = c.summary ? esc(c.summary)
     : (live ? `<span style="color:var(--signal)">On the line now…</span>`
             : `<span style="color:var(--muted-2)">No summary</span>`);
-  return `<div class="call-item ${live?'live':''} ${open?'open':''}" data-call="${c.id}">
-    <div class="m-top"><span class="m-who">${live?'<span class="livedot"></span>':''}${esc(who)}${out}${langBadge(c.language)}</span>
-      <span class="m-when">${esc(fmtDateTime(c.started_at))}${dur?` · ${dur}`:''}</span></div>
-    <div class="m-text">${body}</div>
+  return `<div class="call-item ${live?'live':''} ${open?'open':''}">
+    <div class="call-head" data-call="${c.id}" style="cursor:pointer">
+      <div class="m-top"><span class="m-who">${live?'<span class="livedot"></span>':''}${esc(who)}${out}${langBadge(c.language)}</span>
+        <span class="m-when">${esc(fmtDateTime(c.started_at))}${dur?` · ${dur}`:''}</span></div>
+      <div class="m-text">${body}</div>
+    </div>
+    ${open?callTxHTML(c,live):''}
+  </div>`;
+}
+function callTxHTML(c,live){
+  const lines = (state.callTranscript||[]).map(t=>`<div class="tline ${esc(t.speaker)}"><span class="who">${t.speaker==='donna'?esc(aName()):(t.speaker==='caller'?'Caller':esc(t.speaker))}</span><span class="bub">${esc(t.text)}</span></div>`).join("");
+  return `<div class="call-tx" style="margin-top:12px;padding-top:12px;border-top:1px solid var(--line)">
+    ${live?`<p style="font-size:12.5px;margin-bottom:12px"><span class="livedot"></span><span style="color:var(--signal)">Call in progress — the transcript appears once it ends.</span></p>`:''}
+    <div class="transcript">${lines || `<div class="empty" style="padding:22px">${live?'Listening…':'No transcript was captured for this call.'}</div>`}</div>
+    ${c&&c.recording_url?`<div style="margin-top:14px"><a class="btn sm" href="${esc(c.recording_url)}" target="_blank" rel="noopener">▶ Play recording</a></div>`:''}
   </div>`;
 }
 async function openCall(id){
-  if(state.openCallId===id){ state.openCallId=null; if(state.txChannel){db.removeChannel(state.txChannel);state.txChannel=null;} paintCallsList(); paintCallDetail(); return; }
+  if(state.openCallId===id){ state.openCallId=null; if(state.txChannel){db.removeChannel(state.txChannel);state.txChannel=null;} paintCallsList(); return; }
   state.openCallId=id;
   const { data } = await db.from('transcript_messages').select('*').eq('call_id',id).order('said_at',{ascending:true});
   state.callTranscript = data || [];
   paintCallsList();
-  paintCallDetail();
   subscribeTranscript(id);
 }
 function paintCallDetail(){
@@ -2074,7 +2082,7 @@ async function subscribeCalls(){
   await ensureRealtimeAuth();
   state.callsChannel = db.channel('rt-calls')
     .on('postgres_changes', { event:'*', schema:'public', table:'calls', filter:`account_id=eq.${state.account.id}` },
-      async ()=>{ await loadCalls(); paintCallsList(); if(state.openCallId) paintCallDetail(); })
+      async ()=>{ await loadCalls(); paintCallsList(); })
     .subscribe();
 }
 async function subscribeTranscript(callId){
@@ -2082,7 +2090,7 @@ async function subscribeTranscript(callId){
   await ensureRealtimeAuth();
   state.txChannel = db.channel('rt-tx-'+callId)
     .on('postgres_changes', { event:'INSERT', schema:'public', table:'transcript_messages', filter:`call_id=eq.${callId}` },
-      payload=>{ state.callTranscript.push(payload.new); paintCallDetail(); })
+      payload=>{ state.callTranscript.push(payload.new); paintCallsList(); })
     .subscribe();
 }
 function teardownRealtime(){
