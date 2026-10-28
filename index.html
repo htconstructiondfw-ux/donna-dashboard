@@ -341,7 +341,7 @@ async function loadData(){
     state.assistant = {
       name:asst.assistant_name||DEFAULT_NAME, greetingLabel:asst.greeting_label||"the office",
       voice:asst.voice_id||"warm-female", languages:(asst.languages&&asst.languages.length)?asst.languages:["en"],
-      number:asst.twilio_number||"", recordingNotice:!(asst.routing&&asst.routing.recording_notice===false), active:asst.is_active,
+      number:asst.twilio_number||"", recordingNotice:!(asst.routing&&asst.routing.recording_notice===false), active:true,
       routing:(asst.routing&&typeof asst.routing==='object')?asst.routing:{}
     };
   }
@@ -469,17 +469,6 @@ function pageAssistant(){
     <div class="card">
       <div class="card-h"><h2>Behavior</h2></div>
       <div class="field"><label class="switch"><input type="checkbox" id="a-rec" ${a.recordingNotice?'checked':''}><span class="track"></span><span class="txt">Recording notice<small>Says the call may be recorded. Leave on unless your lawyer clears otherwise.</small></span></label></div>
-      <div class="field"><label class="switch"><input type="checkbox" id="a-active" ${a.active?'checked':''}><span class="track"></span><span class="txt">Answering calls<small>Turn off to send callers to a backup number instead of ${esc(aName())}.</small></span></label></div>
-      <div class="field" id="a-fwd-wrap" style="${a.active?'display:none;':''}margin-top:-6px">
-        <div style="font-size:12px;color:var(--muted-2);line-height:1.65;margin-bottom:10px;padding:11px 13px;border:1px solid var(--line);border-radius:8px;background:var(--surface)">
-          <b style="color:var(--ink)">Before you turn this off, check your setup.</b><br>
-          If you <b>forward your office phone to ${esc(aName())}</b>, leave this on. To pause, turn forwarding off on your own phone instead. Forwarding a paused call back to that same office line would just bounce it back to ${esc(aName())} in a loop.<br>
-          If customers <b>call your ${esc(aName())} number directly</b>, you can turn this off and paused calls go to the backup number below. It must be a different phone than the one that reaches ${esc(aName())}.
-        </div>
-        <label class="lab">Forward paused calls to <span class="sub">Required while answering is off. Use full format, for example +18175551234.</span></label>
-        <input class="inp" id="a-fwd" type="tel" placeholder="+18175551234" value="${esc(((a.routing||{}).paused_forward_number)||"")}">
-        <div id="a-fwd-msg" style="font-size:12px;color:var(--muted);margin-top:6px"></div>
-      </div>
       <div class="field"><label class="lab">Special instructions <span class="sub">Extra rules for how ${esc(aName())} answers, one per line. She follows these on every call.</span></label><textarea class="inp" id="a-instr" rows="5" style="min-height:120px;resize:vertical;font-family:inherit;line-height:1.5;width:100%" placeholder="e.g. Always ask what city the caller is calling from.&#10;If they ask about pricing, tell them a specialist will follow up with a quote.">${esc(((a.routing||{}).custom_instructions)||"")}</textarea></div>
       <div class="field"><label class="lab">Opening question <span class="sub">Optional. Spoken word-for-word at the end of the greeting, replacing "How can I help you?" Works on every call, in the exact words you type.</span></label><input class="inp" id="a-openq" placeholder='e.g. Before we get started, may I ask what city you are calling from?' value="${esc(((a.routing||{}).opening_question)||"")}"></div>
       <div style="margin-top:18px"><button class="btn primary" id="a-save">Save assistant</button></div>
@@ -487,11 +476,10 @@ function pageAssistant(){
   </div>`;
   const sync=()=>{
     a.name=$("#a-name").value; a.greetingLabel=$("#a-label").value; a.voice=$("#a-voice").value; a.number=$("#a-num").value;
-    a.recordingNotice=$("#a-rec").checked; a.active=$("#a-active").checked;
+    a.recordingNotice=$("#a-rec").checked; a.active=true;
     $("#say").innerHTML=greetingText();
     const p=$("#prev"); p.classList.toggle("off",!a.active);
     p.querySelector(".live").innerHTML=`<span class="dot"></span>${a.active? esc(a.name||DEFAULT_NAME)+' is live':'Paused'}`;
-    { const fw=$("#a-fwd-wrap"); if(fw) fw.style.display=a.active?'none':''; }
     const nm=a.name||DEFAULT_NAME;
     const bn=$("#brand-name"); if(bn) bn.textContent=nm;
     const rl=$("#run-label"); if(rl) rl.textContent=`Running ${nm}`;
@@ -499,7 +487,7 @@ function pageAssistant(){
     const ld=$("#assist-lede"); if(ld) ld.textContent=`Configure how ${nm} introduces herself and answers. The name you set here flows across your whole dashboard and is what callers hear. On the Enterprise plan each person can have their own.`;
   };
   ["a-name","a-label","a-num"].forEach(id=>$("#"+id).oninput=sync);
-  ["a-voice","a-rec","a-active"].forEach(id=>$("#"+id).onchange=sync);
+  ["a-voice","a-rec"].forEach(id=>$("#"+id).onchange=sync);
   $("#a-langs").querySelectorAll(".chip").forEach(c=>c.onclick=()=>{ const l=c.dataset.l, on=c.getAttribute("aria-pressed")==="true"; if(on){a.languages=a.languages.filter(x=>x!==l);}else{a.languages.push(l);} c.setAttribute("aria-pressed",String(!on)); });
   $("#a-save").onclick=saveAssistant;
   { const ie=$("#a-instr"); if(ie) ie.oninput=()=>{ state.assistant.routing=state.assistant.routing||{}; state.assistant.routing.custom_instructions=ie.value; }; }
@@ -534,20 +522,9 @@ async function saveAssistant(){
   const a=state.assistant, btn=$("#a-save"); btn.disabled=true; const o=btn.textContent; btn.textContent="Saving…";
   const instrEl=$("#a-instr"); const custom_instructions=instrEl?instrEl.value.trim():(((a.routing||{}).custom_instructions)||"");
   const oqEl=$("#a-openq"); const opening_question=oqEl?oqEl.value.trim():(((a.routing||{}).opening_question)||"");
-  const fwdEl=$("#a-fwd");
-  const fwdVal=fwdEl?fwdEl.value.trim():(((a.routing||{}).paused_forward_number)||"");
-  const normP=v=>{ let d=String(v||'').trim(); const plus=d[0]==='+'; d=d.replace(/\D/g,''); if(!d) return ''; if(plus) return '+'+d; if(d.length===10) return '+1'+d; if(d.length===11&&d[0]==='1') return '+'+d; return '+'+d; };
-  let paused_forward_number=((a.routing||{}).paused_forward_number)||"";
-  if(!a.active){
-    const nf=normP(fwdVal), own=normP(a.number||"");
-    const m=$("#a-fwd-msg"); const fw=$("#a-fwd-wrap"); if(fw) fw.style.display='';
-    if(!nf || nf.replace(/\D/g,'').length<11){ if(m){m.style.color='var(--danger)';m.textContent='Enter the number to forward paused calls to. It is required while answering is off.';} if(fwdEl) fwdEl.focus(); btn.disabled=false; btn.textContent=o; return; }
-    if(own && nf===own){ if(m){m.style.color='var(--danger)';m.textContent='This cannot be the number that reaches '+(a.name||DEFAULT_NAME)+', it would loop. Use a different phone.';} btn.disabled=false; btn.textContent=o; return; }
-    if(m){ m.style.color='var(--muted)'; m.textContent=''; }
-    paused_forward_number=nf;
-  } else if(fwdVal){ paused_forward_number=normP(fwdVal); }
-  const routing=Object.assign({}, a.routing||{}, {recording_notice:a.recordingNotice, custom_instructions, opening_question, paused_forward_number});
-  const row={ assistant_name:a.name, greeting_label:a.greetingLabel, voice_id:a.voice, languages:a.languages, twilio_number:a.number||null, is_active:a.active, routing };
+  const routing=Object.assign({}, a.routing||{}, {recording_notice:a.recordingNotice, custom_instructions, opening_question});
+  delete routing.paused_forward_number;
+  const row={ assistant_name:a.name, greeting_label:a.greetingLabel, voice_id:a.voice, languages:a.languages, twilio_number:a.number||null, is_active:true, routing };
   let error;
   if(state.assistantId){ ({error}=await db.from('assistants').update(row).eq('id',state.assistantId)); }
   else { row.account_id=state.account.id; const r=await db.from('assistants').insert(row).select().single(); error=r.error; if(r.data) state.assistantId=r.data.id; }
