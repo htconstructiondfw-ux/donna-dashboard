@@ -294,6 +294,24 @@ function paintTenant(d){
     </div>
 
     <div class="sec">
+      <h3>Password &amp; access</h3>
+      <div class="fld" style="margin-bottom:10px"><label>Login</label>
+        <select class="in" id="d-pwuser">
+          ${(d.users||[]).map(u=>`<option value="${esc(u.id)}" data-email="${esc(u.email||"")}">${esc(u.full_name||u.email||"User")} · ${esc(u.role||"")}</option>`).join("")}
+        </select></div>
+      <div class="row">
+        <div class="fld"><label>Set a new password</label><input class="in" id="d-pw" type="text" placeholder="at least 8 characters" autocomplete="new-password"></div>
+        <button class="btn sm" id="d-pw-set">Set</button>
+      </div>
+      <div class="hint">Setting it here changes their password immediately. Share it with them securely, and they can change it later.</div>
+      <div class="row" style="margin-top:10px">
+        <button class="btn sm ghost" id="d-pw-reset">Email them a reset link</button>
+      </div>
+      <div class="hint">Sends a link to their email so they choose their own password.</div>
+      <div class="msg" id="d-pw-msg"></div>
+    </div>
+
+    <div class="sec">
       <h3>Donna number</h3>
       ${asst&&asst.twilio_number
         ? `<div class="kv"><span class="k">Current number</span><span class="v mono">${esc(prettyPhone(asst.twilio_number))}</span></div>
@@ -359,6 +377,27 @@ function paintTenant(d){
       if(r.data&&r.data.ok){ tokens={access_token:r.data.access_token, refresh_token:r.data.refresh_token}; trySend(); }
       else { try{w.close();}catch(e){} window.removeEventListener("message",onMsg); m.style.color="var(--danger)"; m.textContent=(r.data&&r.data.error)||(r.error&&r.error.message)||"Could not open tenant view."; }
     }).catch(()=>{ try{w.close();}catch(e){} window.removeEventListener("message",onMsg); m.style.color="var(--danger)"; m.textContent="Could not open tenant view."; });
+  };
+  // password: set directly
+  $("#d-pw-set").onclick=async(e)=>{
+    const btn=e.target, m=$("#d-pw-msg"); const pw=$("#d-pw").value;
+    if(pw.length<8){ m.style.color="var(--danger)"; m.textContent="Password must be at least 8 characters."; return; }
+    const uid=$("#d-pwuser").value;
+    btn.disabled=true; const o=btn.textContent; btn.textContent="Setting…"; m.textContent="";
+    const r=await api("set_password",{account_id:a.id, user_id:uid, password:pw});
+    btn.disabled=false; btn.textContent=o;
+    if(r.data&&r.data.ok){ m.style.color="var(--ok)"; m.textContent="Password set. Share it with them securely."; }
+    else { m.style.color="var(--danger)"; m.textContent=(r.data&&r.data.error)||"Could not set password."; }
+  };
+  // password: send reset email
+  $("#d-pw-reset").onclick=async(e)=>{
+    const btn=e.target, m=$("#d-pw-msg");
+    const sel=$("#d-pwuser"); const email=sel.options[sel.selectedIndex]?sel.options[sel.selectedIndex].getAttribute("data-email"):"";
+    btn.disabled=true; const o=btn.textContent; btn.textContent="Sending…"; m.textContent="";
+    const r=await api("send_reset",{account_id:a.id, email});
+    btn.disabled=false; btn.textContent=o;
+    if(r.data&&r.data.ok){ m.style.color="var(--ok)"; m.textContent="Reset link sent to "+esc(r.data.email||email)+"."; }
+    else { m.style.color="var(--danger)"; m.textContent=(r.data&&r.data.error)||"Could not send reset link."; }
   };
   // provision
   $("#d-prov").onclick=async(e)=>{
