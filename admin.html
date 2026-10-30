@@ -287,6 +287,13 @@ function paintTenant(d){
     </div>
 
     <div class="sec">
+      <h3>Open tenant dashboard</h3>
+      <div class="sub" style="margin-bottom:10px">Opens this tenant's dashboard in a sandbox window so you can set it up or troubleshoot as them. It's held in memory only, never saved on this device, and locks itself after 5 minutes of inactivity. You stay signed in as admin in this window.</div>
+      <button class="btn" id="d-imp">Open tenant view</button>
+      <div class="msg" id="d-imp-msg"></div>
+    </div>
+
+    <div class="sec">
       <h3>Donna number</h3>
       ${asst&&asst.twilio_number
         ? `<div class="kv"><span class="k">Current number</span><span class="v mono">${esc(prettyPhone(asst.twilio_number))}</span></div>
@@ -336,6 +343,22 @@ function paintTenant(d){
     btn.disabled=false; btn.textContent=o;
     if(r.data&&r.data.ok){ m.style.color="var(--ok)"; m.textContent="Saved."; await refreshRow(a.id); }
     else { m.style.color="var(--danger)"; m.textContent=(r.data&&r.data.error)||"Could not save."; }
+  };
+  // open tenant dashboard (sandbox impersonation)
+  $("#d-imp").onclick=()=>{
+    const m=$("#d-imp-msg");
+    // open the window synchronously so pop-up blockers don't stop it
+    const w=window.open(location.origin+"/?imp=1","_blank");
+    if(!w){ m.style.color="var(--danger)"; m.textContent="Allow pop-ups for this site, then try again."; return; }
+    m.style.color="var(--muted)"; m.textContent="Opening tenant view…";
+    let tokens=null, ready=false, done=false;
+    const trySend=()=>{ if(ready&&tokens&&!done){ done=true; w.postMessage(Object.assign({type:"donna-imp-session"},tokens), location.origin); window.removeEventListener("message",onMsg); m.style.color="var(--ok)"; m.textContent="Tenant view opened in a new window."; } };
+    const onMsg=(e)=>{ if(e.origin!==location.origin) return; if(e.data&&e.data.type==="donna-imp-ready"){ ready=true; trySend(); } };
+    window.addEventListener("message", onMsg);
+    api("impersonate",{account_id:a.id}).then(r=>{
+      if(r.data&&r.data.ok){ tokens={access_token:r.data.access_token, refresh_token:r.data.refresh_token}; trySend(); }
+      else { try{w.close();}catch(e){} window.removeEventListener("message",onMsg); m.style.color="var(--danger)"; m.textContent=(r.data&&r.data.error)||(r.error&&r.error.message)||"Could not open tenant view."; }
+    }).catch(()=>{ try{w.close();}catch(e){} window.removeEventListener("message",onMsg); m.style.color="var(--danger)"; m.textContent="Could not open tenant view."; });
   };
   // provision
   $("#d-prov").onclick=async(e)=>{

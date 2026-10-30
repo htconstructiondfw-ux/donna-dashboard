@@ -180,8 +180,14 @@
 /* ===================== SUPABASE ===================== */
 const SUPABASE_URL = "https://hingbdtmxozbjetzwibj.supabase.co";
 const SUPABASE_KEY = "sb_publishable_eCiC9HkJ8PO3D1N_0vtwWQ_Bphb6RXX";
-const db = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
-let pendingRecovery = /type=recovery/i.test(location.hash || "");
+// Admin sandbox view: when opened with ?imp=1 from the admin portal, the session
+// is held in memory only (persistSession:false) so nothing is cached on the
+// device and the admin's own login (in its own tab/storage) is never touched.
+const IMP = new URLSearchParams(location.search).get('imp')==='1';
+const db = IMP
+  ? supabase.createClient(SUPABASE_URL, SUPABASE_KEY, { auth:{ persistSession:false, autoRefreshToken:true, detectSessionInUrl:false, storageKey:'sb-donna-imp' } })
+  : supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+let pendingRecovery = !IMP && /type=recovery/i.test(location.hash || "");
 
 const DEFAULT_NAME = "Donna";
 const DAYS = ["Sunday","Monday","Tuesday","Wednesday","Thursday","Friday","Saturday"];
@@ -2100,7 +2106,64 @@ function teardownRealtime(){
 }
 
 /* ===================== BOOT ===================== */
+/* ===================== ADMIN SANDBOX (impersonation) ===================== */
+const IMP_IDLE_MS = 5*60*1000;   // lock the tenant view after 5 min of no activity
+let impIdleTimer=null, impLocked=false;
+function impLock(reason){
+  if(impLocked) return; impLocked=true;
+  try{ db.auth.signOut({scope:'local'}); }catch(e){}
+  try{ teardownRealtime(); }catch(e){}
+  if('speechSynthesis' in window) try{ window.speechSynthesis.cancel(); }catch(e){}
+  document.title="Session ended";
+  const b=document.getElementById('imp-banner'); if(b) b.remove();
+  document.getElementById("root").innerHTML=`<div class="imp-lock"><div class="imp-lock-card">
+    <h2>Tenant view locked</h2>
+    <p>${esc(reason||"This sandbox session ended.")}</p>
+    <p class="imp-sub">Nothing was saved on this device. To view this tenant again, reopen it from the admin portal.</p>
+    <button class="imp-close" onclick="window.close()">Close window</button>
+  </div></div>`;
+}
+function impPoke(){
+  if(impLocked) return;
+  if(impIdleTimer) clearTimeout(impIdleTimer);
+  impIdleTimer=setTimeout(()=>impLock("You were inactive for 5 minutes, so the tenant view locked itself."), IMP_IDLE_MS);
+}
+function impBanner(company){
+  const css=document.createElement('style');
+  css.textContent=`#imp-banner{position:fixed;left:0;right:0;bottom:0;z-index:9999;background:#13243d;color:#fff;font:500 13px 'Inter',sans-serif;padding:9px 16px;display:flex;align-items:center;gap:10px;justify-content:center;box-shadow:0 -2px 14px rgba(0,0,0,.18)}#imp-banner b{color:#f0c790}#imp-banner button{margin-left:14px;background:#e0892e;color:#fff;border:none;border-radius:7px;padding:5px 12px;font:600 12px 'Inter';cursor:pointer}.dotpulse{width:8px;height:8px;border-radius:50%;background:#2f9e6f;animation:dp 1.6s infinite}@keyframes dp{0%{box-shadow:0 0 0 0 rgba(47,158,111,.6)}70%{box-shadow:0 0 0 7px rgba(47,158,111,0)}100%{box-shadow:0 0 0 0 rgba(47,158,111,0)}}.imp-lock{min-height:100vh;display:grid;place-items:center;background:var(--canvas,#eef1f7);padding:24px}.imp-lock-card{background:#fff;border:1px solid #dfe5f0;border-radius:13px;padding:30px;max-width:380px;text-align:center}.imp-lock-card h2{font-family:'Bricolage Grotesque','Inter',sans-serif;font-size:21px;margin-bottom:8px;color:#13243d}.imp-lock-card p{color:#5d6e8c;font-size:13.5px;margin-bottom:8px}.imp-lock-card .imp-sub{font-size:12px;color:#8b99b3}.imp-close{margin-top:16px;background:#e0892e;color:#fff;border:none;border-radius:9px;padding:9px 16px;font-weight:600;cursor:pointer}`;
+  document.head.appendChild(css);
+  const el=document.createElement('div'); el.id='imp-banner';
+  el.innerHTML=`<span class="dotpulse"></span> Viewing <b>${esc(company||'tenant')}</b> as admin · in-memory only, not saved on this device <button id="imp-exit">Close</button>`;
+  document.body.appendChild(el);
+  document.getElementById('imp-exit').onclick=()=>window.close();
+}
+async function bootImpersonation(){
+  document.getElementById("root").innerHTML=`<div class="booting">Opening tenant view…</div>`;
+  try{ history.replaceState(null,"",location.pathname+"?imp=1"); }catch(e){}
+  let gotSession=false;
+  window.addEventListener('message', async (e)=>{
+    if(e.origin!==location.origin) return;
+    const d=e.data||{};
+    if(d.type==='donna-imp-session' && d.access_token && d.refresh_token && !gotSession){
+      gotSession=true;
+      const { error } = await db.auth.setSession({ access_token:d.access_token, refresh_token:d.refresh_token });
+      if(error){ document.getElementById("root").innerHTML=`<div class="booting">Could not open this tenant view.</div>`; return; }
+      let ok=await loadData();
+      if(!ok){ await new Promise(r=>setTimeout(r,900)); ok=await loadData(); }
+      if(!ok){ document.getElementById("root").innerHTML=`<div class="booting">Could not load this tenant.</div>`; return; }
+      renderApp();
+      impBanner(state.account && state.account.company);
+      ['mousemove','mousedown','keydown','scroll','touchstart','click'].forEach(ev=>window.addEventListener(ev, impPoke, {passive:true}));
+      impPoke();
+    }
+  });
+  if(window.opener){ try{ window.opener.postMessage({type:'donna-imp-ready'}, location.origin); }catch(e){} }
+  else { document.getElementById("root").innerHTML=`<div class="booting">Please open this view from the admin portal.</div>`; return; }
+  setTimeout(()=>{ if(!gotSession && !impLocked){ document.getElementById("root").innerHTML=`<div class="booting">No tenant session received. Reopen from the admin portal.</div>`; } }, 15000);
+}
+
 async function boot(){
+  if(IMP){ return bootImpersonation(); }
   if(pendingRecovery){ state.authMode="reset"; renderAuth(); return; }
   document.getElementById("root").innerHTML=`<div class="booting">Loading…</div>`;
   const { data:{ session } } = await db.auth.getSession();
