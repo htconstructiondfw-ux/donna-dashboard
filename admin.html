@@ -262,7 +262,20 @@ function paintTenant(d){
   const summ = state.accounts.find(x=>x.id===a.id)||{};
   $("#dtitle").textContent=a.name||"Tenant";
   $("#dsub").innerHTML=`${esc(a.industry||"—")} · joined ${dt(a.created_at)}`;
-  const xfer = routing.transfer_number ? prettyPhone(routing.transfer_number) : "not set";
+  // Mirror the live call-routing logic: Pro accounts with a directory transfer
+  // to the directory's general contact; everyone else uses the single number.
+  const tr = (routing && routing.transfer) || {};
+  const dir = Array.isArray(routing.directory) ? routing.directory.filter(p=>p&&String(p.phone||"").trim()) : [];
+  const useDir = (a.plan==="pro") && dir.length>0;
+  let xfer;
+  if(tr.enabled!==true){ xfer = (dir.length||tr.number) ? "off" : "not set"; }
+  else if(useDir){
+    const gen = dir.filter(p=>p.general===true).sort((x,y)=>(Number(x.order)||99)-(Number(y.order)||99));
+    const primary = gen[0]||dir[0];
+    xfer = prettyPhone(primary.phone) + (primary.name?` · ${esc(primary.name)}`:"") + (dir.length>1?` (+${dir.length-1} more)`:"");
+  }
+  else if(tr.number){ xfer = prettyPhone(tr.number); }
+  else { xfer = "not set"; }
   const langs = (asst&&asst.languages&&asst.languages.length)?asst.languages.join(", "):"en";
   const users = (d.users||[]).map(u=>`<div class="uitem"><b>${esc(u.full_name||"—")}</b> · ${esc(u.role||"")}<br><span class="sub">${esc(u.email||"")}${u.phone?" · "+esc(prettyPhone(u.phone)):""}</span></div>`).join("")||`<div class="sub">No users.</div>`;
   const emails = (d.email_addresses||[]).map(e=>`<div class="uitem mono">${esc(e.address||e.email||JSON.stringify(e))}</div>`).join("")||`<div class="sub">No inbound email configured.</div>`;
