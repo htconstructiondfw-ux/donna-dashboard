@@ -114,6 +114,19 @@
   .steps li:last-child{border-bottom:none}
   .steps li::before{counter-increment:s;content:counter(s);position:absolute;left:0;top:8px;width:21px;height:21px;border-radius:50%;background:var(--signal-soft);color:var(--signal);font-size:11px;font-weight:700;display:grid;place-items:center}
 
+  .sec.health{background:#0f2740;color:#eaf0f8;border-color:#1c3a5c}
+  .sec.health .hrow{display:flex;align-items:center;gap:8px;margin-bottom:10px}
+  .sec.health .hgrow{flex:1}
+  .sec.health .hsetup{font-size:12px;font-weight:600;color:#f0c790;background:rgba(224,137,46,.16);padding:3px 10px;border-radius:20px}
+  .sec.health .hsetup.all{color:#8fe3bf;background:rgba(47,158,111,.2)}
+  .sec.health .hline{font-size:12.5px;color:#aebfd6;margin-bottom:12px}
+  .sec.health .checks{display:grid;grid-template-columns:1fr 1fr;gap:7px 16px}
+  .sec.health .chk{display:flex;align-items:center;gap:8px;font-size:12.5px;color:#cdd8ea}
+  .sec.health .chk .ci{width:18px;height:18px;border-radius:50%;display:grid;place-items:center;font-size:11px;font-weight:700;flex:none}
+  .sec.health .chk.ok .ci{background:rgba(47,158,111,.25);color:#8fe3bf}
+  .sec.health .chk.no{color:#8b99b3}
+  .sec.health .chk.no .ci{background:rgba(192,73,47,.22);color:#e8a594}
+  @media(max-width:520px){ .sec.health .checks{grid-template-columns:1fr} }
   .empty{padding:40px;text-align:center;color:var(--muted)}
   .hint{font-size:12px;color:var(--muted);margin-top:6px}
   .banner{background:var(--info-soft);border:1px solid #bcdbe4;color:#17596e;border-radius:var(--r-sm);padding:11px 14px;font-size:12.5px;margin-bottom:18px}
@@ -183,7 +196,7 @@ async function signOut(){ await db.auth.signOut(); renderAuth(); }
 /* ===================== DASHBOARD ===================== */
 async function loadAll(){
   root.innerHTML=`<div class="wrap"><div class="empty">Loading tenants…</div></div>`;
-  const [la, ps] = await Promise.all([ api("list_accounts"), api("platform_stats") ]);
+  const la = await api("list_accounts");
   if(la.error || !la.data || !la.data.ok){
     const m=(la.data&&la.data.error)||(la.error&&la.error.message)||"Could not load.";
     // 403 => signed in but not an admin
@@ -191,7 +204,6 @@ async function loadAll(){
     renderAuth(m); return;
   }
   state.accounts = la.data.accounts || [];
-  state.stats = (ps.data&&ps.data.ok)?ps.data.stats:null;
   renderDash();
 }
 
@@ -208,7 +220,16 @@ function statCard(n,l){ return `<div class="stat"><b class="num">${fmtNum(n)}</b
 
 function renderDash(){
   document.getElementById("signout").style.display="";
-  const s=state.stats||{};
+  // All-tenant operational metrics, computed from the loaded accounts.
+  const A=state.accounts||[]; const now=Date.now(), wk=7*864e5;
+  const st={
+    tenants:A.length,
+    active:A.filter(a=>a.status==='active').length,
+    trial:A.filter(a=>a.status==='trial').length,
+    needsSetup:A.filter(a=>!a.twilio_number).length,
+    calls7:A.reduce((n,a)=>n+(Number(a.calls_7d)||0),0),
+    new7:A.filter(a=>a.created_at && (now-new Date(a.created_at).getTime())<wk).length
+  };
   const rows = state.accounts.map(a=>`
     <tr data-id="${a.id}">
       <td><div class="co">${esc(a.name||"—")}</div><div class="sub">${esc(a.industry||"—")}</div></td>
@@ -222,12 +243,12 @@ function renderDash(){
     </tr>`).join("");
   root.innerHTML=`<div class="wrap">
     <div class="stats">
-      ${statCard(s.accounts,"Tenants")}
-      ${statCard(s.active_accounts,"Active")}
-      ${statCard(s.calls_7d,"Calls · 7d")}
-      ${statCard(s.calls,"Calls · all")}
-      ${statCard(s.contacts,"Contacts")}
-      ${statCard(s.conversations,"Email threads")}
+      ${statCard(st.tenants,"Tenants")}
+      ${statCard(st.active,"Active")}
+      ${statCard(st.trial,"On trial")}
+      ${statCard(st.needsSetup,"Need setup")}
+      ${statCard(st.calls7,"Calls · 7d")}
+      ${statCard(st.new7,"New · 7d")}
     </div>
     <h1 class="page">Tenants</h1>
     <div class="lede">Every account on Donna. Click a row to manage its plan, status, and number.</div>
@@ -281,7 +302,36 @@ function paintTenant(d){
   const emails = (d.email_addresses||[]).map(e=>`<div class="uitem mono">${esc(e.address||e.email||JSON.stringify(e))}</div>`).join("")||`<div class="sub">No inbound email configured.</div>`;
   const calls = (d.recent_calls||[]).map(c=>`<div class="callitem"><b>${esc(prettyPhone(c.from_number)||"Unknown")}</b> <span class="sub">· ${esc(c.outcome||c.status||"")} · ${ago(c.started_at)}</span>${c.summary?`<br><span class="sub">${esc(c.summary.slice(0,120))}</span>`:""}</div>`).join("")||`<div class="sub">No calls yet.</div>`;
 
+  // Health summary + setup checklist (mirrors how the dashboard/backend read each item)
+  const sc = d.setup_counts||{};
+  const settings = a.settings||{};
+  const bh = (routing && routing.business_hours) || {};
+  const checks = [
+    ["Phone number", !!(asst&&asst.twilio_number)],
+    ["Knowledge loaded", (Number(sc.knowledge)||Number(summ.knowledge_count)||0)>0],
+    ["Business hours", (Number(sc.availability_rules)||0)>0 || (Array.isArray(bh.windows)&&bh.windows.length>0)],
+    ["Transfer set", !!(tr.enabled===true && (tr.number || dir.length))],
+    ["Inbound email", !!settings.inbound_address || (Array.isArray(d.email_addresses)&&d.email_addresses.length>0)]
+  ];
+  const doneCount = checks.filter(c=>c[1]).length;
+  const c7 = Number(summ.calls_7d)||0;
+  const healthLine = `${c7} call${c7===1?"":"s"} this week · last call ${ago(summ.last_call_at)}`;
+  const setupNote = (asst&&asst.twilio_number) ? "" : " · no number yet";
+
   $("#dbody").innerHTML=`
+    <div class="sec health">
+      <div class="hrow">
+        <span class="pill ${esc(a.status||'trial')}">${esc(a.status||'trial')}</span>
+        <span class="pill ${esc(a.plan||'starter')}">${esc(a.plan||'starter')}</span>
+        <span class="hgrow"></span>
+        <span class="hsetup ${doneCount===checks.length?'all':''}">${doneCount}/${checks.length} set up</span>
+      </div>
+      <div class="hline">${esc(healthLine)}${esc(setupNote)}</div>
+      <div class="checks">
+        ${checks.map(c=>`<div class="chk ${c[1]?'ok':'no'}"><span class="ci">${c[1]?'✓':'✗'}</span>${esc(c[0])}</div>`).join("")}
+      </div>
+    </div>
+
     <div class="sec">
       <h3>Plan &amp; status</h3>
       <div class="row">
