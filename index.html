@@ -1389,7 +1389,7 @@ function bindBookingForm(){
   if(typeSel) typeSel.onchange=()=>{ const o=typeSel.selectedOptions[0]; if(o&&o.value){ $("#bk-dur").value=o.dataset.dur||45; } };
   // Client: explicit New vs Returning, so a new client never sees a search box.
   const mNew=$("#bk-mode-new"), mEx=$("#bk-mode-ex"), newBlk=$("#bk-new-block"), exBlk=$("#bk-ex-block");
-  const clearClient=()=>{ ['bk-client','bk-phone','bk-email'].forEach(id=>{ const el=$("#"+id); if(el) el.value=''; }); const sel=$("#bk-selected"); if(sel){ sel.style.display='none'; sel.innerHTML=''; } const sf=$("#bk-search-field"); if(sf) sf.style.display='block'; const s=$("#bk-search"); if(s) s.value=''; const rr=$("#bk-results"); if(rr){ rr.style.display='none'; rr.innerHTML=''; } };
+  const clearClient=()=>{ state._bkContactId=null; ['bk-client','bk-phone','bk-email'].forEach(id=>{ const el=$("#"+id); if(el) el.value=''; }); const sel=$("#bk-selected"); if(sel){ sel.style.display='none'; sel.innerHTML=''; } const sf=$("#bk-search-field"); if(sf) sf.style.display='block'; const s=$("#bk-search"); if(s) s.value=''; const rr=$("#bk-results"); if(rr){ rr.style.display='none'; rr.innerHTML=''; } };
   const setMode=m=>{ const isNew=m==='new';
     if(newBlk) newBlk.style.display=isNew?'block':'none';
     if(exBlk) exBlk.style.display=isNew?'none':'block';
@@ -1399,9 +1399,11 @@ function bindBookingForm(){
   };
   if(mNew) mNew.onclick=()=>setMode('new');
   if(mEx) mEx.onclick=()=>setMode('existing');
+  state._bkContactId=null;
+  const nmEl=$("#bk-client"); if(nmEl) nmEl.oninput=()=>{ state._bkContactId=null; }; // manual name edit means it's no longer the picked client
 
   const srch=$("#bk-search"), results=$("#bk-results");
-  const pickClient=c=>{ const a=$("#bk-client"),b=$("#bk-phone"),e=$("#bk-email"); if(a)a.value=c.name||''; if(b)b.value=c.phone||''; if(e)e.value=c.email||'';
+  const pickClient=c=>{ state._bkContactId=c.id||null; const a=$("#bk-client"),b=$("#bk-phone"),e=$("#bk-email"); if(a)a.value=c.name||''; if(b)b.value=c.phone||''; if(e)e.value=c.email||'';
     if(results){ results.style.display='none'; results.innerHTML=''; } const sf=$("#bk-search-field"); if(sf) sf.style.display='none';
     const sel=$("#bk-selected"); if(sel){ sel.innerHTML=`<div style="display:flex;align-items:center;justify-content:space-between;gap:10px;padding:10px 12px;border:1px solid #bfe3d0;background:#f1faf5;border-radius:8px"><div style="font-size:13px"><b>${esc(c.name||'Client')}</b>${c.phone?` · ${esc(c.phone)}`:''}${c.email?`<br><span style="color:var(--muted);font-size:12px">${esc(c.email)}</span>`:''}</div><button type="button" class="btn sm" id="bk-change">Change</button></div>`; sel.style.display='block'; const ch=$("#bk-change"); if(ch) ch.onclick=()=>clearClient(); }
   };
@@ -1434,7 +1436,7 @@ async function submitBooking(){
   const btn=$("#bk-save"); btn.disabled=true; const ob=btn.textContent; btn.textContent="Booking…"; set("Checking the time…");
   let r=null,err=null;
   const phRaw=$("#bk-phone")?$("#bk-phone").value.trim():""; const phone=phRaw?((typeof normPhone==='function'&&normPhone(phRaw))||phRaw):null;
-  try{ const res=await db.functions.invoke('staff-book',{ body:{ action:'book', user_id:uid, start_iso:startIso, dur_min:dur, type_id:typeId, mode, client_name:$("#bk-client").value.trim()||null, client_phone:phone, customer_email:$("#bk-email").value.trim()||null, notes:$("#bk-notes").value.trim()||null, tz:state.account.timezone } }); r=res.data; err=res.error; }catch(e){ err=e; }
+  try{ const res=await db.functions.invoke('staff-book',{ body:{ action:'book', user_id:uid, start_iso:startIso, dur_min:dur, type_id:typeId, mode, client_name:$("#bk-client").value.trim()||null, client_phone:phone, customer_email:$("#bk-email").value.trim()||null, contact_id:state._bkContactId||null, notes:$("#bk-notes").value.trim()||null, tz:state.account.timezone } }); r=res.data; err=res.error; }catch(e){ err=e; }
   btn.disabled=false; btn.textContent=ob;
   if(err){ set("Could not book. Try again.","var(--danger)"); return; }
   if(r&&r.ok){ set(`Booked for ${r.when_label||'the selected time'}.`,"var(--ok)"); await loadAppointments(); renderAppts(); return; }
