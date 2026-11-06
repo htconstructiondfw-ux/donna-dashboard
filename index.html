@@ -1357,10 +1357,21 @@ function bookingCardHTML(){
         <div class="field"><label class="lab">Date</label><input class="inp" type="date" id="bk-date"></div>
         <div class="field"><label class="lab">Time</label><input class="inp" type="time" id="bk-time"></div>
       </div>
-      <div class="field" style="position:relative"><label class="lab">Find existing client <span class="sub">search by name or phone</span></label><input class="inp" id="bk-search" placeholder="Start typing a name or phone" autocomplete="off"><div id="bk-results" style="position:absolute;z-index:5;left:0;right:0;top:100%;background:#fff;border:1px solid var(--line);border-radius:var(--r-sm);box-shadow:0 8px 24px rgba(16,24,40,.12);display:none;max-height:220px;overflow:auto"></div></div>
-      <div class="grid-2">
-        <div class="field"><label class="lab">Client name</label><input class="inp" id="bk-client" placeholder="e.g. Jane Doe"></div>
-        <div class="field"><label class="lab">Client phone <span class="sub">optional</span></label><input class="inp" id="bk-phone" placeholder="optional"></div>
+      <div class="field"><label class="lab">Client</label>
+        <div style="display:flex;border:1px solid var(--line);border-radius:8px;overflow:hidden;width:fit-content">
+          <button type="button" id="bk-mode-new" style="padding:7px 16px;border:none;background:var(--ink);color:#fff;font:inherit;font-size:13px;cursor:pointer">New client</button>
+          <button type="button" id="bk-mode-ex" style="padding:7px 16px;border:none;border-left:1px solid var(--line);background:#fff;color:var(--ink-2);font:inherit;font-size:13px;cursor:pointer">Returning client</button>
+        </div>
+      </div>
+      <div id="bk-new-block">
+        <div class="grid-2">
+          <div class="field"><label class="lab">Client name</label><input class="inp" id="bk-client" placeholder="e.g. Jane Doe"></div>
+          <div class="field"><label class="lab">Client phone <span class="sub">optional</span></label><input class="inp" id="bk-phone" placeholder="optional"></div>
+        </div>
+      </div>
+      <div id="bk-ex-block" style="display:none">
+        <div class="field" id="bk-search-field" style="position:relative"><label class="lab">Search clients <span class="sub">by name or phone</span></label><input class="inp" id="bk-search" placeholder="Start typing a name or phone" autocomplete="off"><div id="bk-results" style="position:absolute;z-index:5;left:0;right:0;top:100%;background:#fff;border:1px solid var(--line);border-radius:var(--r-sm);box-shadow:0 8px 24px rgba(16,24,40,.12);display:none;max-height:220px;overflow:auto"></div></div>
+        <div id="bk-selected" style="display:none"></div>
       </div>
       <div class="grid-2">
         <div class="field"><label class="lab">Client email <span class="sub">optional — sends a confirmation</span></label><input class="inp" type="email" id="bk-email" placeholder="optional"></div>
@@ -1376,16 +1387,33 @@ function bindBookingForm(){
   tog.onclick=()=>{ const f=$("#bk-form"); const open=f.style.display!=='none'; f.style.display=open?'none':'block'; tog.textContent=open?'+ New booking':'Close'; };
   const typeSel=$("#bk-type");
   if(typeSel) typeSel.onchange=()=>{ const o=typeSel.selectedOptions[0]; if(o&&o.value){ $("#bk-dur").value=o.dataset.dur||45; } };
+  // Client: explicit New vs Returning, so a new client never sees a search box.
+  const mNew=$("#bk-mode-new"), mEx=$("#bk-mode-ex"), newBlk=$("#bk-new-block"), exBlk=$("#bk-ex-block");
+  const clearClient=()=>{ ['bk-client','bk-phone','bk-email'].forEach(id=>{ const el=$("#"+id); if(el) el.value=''; }); const sel=$("#bk-selected"); if(sel){ sel.style.display='none'; sel.innerHTML=''; } const sf=$("#bk-search-field"); if(sf) sf.style.display='block'; const s=$("#bk-search"); if(s) s.value=''; const rr=$("#bk-results"); if(rr){ rr.style.display='none'; rr.innerHTML=''; } };
+  const setMode=m=>{ const isNew=m==='new';
+    if(newBlk) newBlk.style.display=isNew?'block':'none';
+    if(exBlk) exBlk.style.display=isNew?'none':'block';
+    if(mNew){ mNew.style.background=isNew?'var(--ink)':'#fff'; mNew.style.color=isNew?'#fff':'var(--ink-2)'; }
+    if(mEx){ mEx.style.background=isNew?'#fff':'var(--ink)'; mEx.style.color=isNew?'var(--ink-2)':'#fff'; }
+    clearClient();
+  };
+  if(mNew) mNew.onclick=()=>setMode('new');
+  if(mEx) mEx.onclick=()=>setMode('existing');
+
   const srch=$("#bk-search"), results=$("#bk-results");
+  const pickClient=c=>{ const a=$("#bk-client"),b=$("#bk-phone"),e=$("#bk-email"); if(a)a.value=c.name||''; if(b)b.value=c.phone||''; if(e)e.value=c.email||'';
+    if(results){ results.style.display='none'; results.innerHTML=''; } const sf=$("#bk-search-field"); if(sf) sf.style.display='none';
+    const sel=$("#bk-selected"); if(sel){ sel.innerHTML=`<div style="display:flex;align-items:center;justify-content:space-between;gap:10px;padding:10px 12px;border:1px solid #bfe3d0;background:#f1faf5;border-radius:8px"><div style="font-size:13px"><b>${esc(c.name||'Client')}</b>${c.phone?` · ${esc(c.phone)}`:''}${c.email?`<br><span style="color:var(--muted);font-size:12px">${esc(c.email)}</span>`:''}</div><button type="button" class="btn sm" id="bk-change">Change</button></div>`; sel.style.display='block'; const ch=$("#bk-change"); if(ch) ch.onclick=()=>clearClient(); }
+  };
   if(srch&&results){ let tmr=null;
     srch.oninput=()=>{ const q=srch.value.trim(); clearTimeout(tmr); if(q.length<2){ results.style.display='none'; results.innerHTML=''; return; }
       tmr=setTimeout(async()=>{
         const qf=q.replace(/[,()*%]/g,' ').trim(); let rows=[];
         try{ const { data }=await db.from('contacts').select('id,name,phone,email').eq('account_id',state.account.id).or(`name.ilike.%${qf}%,phone.ilike.%${qf}%`).limit(6); rows=data||[]; }catch(_e){ rows=[]; }
-        if(!rows.length){ results.innerHTML='<div style="padding:9px 12px;color:var(--muted);font-size:12.5px">No match. Fill in the fields below for a new client.</div>'; results.style.display='block'; return; }
+        if(!rows.length){ results.innerHTML='<div style="padding:9px 12px;color:var(--muted);font-size:12.5px">No match. Tap <b>New client</b> above to add them.</div>'; results.style.display='block'; return; }
         results.innerHTML=rows.map((c,i)=>`<div class="bk-res" data-i="${i}" style="padding:9px 12px;cursor:pointer;border-bottom:1px solid var(--line-2);font-size:13px"><b>${esc(c.name||'Unknown')}</b>${c.phone?` · ${esc(c.phone)}`:''}${c.email?`<br><span style="color:var(--muted);font-size:12px">${esc(c.email)}</span>`:''}</div>`).join('');
         results.style.display='block';
-        results.querySelectorAll('.bk-res').forEach(el=>el.onclick=()=>{ const c=rows[+el.dataset.i]; $("#bk-client").value=c.name||''; $("#bk-phone").value=c.phone||''; $("#bk-email").value=c.email||''; srch.value=c.name||c.phone||''; results.style.display='none'; });
+        results.querySelectorAll('.bk-res').forEach(el=>el.onclick=()=>pickClient(rows[+el.dataset.i]));
       },250);
     };
     srch.onblur=()=>setTimeout(()=>{ if(results) results.style.display='none'; },200);
