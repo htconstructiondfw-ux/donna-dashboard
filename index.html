@@ -370,7 +370,7 @@ async function loadData(){
     };
   }
   const { data: types } = await db.from('appointment_types').select('*').eq('account_id', acct.id).order('created_at');
-  state.types = (types||[]).map(t=>({ id:t.id, name:t.name, mode:t.mode, dur:t.default_duration_min, before:t.buffer_before_min, after:t.buffer_after_min, travel:t.requires_travel }));
+  state.types = (types||[]).map(t=>({ id:t.id, name:t.name, mode:t.mode, dur:t.default_duration_min, before:t.buffer_before_min, after:t.buffer_after_min, travel:t.requires_travel, overlap:t.overlap_minutes||0 }));
   const { data: rules } = await db.from('availability_rules').select('*').eq('user_id', me.id);
   state.schedule = DAYS.map(()=>({ working:{on:false,start:"08:00",end:"18:00"}, bookable:{on:false,start:"09:00",end:"15:00"} }));
   (rules||[]).forEach(r=>{ const w = r.rule_type==='working'?state.schedule[r.day_of_week].working:state.schedule[r.day_of_week].bookable; w.on=true; w.start=(r.start_time||"08:00").slice(0,5); w.end=(r.end_time||"18:00").slice(0,5); });
@@ -658,6 +658,8 @@ function pageTypes(){
         <div class="field"><label class="lab">Buffer after (min)</label><input class="inp" type="number" id="t-after" value="0" min="0" step="5"></div>
       </div>
       <div class="field"><label class="switch"><input type="checkbox" id="t-travel"><span class="track"></span><span class="txt">Reserve travel time<small>Auto-on for in-person — drive time is checked before booking.</small></span></label></div>
+      <div class="field"><label class="switch"><input type="checkbox" id="t-overlap-on"><span class="track"></span><span class="txt">Allow overlap during processing<small>For services with wait time, like color developing. Only the hands-on part blocks the stylist; they can start another client during the overlap.</small></span></label></div>
+      <div class="field" id="t-overlap-row" style="display:none"><label class="lab">Overlap minutes <span class="sub">the processing tail that can overlap another booking</span></label><input class="inp" type="number" id="t-overlap" value="60" min="0" step="5"></div>
       <div style="margin-top:8px"><button class="btn primary" id="t-add">+ Add type</button></div>
     </div>
     <div class="card">
@@ -667,6 +669,7 @@ function pageTypes(){
   </div>`;
   const modeSel=$("#t-mode"), travel=$("#t-travel");
   modeSel.onchange=()=>{ travel.checked = modeSel.value==="in_person"; };
+  const ovOn=$("#t-overlap-on"); if(ovOn) ovOn.onchange=()=>{ const r=$("#t-overlap-row"); if(r) r.style.display=ovOn.checked?'block':'none'; };
   $("#t-add").onclick=addType;
   bindTypeRemovers();
   paintVideoCard();
@@ -711,7 +714,7 @@ async function verifyVideo(provider){
   if(reason==="auth_failed"){ setMsg("Please reconnect "+pname+" and try again.","var(--danger)"); connectCalendar(provider); return; }
   setMsg("Couldn't verify "+pname+". Try again.","var(--danger)");
 }
-function typeHTML(t){ const lbl={phone:"Phone",virtual:"Virtual",in_person:"In person"}[t.mode]; const icon={phone:I.phone,virtual:I.vid,in_person:I.pin}[t.mode]; return `<div class="type-item"><span class="ic ${t.mode}">${icon}</span><span class="nm">${esc(t.name)}<small>${t.dur} min${t.after?` · ${t.after} min buffer`:""}${t.travel?" · travel reserved":""}</small></span><span class="mode">${lbl}</span><button class="rm" data-id="${t.id||''}" title="Remove" style="margin-left:12px;background:none;border:none;color:var(--muted-2);font-size:13px">✕</button></div>`; }
+function typeHTML(t){ const lbl={phone:"Phone",virtual:"Virtual",in_person:"In person"}[t.mode]; const icon={phone:I.phone,virtual:I.vid,in_person:I.pin}[t.mode]; return `<div class="type-item"><span class="ic ${t.mode}">${icon}</span><span class="nm">${esc(t.name)}<small>${t.dur} min${t.after?` · ${t.after} min buffer`:""}${t.travel?" · travel reserved":""}${t.overlap?` · ${t.overlap} min can overlap`:""}</small></span><span class="mode">${lbl}</span><button class="rm" data-id="${t.id||''}" title="Remove" style="margin-left:12px;background:none;border:none;color:var(--muted-2);font-size:13px">✕</button></div>`; }
 function bindTypeRemovers(){ document.querySelectorAll("#types .rm").forEach(b=>b.onclick=()=>removeType(b.dataset.id)); }
 async function addType(){
   const name=$("#t-name").value.trim(); if(!name){ const b=$("#t-add"); const o=b.textContent; b.textContent="Name it first"; setTimeout(()=>b.textContent=o,1100); return; }
@@ -721,9 +724,12 @@ async function addType(){
     if(!vp){ try{ const r=await db.functions.invoke("donna-video",{body:{action:"status"}}); if(r.data&&r.data.ok) vp=r.data.video_provider; }catch(_e){} state.videoProvider=vp; }
     if(!vp){ const b=$("#t-add"); const o=b.textContent; b.textContent="Verify a video provider first"; setTimeout(()=>b.textContent=o,1600); const m=$("#vid-msg"); if(m){ m.style.color="var(--danger)"; m.textContent="Verify Google Meet or Microsoft Teams below before adding a virtual type."; } return; }
   }
-  const row={ account_id:state.account.id, name, mode, default_duration_min:+$("#t-dur").value||30, buffer_before_min:0, buffer_after_min:+$("#t-after").value||0, requires_travel:$("#t-travel").checked };
+  const dur=+$("#t-dur").value||30;
+  const ovOn=$("#t-overlap-on")&&$("#t-overlap-on").checked;
+  let overlap=ovOn?(+$("#t-overlap").value||0):0; if(overlap>dur) overlap=dur; if(overlap<0) overlap=0;
+  const row={ account_id:state.account.id, name, mode, default_duration_min:dur, buffer_before_min:0, buffer_after_min:+$("#t-after").value||0, requires_travel:$("#t-travel").checked, overlap_minutes:overlap };
   const { data, error } = await db.from('appointment_types').insert(row).select().single();
-  if(!error && data){ state.types.push({id:data.id,name:data.name,mode:data.mode,dur:data.default_duration_min,before:data.buffer_before_min,after:data.buffer_after_min,travel:data.requires_travel}); pageTypes(); }
+  if(!error && data){ state.types.push({id:data.id,name:data.name,mode:data.mode,dur:data.default_duration_min,before:data.buffer_before_min,after:data.buffer_after_min,travel:data.requires_travel,overlap:data.overlap_minutes||0}); pageTypes(); }
 }
 async function removeType(id){ if(id){ await db.from('appointment_types').delete().eq('id',id); } state.types=state.types.filter(t=>t.id!==id); pageTypes(); }
 
