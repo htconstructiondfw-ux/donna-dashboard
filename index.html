@@ -164,6 +164,20 @@
   .staff-row .staff-meta{margin-left:auto;display:flex;gap:6px;align-items:center;flex:none} .staff-row .staff-act{flex:none}
   .pill{font-size:10.5px;letter-spacing:.04em;text-transform:uppercase;font-weight:600;color:var(--muted-2);border:1px solid var(--line);border-radius:20px;padding:2px 8px;white-space:nowrap}
   .pill.ok{color:var(--ok);border-color:#bfe3d0;background:#f1faf5} .pill.mgr{color:var(--ink-2);border-color:#c9d6ea;background:#eef3fb}
+  .cal-dow{display:grid;grid-template-columns:repeat(7,1fr);gap:6px;margin-bottom:6px}
+  .cal-dow span{text-align:center;font-size:10.5px;font-weight:700;letter-spacing:.04em;text-transform:uppercase;color:var(--muted-2)}
+  .cal-grid{display:grid;grid-template-columns:repeat(7,1fr);gap:6px}
+  .cal-cell{min-height:66px;border:1px solid var(--line);border-radius:var(--r-sm);padding:6px 7px;cursor:pointer;background:#fcfdff;position:relative;transition:border-color .1s}
+  .cal-cell.out{opacity:.4} .cal-cell:hover{border-color:var(--muted-2)}
+  .cal-cell.sel{border-color:var(--ink);box-shadow:0 0 0 1px var(--ink)}
+  .cal-cell.today .cal-dnum{background:var(--ink);color:#fff;border-radius:50%;width:21px;height:21px;display:inline-flex;align-items:center;justify-content:center}
+  .cal-dnum{font-size:12.5px;font-weight:600;color:var(--ink-2)}
+  .cal-cnt{position:absolute;top:6px;right:7px;font-size:10px;font-weight:700;color:#b45309;background:#fef3e2;border-radius:20px;padding:1px 6px}
+  .cal-dots{position:absolute;bottom:7px;left:7px;display:flex;gap:3px}
+  .cal-dot{width:7px;height:7px;border-radius:50%;display:inline-block}
+  .cal-legend{display:flex;flex-wrap:wrap;gap:14px;margin-top:12px;font-size:12px;color:var(--muted)}
+  .cal-legend span{display:inline-flex;align-items:center;gap:6px}
+  @media(max-width:560px){ .cal-cell{min-height:50px;padding:5px} .cal-dnum{font-size:11px} .cal-cnt{font-size:9px} }
   .empty{text-align:center;padding:46px 20px;color:var(--muted)} .empty svg{width:34px;height:34px;color:var(--muted-2);margin-bottom:10px}
   .gate{min-height:100vh;display:grid;place-items:center;padding:24px;background:radial-gradient(120% 90% at 50% -10%,#1b3258 0%,var(--canvas) 46%)}
   .gate-card{background:var(--surface);border:1px solid var(--line);border-radius:18px;padding:34px 34px 30px;width:100%;max-width:460px;box-shadow:0 24px 60px -28px rgba(19,36,61,.4)}
@@ -1442,13 +1456,41 @@ async function submitBooking(){
   if(r&&r.ok){ set(`Booked for ${r.when_label||'the selected time'}.`,"var(--ok)"); await loadAppointments(); renderAppts(); return; }
   set(BOOK_ERR[r&&r.error]||"Could not book. Try again.","var(--danger)");
 }
+const STYLIST_PALETTE=['#2563eb','#d946a6','#0d9488','#d97706','#7c3aed','#dc2626','#0891b2','#65a30d'];
+function stylistColor(uid){ const i=(state.staff||[]).findIndex(s=>s.id===uid); return STYLIST_PALETTE[(i<0?0:i)%STYLIST_PALETTE.length]; }
+function calKey(d){ return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0'); }
+function apptDayKey(iso){ const p=new Intl.DateTimeFormat('en-CA',{timeZone:state.account.timezone,year:'numeric',month:'2-digit',day:'2-digit'}).formatToParts(new Date(iso)).reduce((a,x)=>{a[x.type]=x.value;return a;},{}); return `${p.year}-${p.month}-${p.day}`; }
+function apptsForDay(key){ return state.appointments.filter(a=>apptDayKey(a.start)===key).sort((a,b)=>new Date(a.start)-new Date(b.start)); }
+function calendarCardHTML(){
+  if(!state._calMonth) state._calMonth=new Date();
+  if(!state._calSel) state._calSel=calKey(new Date());
+  const m=state._calMonth, mLabel=m.toLocaleDateString('en-US',{month:'long',year:'numeric'});
+  const first=new Date(m.getFullYear(),m.getMonth(),1); const start=new Date(first); start.setDate(1-first.getDay());
+  const todayKey=calKey(new Date());
+  let cells='';
+  for(let i=0;i<42;i++){ const d=new Date(start); d.setDate(start.getDate()+i);
+    if(i>=35 && d.getMonth()!==m.getMonth()) continue;
+    const k=calKey(d), inM=d.getMonth()===m.getMonth();
+    const day=apptsForDay(k).filter(a=>a.status!=='cancelled'); const n=day.length;
+    const uids=[...new Set(day.map(a=>a.userId).filter(Boolean))].slice(0,4);
+    const dots=(salonOn()&&isManager())?uids.map(u=>`<i class="cal-dot" style="background:${stylistColor(u)}"></i>`).join(''):'';
+    cells+=`<div class="cal-cell${inM?'':' out'}${k===state._calSel?' sel':''}${k===todayKey?' today':''}" data-day="${k}"><span class="cal-dnum">${d.getDate()}</span>${n?`<span class="cal-cnt">${n}</span>`:''}${dots?`<div class="cal-dots">${dots}</div>`:''}</div>`;
+  }
+  const sel=state._calSel; const selAppts=apptsForDay(sel);
+  const selLabel=new Date(sel+'T12:00:00').toLocaleDateString('en-US',{weekday:'long',month:'long',day:'numeric'});
+  const detail = selAppts.length ? selAppts.map(apptHTML).join('') : `<div class="empty" style="padding:26px 10px">${I.appt}<div>No appointments on ${esc(selLabel)}.</div></div>`;
+  const legend = (salonOn()&&isManager()&&(state.staff||[]).filter(s=>s.is_bookable).length)
+    ? `<div class="cal-legend">${(state.staff||[]).filter(s=>s.is_bookable).map(s=>`<span><i class="cal-dot" style="background:${stylistColor(s.id)}"></i>${esc((s.full_name||'').split(' ')[0]||s.email)}</span>`).join('')}</div>` : '';
+  return `
+  <div class="card">
+    <div class="card-h"><h2>Calendar</h2><div style="display:flex;gap:6px;align-items:center"><button class="btn sm" id="ap-refresh">Refresh</button><button class="btn sm" id="cal-prev" aria-label="Previous month">‹</button><span style="font-weight:600;min-width:132px;text-align:center;font-size:13.5px">${esc(mLabel)}</span><button class="btn sm" id="cal-next" aria-label="Next month">›</button></div></div>
+    <div class="cal-dow">${['Sun','Mon','Tue','Wed','Thu','Fri','Sat'].map(x=>`<span>${x}</span>`).join('')}</div>
+    <div class="cal-grid" id="cal-grid">${cells}</div>
+    ${legend}
+    <div style="margin-top:16px;border-top:1px solid var(--line-2);padding-top:14px"><h3 style="font-size:13px;margin:0 0 11px;color:var(--ink-2)">${esc(selLabel)}${selAppts.length?` · ${selAppts.length} appointment${selAppts.length>1?'s':''}`:''}</h3>${detail}</div>
+  </div>`;
+}
 function renderAppts(){
-  const now=Date.now();
-  const active = state.appointments.filter(a=>a.status!=='cancelled');
-  const upcoming = active.filter(a=> new Date(a.end||a.start).getTime()>=now);
-  const past = active.filter(a=> new Date(a.end||a.start).getTime()<now);
-  const cancelled = state.appointments.filter(a=>a.status==='cancelled');
-  const card = list => list.map(apptHTML).join("");
   const lede = isManager()
     ? `Appointments across your salon. Add or move one here and ${esc(aName())} treats it like any booking: it syncs to your connected calendar and the client gets a confirmation and reminder.`
     : `Your appointments. Add or move one here and it is handled like any booking: it syncs to the connected calendar and the client gets a confirmation and reminder.`;
@@ -1456,13 +1498,14 @@ function renderAppts(){
   <div class="page">
     <div class="page-head"><h1>Appointments</h1><p>${lede} Times shown in ${esc(tzLabel(state.account.timezone))}.</p></div>
     ${bookingCardHTML()}
-    <div class="card"><div class="card-h"><h2>Upcoming${upcoming.length?` (${upcoming.length})`:''}</h2><button class="btn sm" id="ap-refresh">Refresh</button></div>
-      <div>${upcoming.length?card(upcoming):`<div class="empty">${I.appt}<div>No upcoming appointments yet.</div></div>`}</div></div>
-    ${past.length?`<div class="card"><div class="card-h"><h2>Past</h2><span class="hint">${past.length}</span></div><div>${card(past)}</div></div>`:''}
-    ${cancelled.length?`<div class="card"><div class="card-h"><h2>Cancelled</h2><span class="hint">${cancelled.length}</span></div><div>${card(cancelled)}</div></div>`:''}
+    ${calendarCardHTML()}
   </div>`;
-  $("#ap-refresh").onclick=async()=>{ const b=$("#ap-refresh"); b.disabled=true; b.textContent="…"; await loadAppointments(); renderAppts(); };
   bindBookingForm();
+  const rf=$("#ap-refresh"); if(rf) rf.onclick=async()=>{ rf.disabled=true; rf.textContent="…"; await loadAppointments(); renderAppts(); };
+  const cp=$("#cal-prev"), cn=$("#cal-next");
+  if(cp) cp.onclick=()=>{ state._calMonth=new Date(state._calMonth.getFullYear(),state._calMonth.getMonth()-1,1); renderAppts(); };
+  if(cn) cn.onclick=()=>{ state._calMonth=new Date(state._calMonth.getFullYear(),state._calMonth.getMonth()+1,1); renderAppts(); };
+  document.querySelectorAll('#cal-grid .cal-cell[data-day]').forEach(c=>c.onclick=()=>{ state._calSel=c.dataset.day; renderAppts(); });
   bindApptActions();
 }
 function apptHTML(a){
