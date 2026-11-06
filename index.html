@@ -1169,7 +1169,7 @@ function showImportReview(rows){ const src = (rows[0]&&rows[0].source==='phone')
 
 function showExport(){ if(!state.contacts.length){ alert("No contacts to export yet."); return; } const items=state.contacts.map((c,i)=>'<label style="display:flex;gap:9px;align-items:center;padding:7px 0;border-bottom:1px solid var(--line-2)"><input type="checkbox" data-i="'+i+'" checked><div style="flex:1;font-size:13px"><span style="font-weight:600">'+esc(c.name||'Unknown')+'</span> <span style="color:var(--muted)">'+esc(c.phone||'')+'</span></div></label>').join(""); const o=ctOverlay('<h2 style="margin:0 0 4px">Export contacts</h2><p style="color:var(--muted);font-size:13px;margin:0 0 12px">All selected. Uncheck anyone to leave out. This downloads a vCard (.vcf) file to your computer. Nothing is sent to Google or Microsoft.</p><div id="exp-list" style="margin-bottom:14px;max-height:40vh;overflow:auto">'+items+'</div><div style="display:flex;gap:8px;justify-content:flex-end"><button class="btn sm" id="exp-cancel">Cancel</button><button class="btn sm primary" id="exp-go">Download vCard</button></div>'); o.querySelector('#exp-cancel').onclick=()=>o.remove(); o.querySelector('#exp-go').onclick=()=>{ const chosen=[...o.querySelectorAll('#exp-list input[type=checkbox]')].filter(x=>x.checked).map(x=>state.contacts[+x.dataset.i]); if(!chosen.length){ o.remove(); return; } const esc2=v=>String(v||"").replace(/\r?\n/g,"\\n").replace(/,/g,"\\,").replace(/;/g,"\\;"); const vcf=chosen.map(c=>{ const L=["BEGIN:VCARD","VERSION:3.0"]; L.push("FN:"+esc2(c.name||c.phone||"Unknown")); if(c.company) L.push("ORG:"+esc2(c.company)); if(c.phone) L.push("TEL;TYPE=CELL:"+c.phone); if(c.email) L.push("EMAIL:"+esc2(c.email)); L.push("END:VCARD"); return L.join("\r\n"); }).join("\r\n"); const blob=new Blob([vcf],{type:"text/vcard"}); const a=document.createElement('a'); a.href=URL.createObjectURL(blob); a.download="donna-contacts.vcf"; a.click(); setTimeout(()=>URL.revokeObjectURL(a.href),2000); o.remove(); }; }
 
-function showAddContact(){ const o=ctOverlay('<h2 style="margin:0 0 12px">Add a contact</h2><div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">'+ctField('Name','ac-name','')+ctField('Name '+esc(aName())+' says','ac-pref','first name spoken')+'<div style="grid-column:1/-1"><label style="'+CL+'">How '+esc(aName())+' says it</label><div style="display:flex;gap:8px"><input id="ac-pron" placeholder="e.g., twong-ahn" style="'+CI+';flex:1"><button type="button" class="btn sm" id="ac-suggest">Suggest</button><button type="button" class="btn sm" id="ac-say">Preview</button></div></div>'+ctField('Company','ac-company','')+ctField('Email','ac-email','')+ctField('Phone','ac-phone','+1...')+ctField('Language','ac-language','')+ctField('Label (private, never spoken)','ac-label','your private tag')+ctField('Interest','ac-interest','',true)+'<div style="grid-column:1/-1"><label style="'+CL+'">Notes</label><textarea id="ac-notes" rows="2" style="'+CI+'"></textarea></div><div style="grid-column:1/-1;display:flex;gap:8px;justify-content:flex-end"><button class="btn sm" id="ac-cancel">Cancel</button><button class="btn sm primary" id="ac-save">Add contact</button></div></div>'); const g=id=>{const el=o.querySelector('#'+id);return el?el.value.trim():"";}; o.querySelector('#ac-say').onclick=()=>ctSpeak(g('ac-pron')||g('ac-pref')||(g('ac-name').split(/\s+/)[0]||'')); o.querySelector('#ac-suggest').onclick=()=>ctSuggest(g('ac-name'),g('ac-language'),o.querySelector('#ac-pron'),o.querySelector('#ac-suggest')); o.querySelector('#ac-cancel').onclick=()=>o.remove(); o.querySelector('#ac-save').onclick=async()=>{ const name=g('ac-name'); const phone=normPhone(g('ac-phone')); if(!name && !phone){ alert("Add at least a name or a phone number."); return; } if(phone && state.contacts.some(c=>c.phone===phone) && !confirm("Another contact already has that number. People can share a line, like a couple, so this adds a separate contact. Add anyway?")){ return; } const row={ account_id:state.account.id, name:name||null, preferred_name:g('ac-pref')||cleanSpoken(name)||null, pronunciation:g('ac-pron')||null, company:g('ac-company')||null, email:g('ac-email')||null, phone:phone||null, language:g('ac-language')||null, label:g('ac-label')||null, interest:g('ac-interest')||null, notes:g('ac-notes')||null, source:'manual', list_type:'normal', updated_at:new Date().toISOString() }; const btn=o.querySelector('#ac-save'); btn.disabled=true; btn.textContent="\u2026"; const r=await db.from('contacts').insert(row); if(r.error){ btn.disabled=false; btn.textContent="Add contact"; alert("Could not add: "+r.error.message); return; } o.remove(); await loadContacts(); pageContacts(); }; }
+function showAddContact(){ const o=ctOverlay('<h2 style="margin:0 0 12px">Add a contact</h2><div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">'+ctField('Name','ac-name','')+ctField('Name '+esc(aName())+' says','ac-pref','first name spoken')+'<div style="grid-column:1/-1"><label style="'+CL+'">How '+esc(aName())+' says it</label><div style="display:flex;gap:8px"><input id="ac-pron" placeholder="e.g., twong-ahn" style="'+CI+';flex:1"><button type="button" class="btn sm" id="ac-suggest">Suggest</button><button type="button" class="btn sm" id="ac-say">Preview</button></div></div>'+ctField('Company','ac-company','')+ctField('Email','ac-email','')+ctField('Phone','ac-phone','+1...')+ctField('Language','ac-language','')+ctField('Label (private, never spoken)','ac-label','your private tag')+ctField('Interest','ac-interest','',true)+'<div style="grid-column:1/-1"><label style="'+CL+'">Notes</label><textarea id="ac-notes" rows="2" style="'+CI+'"></textarea></div><div style="grid-column:1/-1;display:flex;gap:8px;justify-content:flex-end"><button class="btn sm" id="ac-cancel">Cancel</button><button class="btn sm primary" id="ac-save">Add contact</button></div></div>'); const g=id=>{const el=o.querySelector('#'+id);return el?el.value.trim():"";}; o.querySelector('#ac-say').onclick=()=>ctSpeak(g('ac-pron')||g('ac-pref')||(g('ac-name').split(/\s+/)[0]||'')); o.querySelector('#ac-suggest').onclick=()=>ctSuggest(g('ac-name'),g('ac-language'),o.querySelector('#ac-pron'),o.querySelector('#ac-suggest')); o.querySelector('#ac-cancel').onclick=()=>o.remove(); o.querySelector('#ac-save').onclick=async()=>{ const name=g('ac-name'); const phone=normPhone(g('ac-phone')); if(!name && !phone){ alert("Add at least a name or a phone number."); return; } if(phone && state.contacts.some(c=>c.phone===phone) && !(await uiConfirm("Another contact already has that number. People can share a line, like a couple, so this adds a separate contact. Add anyway?",{okText:'Add anyway',cancelText:'Go back'}))){ return; } const row={ account_id:state.account.id, name:name||null, preferred_name:g('ac-pref')||cleanSpoken(name)||null, pronunciation:g('ac-pron')||null, company:g('ac-company')||null, email:g('ac-email')||null, phone:phone||null, language:g('ac-language')||null, label:g('ac-label')||null, interest:g('ac-interest')||null, notes:g('ac-notes')||null, source:'manual', list_type:'normal', updated_at:new Date().toISOString() }; const btn=o.querySelector('#ac-save'); btn.disabled=true; btn.textContent="\u2026"; const r=await db.from('contacts').insert(row); if(r.error){ btn.disabled=false; btn.textContent="Add contact"; alert("Could not add: "+r.error.message); return; } o.remove(); await loadContacts(); pageContacts(); }; }
 
 function pageContacts(){
   const q = state._cq||"";
@@ -1476,6 +1476,23 @@ function bindBookingForm(){
   }
   const save=$("#bk-save"); if(save) save.onclick=submitBooking;
 }
+// In-app confirm/alert so dialogs don't show the browser's "<site> says" prefix.
+function uiConfirm(message, opts){
+  opts=opts||{};
+  return new Promise(resolve=>{
+    const ov=document.createElement('div');
+    ov.style.cssText='position:fixed;inset:0;background:rgba(14,27,46,.45);display:flex;align-items:center;justify-content:center;z-index:9999;padding:20px';
+    ov.innerHTML=`<div style="background:#fff;border-radius:14px;max-width:420px;width:100%;padding:22px 22px 18px;box-shadow:0 20px 60px rgba(16,24,40,.3)"><div style="font-size:14.5px;line-height:1.55;color:var(--ink,#0e1b2e);margin-bottom:18px">${esc(message)}</div><div style="display:flex;gap:9px;justify-content:flex-end"><button class="btn sm" id="uic-cancel">${esc(opts.cancelText||'Cancel')}</button>${opts.alert?'':`<button class="btn sm primary" id="uic-ok">${esc(opts.okText||'OK')}</button>`}</div></div>`;
+    document.body.appendChild(ov);
+    const done=v=>{ ov.remove(); document.removeEventListener('keydown',onKey); resolve(v); };
+    function onKey(e){ if(e.key==='Escape') done(false); if(e.key==='Enter' && !opts.alert) done(true); }
+    const ok=ov.querySelector('#uic-ok'); if(ok) ok.onclick=()=>done(true);
+    ov.querySelector('#uic-cancel').onclick=()=>done(opts.alert?true:false);
+    ov.addEventListener('click',e=>{ if(e.target===ov) done(opts.alert?true:false); });
+    document.addEventListener('keydown',onKey);
+  });
+}
+function uiAlert(message){ return uiConfirm(message,{alert:true, cancelText:'OK'}); }
 // Is [time, time+dur] on dateStr within this user's set bookable hours? {ok, hasRules}
 async function withinBookableHours(userId, dateStr, timeStr, durMin){
   let rules=[];
@@ -1493,7 +1510,7 @@ async function confirmIfOutsideHours(uid, dateStr, timeStr, durMin, isSelf){
   if(av.ok) return true;
   const subj = isSelf ? 'You have' : staffFirstName(uid)+' has';
   const detail = av.hasRules ? 'no availability set for that day and time' : 'no availability hours set yet';
-  return confirm(subj+' '+detail+'. Book anyway?');
+  return uiConfirm(subj+' '+detail+'. Book anyway?', {okText:'Book anyway', cancelText:'Go back'});
 }
 async function submitBooking(){
   const msg=$("#bk-msg"); const set=(t,c)=>{ if(msg){msg.style.color=c||'var(--muted)';msg.textContent=t;} };
@@ -1600,7 +1617,7 @@ function apptHTML(a){
 }
 function bindApptActions(){
   document.querySelectorAll('#page [data-cancel]').forEach(b=>b.onclick=async()=>{
-    if(!confirm('Cancel this appointment? This removes it from your calendar, and emails the customer if one is on file.')) return;
+    if(!(await uiConfirm('Cancel this appointment? This removes it from your calendar, and emails the customer if one is on file.',{okText:'Cancel appointment',cancelText:'Keep it'}))) return;
     const id=b.dataset.cancel; b.disabled=true; b.textContent="…";
     try{
       const { data, error } = await db.functions.invoke('donna-cancel', { body: { appointment_id: id } });
@@ -1608,7 +1625,7 @@ function bindApptActions(){
       await loadAppointments(); renderAppts();
     }catch(e){
       b.disabled=false; b.textContent="Cancel";
-      alert("Sorry, that cancellation didn't go through. Please try again.");
+      await uiAlert("Sorry, that cancellation didn't go through. Please try again.");
     }
   });
   document.querySelectorAll('#page [data-resched]').forEach(b=>b.onclick=()=>{
