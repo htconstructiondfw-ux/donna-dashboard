@@ -1385,6 +1385,12 @@ function pageSettings(){
       <select class="inp" id="tz-select" style="max-width:340px">${TZS.map(t=>`<option value="${t[0]}" ${ac.timezone===t[0]?'selected':''}>${t[1]}</option>`).join("")}</select>
     </div>
 
+    ${(ac.settings&&ac.settings.email_address)?`
+    <div class="card"><div class="card-h"><h2>Your ${esc(aName())} email address</h2></div>
+      <p style="font-size:13px;color:var(--muted);margin-bottom:12px">This is ${esc(aName())}'s own email address, created for your account. Customers can email it directly and she answers, or you can forward your business inbox here so she handles that mail too. Put it on your website or share it anywhere you want ${esc(aName())} reachable by email.</p>
+      <div style="display:flex;gap:8px;align-items:center;max-width:480px"><input class="inp" id="donna-email" type="email" readonly value="${esc(ac.settings.email_address)}" style="flex:1;font-weight:600"><button type="button" class="btn sm" id="donna-email-copy">Copy</button></div>
+    </div>`:''}
+
     <div class="card"><div class="card-h"><h2>Message alerts</h2><button class="btn sm" id="alert-save">Save</button></div>
       <p style="font-size:13px;color:var(--muted);margin-bottom:12px">When ${esc(aName())} takes a message, it is emailed here. If a caller asks for someone by name, that person is emailed directly and this inbox is copied. Use an address you actually check.</p>
       <div class="field" style="max-width:340px;margin:0"><label class="lab">General inbox email</label><input class="inp" id="alert-email" type="email" placeholder="you@yourcompany.com" value="${esc((ac.settings&&ac.settings.alert_email)||'')}"></div>
@@ -1477,6 +1483,7 @@ function pageSettings(){
   $("#tz-save").onclick=saveTimezone;
   { const ae=$("#alert-save"); if(ae) ae.onclick=saveAlertEmail; }
   { const is=$("#inbound-save"); if(is) is.onclick=saveInbound; const ic=$("#inbound-copy"); if(ic) ic.onclick=()=>{ const a=$("#inbound-addr"); if(a&&a.value){ try{ navigator.clipboard&&navigator.clipboard.writeText(a.value.trim()); }catch(e){} const m=$("#inbound-msg"); if(m){ m.style.color='var(--muted)'; m.textContent='Copied.'; } } }; }
+  { const dc=$("#donna-email-copy"); if(dc) dc.onclick=()=>{ const a=$("#donna-email"); if(a&&a.value){ try{ navigator.clipboard&&navigator.clipboard.writeText(a.value.trim()); }catch(e){} } dc.textContent='Copied'; setTimeout(()=>{dc.textContent='Copy';},1200); }; }
   { const ss=$("#sched-save"); if(ss) ss.onclick=saveScheduling; }
   { const rs=$("#rem-save"); if(rs) rs.onclick=saveReminders; const rm=$("#rem-mode"); if(rm){ const upd=()=>{ const f=$("#rem-time-field"); if(f) f.style.opacity=rm.value==="off"?".45":"1"; const ri=$("#rem-time"); if(ri) ri.disabled=rm.value==="off"; }; rm.addEventListener("change",upd); upd(); } }
   { const se=$("#sched-enabled"), sr=$("#sched-auto-row"); if(se&&sr){ const upd=()=>{ sr.style.opacity=se.checked?'1':'.45'; const a=$("#sched-auto"); if(a) a.disabled=!se.checked; }; se.addEventListener('change',upd); upd(); } }
