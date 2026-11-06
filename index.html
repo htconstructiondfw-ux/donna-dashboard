@@ -239,6 +239,7 @@ function renderAuth(){
     <p class="lede">${signup?'This is the company your assistant will answer for. You\'ll be the owner.':'Sign in to manage your assistant.'}</p>
     <div class="msg" id="auth-msg"></div>
     ${signup?`
+    <div class="field"><label class="lab">Invite code <span class="sub">Donna is in closed beta</span></label><input class="inp" id="f-invite" placeholder="DONNA-XXXX-XXXX" autocapitalize="characters"></div>
     <div class="field"><label class="lab">Business name</label><input class="inp" id="f-company" placeholder="e.g. HT Construction DFW"></div>
     <div class="grid-2">
       <div class="field"><label class="lab">Industry</label><select class="inp" id="f-industry"><option value="">Choose…</option><option>Construction</option><option>Property management</option><option>Dental / medical</option><option>HVAC / plumbing</option><option>Professional services</option><option>Other</option></select></div>
@@ -292,14 +293,22 @@ function authOk(t){ const m=$("#auth-msg"); m.className="msg ok"; m.textContent=
 
 async function doSignup(){
   const email=$("#f-email").value.trim(), password=$("#f-pass").value;
+  const invite=($("#f-invite")?$("#f-invite").value:"").trim();
+  if(!invite){ authErr("An invite code is required. Donna is in closed beta."); return; }
   if(!email||password.length<8){ authErr("Enter an email and a password of at least 8 characters."); return; }
   $("#f-go").disabled=true;
   const { data, error } = await db.auth.signUp({ email, password, options:{ data:{
+    invite_code:invite,
     company:$("#f-company").value.trim(), industry:$("#f-industry").value,
     full_name:$("#f-name").value.trim(), title:$("#f-title").value.trim(), phone:$("#f-phone").value.trim()
   }}});
   $("#f-go").disabled=false;
-  if(error){ authErr(error.message); return; }
+  if(error){
+    const m=(error.message||"").toLowerCase();
+    if(m.includes("invite")||m.includes("database error saving")) authErr("That invite code is not valid or has already been used. Check it and try again.");
+    else authErr(error.message);
+    return;
+  }
   if(data.session){ await boot(); }            // email confirmation off -> straight in
   else { authOk("Account created. Check your email to confirm, then sign in."); state.authMode="login"; setTimeout(renderAuth,1600); }
 }
@@ -398,12 +407,14 @@ function renderApp(){
         <div class="crumbs">${state.view==='settings'?'Account':(['messages','appointments','calls','contacts','gaps','conversations'].includes(state.view)?'Activity':'Configure')} · <b>${esc(({assistant:"Assistant",schedule:"Schedule",types:"Appointment types",messages:"Messages",appointments:"Appointments",settings:"Settings",calls:"Calls",knowledge:"Knowledge",contacts:"Contacts",gaps:"Open questions",conversations:"Inbox"})[state.view])}</b></div>
         <div class="acct-chip"><span class="av">${initials}</span><div class="who"><b>${esc(state.account.company)}</b><span>${esc((state.account.status||'trial'))} · ${esc(state.account.plan||'starter')}</span></div></div>
       </div>
+      <div id="approve-banner"></div>
       <div id="page"></div>
     </main>
   </div>`;
   document.querySelectorAll(".nav-item[data-v]").forEach(b=>b.onclick=()=>{state.view=b.dataset.v;renderPage();});
   $("#signout").onclick=signOut;
   renderPage();
+  paintApproveBanner();
 }
 function renderPage(){
   if('speechSynthesis' in window) window.speechSynthesis.cancel();
@@ -421,6 +432,7 @@ function renderPage(){
     if(v==='conversations' && state.openConvId) return; // don't clobber an open thread
     (PAGES[v]||(()=>{}))();
   }).catch(()=>{}); }
+  if(typeof paintApproveBanner==='function') paintApproveBanner();
 }
 
 /* ===================== ASSISTANT PAGE ===================== */
@@ -754,6 +766,29 @@ function updateNavBadge(){
 async function loadConversations(){
   const { data } = await db.from('conversations').select('*').eq('account_id', state.account.id).eq('channel','email').order('updated_at',{ascending:false});
   state.conversations = data || [];
+  state.pendingApprovals = (data||[]).filter(c=>c.status==='awaiting_staff').length;
+  if(typeof paintApproveBanner==='function') paintApproveBanner();
+}
+function paintApproveBanner(){
+  const host=document.getElementById('approve-banner'); if(!host) return;
+  const n=state.pendingApprovals||0;
+  if(!n || state.view==='conversations'){ host.innerHTML=''; return; }
+  host.innerHTML=`
+    <style>
+      .ab-wrap{display:flex;align-items:center;gap:12px;background:#fff4e5;border:1px solid #f0d9a8;border-radius:10px;padding:12px 14px;margin-bottom:14px}
+      .ab-dot{flex:0 0 auto;width:30px;height:30px;border-radius:50%;background:#9a5b00;color:#fff;display:flex;align-items:center;justify-content:center;font-weight:700;font-size:14px}
+      .ab-txt{color:#7a4a00;font-weight:600}
+      .ab-sub{color:#9a6b2b;font-weight:400;font-size:12.5px;margin-top:1px}
+      .ab-btn{margin-left:auto}
+    </style>
+    <div class="ab-wrap">
+      <div class="ab-dot">${n}</div>
+      <div><div class="ab-txt">${n===1?'1 reply is waiting for your review':n+' replies are waiting for your review'}</div>
+        <div class="ab-sub">${esc(aName())} drafted ${n===1?'it':'them'} and will not send until you approve.</div></div>
+      <button class="btn sm primary ab-btn" id="ab-go">Review now</button>
+    </div>`;
+  const go=document.getElementById('ab-go');
+  if(go) go.onclick=()=>{ state.view='conversations'; renderPage(); paintApproveBanner(); };
 }
 function convStatusBadge(st){
   if(st==='awaiting_staff') return '<span class="c-badge" style="background:#fff4e5;color:#9a5b00">Needs you</span>';
@@ -805,6 +840,8 @@ async function renderThread(){
   const { data:msgs } = await db.from('conversation_messages').select('*').eq('conversation_id',c.id).order('created_at',{ascending:true});
   state.threadMsgs = msgs||[];
   const draft = [...state.threadMsgs].reverse().find(m=>m.direction==='outbound' && m.status==='queued');
+  const lastIn = [...state.threadMsgs].reverse().find(m=>m.direction==='inbound');
+  const replyingTo = lastIn ? `<div class="th-replyto"><div class="th-role">Replying to ${esc(c.customer_name||c.customer_identifier||'the customer')}</div><div class="th-quote">${esc((lastIn.subject?('Re: '+lastIn.subject+'\n\n'):'')+(lastIn.body||''))}</div></div>` : '';
   const rowsHtml = state.threadMsgs.map(m=>{
     if(m.direction==='outbound' && m.status!=='sent') return '';
     const role = m.direction==='inbound'?'Customer':(m.actor==='staff'?'You':aName());
@@ -814,6 +851,7 @@ async function renderThread(){
   const draftHtml = draft ? `
     <div class="th-msg th-draft">
       <div class="th-role">${esc(aName())}'s draft \u2014 review before sending</div>
+      ${replyingTo}
       <textarea class="th-edit" id="th-draft">${esc(draft.body||'')}</textarea>
       <div class="th-actions"><span class="th-msgtxt" id="th-msg"></span>
         <button class="btn sm" data-act="discard">Discard</button>
@@ -822,6 +860,7 @@ async function renderThread(){
     </div>` : `
     <div class="th-msg th-out">
       <div class="th-role">Reply as ${esc(aName())}</div>
+      ${replyingTo}
       <textarea class="th-edit" id="th-draft" placeholder="Type a reply to send to ${esc(c.customer_identifier||'the customer')}\u2026"></textarea>
       <div class="th-actions"><span class="th-msgtxt" id="th-msg"></span>
         <button class="btn sm primary" data-act="sendnew">Send</button>
@@ -836,6 +875,8 @@ async function renderThread(){
     .th-edit{width:100%;min-height:140px;padding:10px 12px;border:1px solid var(--line);border-radius:8px;font:inherit;font-size:14px;line-height:1.55;background:var(--surface);color:var(--ink);resize:vertical}
     .th-actions{display:flex;gap:8px;justify-content:flex-end;margin-top:8px;align-items:center}
     .th-msgtxt{font-size:12.5px;margin-right:auto}
+    .th-replyto{border-left:3px solid #d9b877;background:#fffdf7;padding:8px 12px;border-radius:0 8px 8px 0;margin:4px 0 10px}
+    .th-quote{white-space:pre-wrap;color:#6b5a38;font-size:13px;line-height:1.5;max-height:160px;overflow:auto;margin-top:3px}
   </style>
   <div class="page">
     <div class="page-head"><button class="btn sm" id="th-back">\u2190 Inbox</button>
@@ -2174,6 +2215,365 @@ async function bootImpersonation(){
   setTimeout(()=>{ if(!gotSession && !impLocked){ document.getElementById("root").innerHTML=`<div class="booting">No tenant session received. Reopen from the admin portal.</div>`; } }, 15000);
 }
 
+/* ===================== ONBOARDING WIZARD ===================== */
+const WZ_INDUSTRIES=[["property_management","Property management"],["salon","Salon, hair or nails"],["restaurant","Restaurant"],["contractor","Contractor or trades"],["real_estate","Real estate"],["professional","Professional services"],["other","Something else"]];
+const WZ_TITLES=["Welcome","Your business","Your assistant","Hours","Knowledge","Appointments","Calls","Notifications","Go live"];
+const WZ_TZ=[["America/New_York","Eastern"],["America/Chicago","Central"],["America/Denver","Mountain"],["America/Phoenix","Arizona"],["America/Los_Angeles","Pacific"],["America/Anchorage","Alaska"],["Pacific/Honolulu","Hawaii"]];
+function obState(){ return (state.account&&state.account.settings&&state.account.settings.onboarding)||null; }
+function needsOnboarding(){
+  const ob=obState();
+  if(ob && typeof ob.completed==='boolean') return ob.completed===false;
+  // No flag yet: only a brand-new account with nothing configured starts the wizard.
+  return !state.assistantId && (!state.types||!state.types.length) && (!state.blocks||!state.blocks.length);
+}
+async function wzPersist(patch){
+  const cur=(state.account.settings&&state.account.settings.onboarding)||{};
+  const onboarding=Object.assign({started_at:cur.started_at||new Date().toISOString()}, cur, {step:state.wizStep||0, completed:(patch&&patch.completed)||false}, patch||{});
+  const settings=Object.assign({}, state.account.settings||{}, {onboarding});
+  const { error }=await db.from('accounts').update({settings}).eq('id',state.account.id);
+  if(!error) state.account.settings=settings;
+  return !error;
+}
+function wzShell(body,opts){
+  opts=opts||{};
+  const step=state.wizStep||0, total=8;
+  const dots=WZ_TITLES.map((t,i)=>`<span class="wz-dot ${i<step?'done':''} ${i===step?'cur':''}"></span>`).join("");
+  const footer = step===0
+    ? `<button class="btn primary" id="wz-next">Get started</button>`
+    : `<div class="wz-foot">
+         <button class="btn sm" id="wz-back">Back</button>
+         <div style="margin-left:auto;display:flex;gap:8px;align-items:center">
+           ${opts.canSkip?`<button class="btn sm ghost" id="wz-skip">Skip for now</button>`:''}
+           <button class="btn primary" id="wz-next">${esc(opts.nextLabel||'Save and continue')}</button>
+         </div>
+       </div>`;
+  return `
+  <style>
+    .wz-wrap{max-width:620px;margin:0 auto;padding:40px 20px 80px}
+    .wz-top{display:flex;align-items:center;gap:10px;margin-bottom:22px}
+    .wz-mark{width:34px;height:34px;border-radius:9px;background:var(--accent,#2f6f4f);color:#fff;display:flex;align-items:center;justify-content:center;font-weight:700}
+    .wz-dots{display:flex;gap:6px;margin:0 0 6px}
+    .wz-dot{width:22px;height:4px;border-radius:3px;background:var(--line,#e4e7ea)}
+    .wz-dot.done{background:var(--accent,#2f6f4f)} .wz-dot.cur{background:var(--accent,#2f6f4f);opacity:.55}
+    .wz-step{font-size:12.5px;color:var(--muted);font-weight:600;text-transform:uppercase;letter-spacing:.05em}
+    .wz-card{background:var(--surface,#fff);border:1px solid var(--line,#e4e7ea);border-radius:14px;padding:26px}
+    .wz-card h1{font-size:22px;margin:4px 0 6px} .wz-card p.lede{color:var(--muted);margin:0 0 18px;line-height:1.5}
+    .wz-field{margin-bottom:16px} .wz-field label{display:block;font-weight:600;font-size:13.5px;margin-bottom:6px}
+    .wz-field .hint{font-weight:400;color:var(--muted);font-size:12.5px}
+    .wz-inp,.wz-sel,.wz-ta{width:100%;padding:11px 12px;border:1px solid var(--line,#e4e7ea);border-radius:9px;font:inherit;font-size:14.5px;background:var(--surface,#fff);color:var(--ink,#111)}
+    .wz-ta{min-height:92px;resize:vertical}
+    .wz-foot{display:flex;align-items:center;margin-top:24px}
+    .wz-choices{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+    .wz-choice{border:1px solid var(--line,#e4e7ea);border-radius:10px;padding:13px 14px;cursor:pointer;font-weight:600;font-size:14px}
+    .wz-choice.sel{border-color:var(--accent,#2f6f4f);box-shadow:inset 0 0 0 1px var(--accent,#2f6f4f);background:#f3f9f5}
+    .wz-days{display:flex;gap:6px;flex-wrap:wrap} .wz-day{border:1px solid var(--line,#e4e7ea);border-radius:8px;padding:8px 0;width:42px;text-align:center;cursor:pointer;font-size:12.5px;font-weight:600}
+    .wz-day.on{border-color:var(--accent,#2f6f4f);background:#f3f9f5;color:var(--accent,#2f6f4f)}
+    .wz-row2{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+    .wz-msg{font-size:12.5px;margin-top:8px;min-height:16px}
+    .wz-skiplink{display:block;text-align:center;margin-top:16px;color:var(--muted);font-size:12.5px;background:none;border:0;cursor:pointer;width:100%}
+    .btn.ghost{background:transparent}
+  </style>
+  <div class="wz-wrap">
+    <div class="wz-top"><div class="wz-mark">${esc(DEFAULT_NAME[0])}</div><div><div class="wz-dots">${dots}</div><div class="wz-step">${step===0?'Welcome':('Step '+step+' of '+total+' · '+esc(WZ_TITLES[step]))}</div></div></div>
+    <div class="wz-card">${body}</div>
+    ${footer?`<div>${footer}</div>`:''}
+    ${step>0?`<button class="wz-skiplink" id="wz-exit">Save and finish later</button>`:''}
+  </div>`;
+}
+function wzBindNav(saveFn,opts){
+  opts=opts||{};
+  const next=$("#wz-next"); if(next) next.onclick=async()=>{
+    next.disabled=true; const o=next.textContent; next.textContent="Saving…";
+    let ok=true; if(saveFn){ ok=await saveFn(); }
+    if(!ok){ next.disabled=false; next.textContent=o; return; }
+    state.wizStep=(state.wizStep||0)+1; await wzPersist({}); renderWizard();
+  };
+  const back=$("#wz-back"); if(back) back.onclick=async()=>{ state.wizStep=Math.max(0,(state.wizStep||0)-1); await wzPersist({}); renderWizard(); };
+  const skip=$("#wz-skip"); if(skip) skip.onclick=async()=>{ state.wizStep=(state.wizStep||0)+1; await wzPersist({}); renderWizard(); };
+  const exit=$("#wz-exit"); if(exit) exit.onclick=async()=>{ await wzPersist({}); renderApp(); };
+}
+function renderWizard(){
+  if(typeof teardownRealtime==='function') teardownRealtime();
+  if(typeof state.wizStep!=='number'){ const ob=obState(); state.wizStep=(ob&&typeof ob.step==='number')?ob.step:0; }
+  if(!state.wz){ state.wz={
+    industry: state.account.industry||'',
+    company: state.account.company||'',
+    tz: state.account.timezone||'America/Chicago',
+    owner: (state.owner&&state.owner.name)||'',
+    phone: (state.owner&&state.owner.phone)||'',
+    aname: (state.assistant&&state.assistant.name)||DEFAULT_NAME,
+    glabel: (state.assistant&&state.assistant.greetingLabel)||(state.account.company||'the office'),
+    voice: (state.assistant&&state.assistant.voice)||'warm-female',
+    openq: (state.assistant&&state.assistant.routing&&state.assistant.routing.opening_question)||'',
+    days: [false,true,true,true,true,true,false],
+    hstart:'09:00', hend:'17:00',
+    xfer_on:false, xfer_num:'',
+    alert: (state.account.settings&&state.account.settings.alert_email)||(state.owner&&state.owner.email)||'',
+    kb_done:false, kb_count:0
+  }; }
+  const step=state.wizStep||0;
+  (WZ_RENDER[step]||WZ_RENDER[0])();
+}
+const WZ_RENDER={
+  0:function(){
+    const g=state.wz;
+    document.getElementById("root").innerHTML=wzShell(`
+      <h1>Let's set up ${esc(DEFAULT_NAME)}.</h1>
+      <p class="lede">${esc(DEFAULT_NAME)} is your AI receptionist. In a few short steps you'll tell her about your business, how to answer, and when you're available. You can stop any time and pick up where you left off. Your phone number stays private until you finish and go live.</p>
+      <div class="wz-field"><label>What kind of business is this? <span class="hint">helps ${esc(DEFAULT_NAME)} start with the right setup</span></label>
+      <div class="wz-choices" id="wz-ind">${WZ_INDUSTRIES.map(x=>`<div class="wz-choice ${g.industry===x[0]?'sel':''}" data-v="${x[0]}">${esc(x[1])}</div>`).join("")}</div></div>
+    `,{});
+    document.querySelectorAll('#wz-ind .wz-choice').forEach(el=>el.onclick=()=>{ state.wz.industry=el.dataset.v; document.querySelectorAll('#wz-ind .wz-choice').forEach(c=>c.classList.toggle('sel',c===el)); });
+    wzBindNav(null,{});
+  },
+  1:function(){
+    const g=state.wz;
+    document.getElementById("root").innerHTML=wzShell(`
+      <h1>Your business</h1>
+      <p class="lede">The basics ${esc(DEFAULT_NAME)} needs to represent you.</p>
+      <div class="wz-field"><label>Business name</label><input class="wz-inp" id="wz-company" value="${esc(g.company)}" placeholder="Acme Property Management"></div>
+      <div class="wz-row2">
+        <div class="wz-field"><label>Your name</label><input class="wz-inp" id="wz-owner" value="${esc(g.owner)}" placeholder="Jordan Lee"></div>
+        <div class="wz-field"><label>Your mobile <span class="hint">optional</span></label><input class="wz-inp" id="wz-phone" value="${esc(g.phone)}" placeholder="+18175551234"></div>
+      </div>
+      <div class="wz-field"><label>Time zone</label><select class="wz-sel" id="wz-tz">${WZ_TZ.map(t=>`<option value="${t[0]}" ${g.tz===t[0]?'selected':''}>${esc(t[1])}</option>`).join("")}</select></div>
+      <div class="wz-msg" id="wz-m"></div>
+    `,{});
+    wzBindNav(async()=>{
+      const company=$("#wz-company").value.trim();
+      if(!company){ $("#wz-m").style.color='var(--danger)'; $("#wz-m").textContent='Please enter your business name.'; return false; }
+      state.wz.company=company; state.wz.owner=$("#wz-owner").value.trim(); state.wz.phone=$("#wz-phone").value.trim(); state.wz.tz=$("#wz-tz").value;
+      if(!state.wz.glabel || state.wz.glabel==='the office') state.wz.glabel=company;
+      const settings=Object.assign({}, state.account.settings||{}, {timezone:state.wz.tz});
+      const { error:e1 }=await db.from('accounts').update({ name:company, industry:state.wz.industry||null, settings }).eq('id',state.account.id);
+      if(!e1){ state.account.company=company; state.account.industry=state.wz.industry||null; state.account.settings=settings; state.account.timezone=state.wz.tz; }
+      if(state.owner&&state.owner.id){ await db.from('users').update({ full_name:state.wz.owner||null, phone:state.wz.phone||null }).eq('id',state.owner.id); if(state.wz.owner) state.owner.name=state.wz.owner; if(state.wz.phone!==undefined) state.owner.phone=state.wz.phone; }
+      if(e1){ $("#wz-m").style.color='var(--danger)'; $("#wz-m").textContent='Could not save. Please try again.'; return false; }
+      return true;
+    },{});
+  },
+  2:function(){
+    const g=state.wz;
+    document.getElementById("root").innerHTML=wzShell(`
+      <h1>Your assistant</h1>
+      <p class="lede">How ${esc(DEFAULT_NAME)} introduces herself and sounds on the phone.</p>
+      <div class="wz-row2">
+        <div class="wz-field"><label>Assistant's name</label><input class="wz-inp" id="wz-aname" value="${esc(g.aname)}" placeholder="${esc(DEFAULT_NAME)}"></div>
+        <div class="wz-field"><label>Voice</label><select class="wz-sel" id="wz-voice">${VOICES.map(v=>`<option value="${v[0]}" ${g.voice===v[0]?'selected':''}>${esc(v[1])}</option>`).join("")}</select></div>
+      </div>
+      <div class="wz-field"><label>Greeting <span class="hint">she says "Hello, this is NAME with ___"</span></label><input class="wz-inp" id="wz-glabel" value="${esc(g.glabel)}" placeholder="${esc(g.company||'your business')}"></div>
+      <div class="wz-field"><label>Opening question <span class="hint">optional, how she invites the caller to talk</span></label><input class="wz-inp" id="wz-openq" value="${esc(g.openq)}" placeholder="How can I help you today?"></div>
+      <div class="wz-msg" id="wz-m"></div>
+    `,{});
+    wzBindNav(async()=>{
+      const aname=$("#wz-aname").value.trim()||DEFAULT_NAME;
+      state.wz.aname=aname; state.wz.voice=$("#wz-voice").value; state.wz.glabel=$("#wz-glabel").value.trim()||state.wz.company; state.wz.openq=$("#wz-openq").value.trim();
+      const routing=Object.assign({}, (state.assistant&&state.assistant.routing)||{}, { recording_notice:true, opening_question:state.wz.openq });
+      const row={ assistant_name:aname, greeting_label:state.wz.glabel, voice_id:state.wz.voice, languages:['en'], is_active:true, routing };
+      let error;
+      if(state.assistantId){ ({error}=await db.from('assistants').update(row).eq('id',state.assistantId)); }
+      else { row.account_id=state.account.id; const r=await db.from('assistants').insert(row).select().single(); error=r.error; if(r.data){ state.assistantId=r.data.id; } }
+      if(!error){ state.assistant=Object.assign({}, state.assistant||{}, { name:aname, greetingLabel:state.wz.glabel, voice:state.wz.voice, languages:['en'], routing }); }
+      else { $("#wz-m").style.color='var(--danger)'; $("#wz-m").textContent='Could not save. Please try again.'; return false; }
+      return true;
+    },{});
+  },
+  3:function(){
+    const g=state.wz;
+    document.getElementById("root").innerHTML=wzShell(`
+      <h1>Hours</h1>
+      <p class="lede">The days and times you're open. ${esc(DEFAULT_NAME)} answers around the clock, but she only books and transfers within these. You can fine-tune each day later under Schedule.</p>
+      <div class="wz-field"><label>Open days</label><div class="wz-days" id="wz-days">${DAYS.map((d,i)=>`<div class="wz-day ${g.days[i]?'on':''}" data-i="${i}">${d.slice(0,3)}</div>`).join("")}</div></div>
+      <div class="wz-row2">
+        <div class="wz-field"><label>Opens</label><input class="wz-inp" type="time" id="wz-hstart" value="${g.hstart}"></div>
+        <div class="wz-field"><label>Closes</label><input class="wz-inp" type="time" id="wz-hend" value="${g.hend}"></div>
+      </div>
+      <div class="wz-msg" id="wz-m"></div>
+    `,{canSkip:true});
+    document.querySelectorAll('#wz-days .wz-day').forEach(el=>el.onclick=()=>{ const i=+el.dataset.i; state.wz.days[i]=!state.wz.days[i]; el.classList.toggle('on',state.wz.days[i]); });
+    wzBindNav(async()=>{
+      state.wz.hstart=$("#wz-hstart").value||'09:00'; state.wz.hend=$("#wz-hend").value||'17:00';
+      if(state.wz.hend<=state.wz.hstart){ $("#wz-m").style.color='var(--danger)'; $("#wz-m").textContent='Closing time must be after opening time.'; return false; }
+      if(!state.owner||!state.owner.id) return true;
+      await db.from('availability_rules').delete().eq('user_id', state.owner.id);
+      const rows=[];
+      state.wz.days.forEach((on,i)=>{ if(on){
+        rows.push({account_id:state.account.id,user_id:state.owner.id,rule_type:'working',day_of_week:i,start_time:state.wz.hstart,end_time:state.wz.hend});
+        rows.push({account_id:state.account.id,user_id:state.owner.id,rule_type:'bookable',appointment_type_id:null,day_of_week:i,start_time:state.wz.hstart,end_time:state.wz.hend});
+      }});
+      if(rows.length){ const { error }=await db.from('availability_rules').insert(rows); if(error){ $("#wz-m").style.color='var(--danger)'; $("#wz-m").textContent='Could not save hours. Please try again.'; return false; } }
+      return true;
+    },{});
+  },
+  4:function(){
+    const g=state.wz;
+    document.getElementById("root").innerHTML=wzShell(`
+      <h1>Knowledge</h1>
+      <p class="lede">Give ${esc(DEFAULT_NAME)} something to answer from. Paste your website and she'll read your main pages and turn them into answers for you to review. You can also add documents and type answers later under Knowledge.</p>
+      <div class="wz-field"><label>Website address <span class="hint">optional</span></label><input class="wz-inp" id="wz-kburl" placeholder="https://yourbusiness.com"></div>
+      <button class="btn sm" id="wz-kbgo">Read my website</button>
+      <div class="wz-msg" id="wz-m">${g.kb_done?('Imported '+g.kb_count+' items. Review and approve them under Knowledge after setup.'):''}</div>
+    `,{canSkip:true, nextLabel:'Continue'});
+    $("#wz-kbgo").onclick=async()=>{
+      const url=$("#wz-kburl").value.trim(); const m=$("#wz-m"); const b=$("#wz-kbgo");
+      if(!url){ m.style.color='var(--danger)'; m.textContent='Enter your website address, or skip this step.'; return; }
+      b.disabled=true; const o=b.textContent; b.textContent='Reading…'; m.style.color='var(--muted)'; m.textContent='Reading your website, this can take a moment…';
+      try{
+        const { data, error }=await db.functions.invoke("knowledge-ingest-website",{ body:{ url } });
+        if(error||(data&&data.ok===false)) throw new Error((data&&data.error)||'failed');
+        const n=(data&&(data.count||data.entries||data.created))||0;
+        state.wz.kb_done=true; state.wz.kb_count=n;
+        m.style.color='var(--muted)'; m.textContent=(n?('Imported '+n+' items. '):'Website read. ')+'Review and approve them under Knowledge after setup.';
+      }catch(e){ m.style.color='var(--danger)'; m.textContent='Could not read that site. You can skip this and add knowledge later.'; }
+      b.disabled=false; b.textContent=o;
+    };
+    wzBindNav(async()=>true,{});
+  },
+  5:function(){
+    const g=state.wz;
+    const list=(state.types||[]).map(t=>`<div style="font-size:13.5px;padding:6px 0;border-bottom:1px solid var(--line,#eee)">${esc(t.name)} · ${t.dur} min</div>`).join("");
+    document.getElementById("root").innerHTML=wzShell(`
+      <h1>Appointments</h1>
+      <p class="lede">What can people book? Add the common ones. Skip if ${esc(DEFAULT_NAME)} won't be booking for you.</p>
+      ${list?`<div style="margin-bottom:14px">${list}</div>`:''}
+      <div class="wz-row2">
+        <div class="wz-field"><label>Name</label><input class="wz-inp" id="wz-tname" placeholder="Consultation"></div>
+        <div class="wz-field"><label>Length</label><select class="wz-sel" id="wz-tdur"><option>15</option><option selected>30</option><option>45</option><option>60</option></select></div>
+      </div>
+      <div class="wz-field"><label>Where</label><select class="wz-sel" id="wz-tmode"><option value="in_person">In person</option><option value="phone">Phone</option></select></div>
+      <button class="btn sm" id="wz-taddbtn">+ Add this type</button>
+      <div class="wz-msg" id="wz-m"></div>
+    `,{canSkip:true, nextLabel:'Continue'});
+    $("#wz-taddbtn").onclick=async()=>{
+      const name=$("#wz-tname").value.trim(); const m=$("#wz-m");
+      if(!name){ m.style.color='var(--danger)'; m.textContent='Give the appointment a name first.'; return; }
+      const row={ account_id:state.account.id, name, mode:$("#wz-tmode").value, default_duration_min:+$("#wz-tdur").value||30, buffer_before_min:0, buffer_after_min:0, requires_travel:false };
+      const { data, error }=await db.from('appointment_types').insert(row).select().single();
+      if(!error&&data){ state.types=state.types||[]; state.types.push({id:data.id,name:data.name,mode:data.mode,dur:data.default_duration_min,before:0,after:0,travel:false}); WZ_RENDER[5](); }
+      else { m.style.color='var(--danger)'; m.textContent='Could not add that. Please try again.'; }
+    };
+    wzBindNav(async()=>true,{});
+  },
+  6:function(){
+    const g=state.wz;
+    document.getElementById("root").innerHTML=wzShell(`
+      <h1>Calls</h1>
+      <p class="lede">When someone needs a person, who should ${esc(DEFAULT_NAME)} reach? Leave this off and she'll take a message instead.</p>
+      <div class="wz-field"><label><input type="checkbox" id="wz-xon" ${g.xfer_on?'checked':''}> Let ${esc(DEFAULT_NAME)} transfer live calls</label></div>
+      <div class="wz-field"><label>Transfer to this number</label><input class="wz-inp" id="wz-xnum" value="${esc(g.xfer_num)}" placeholder="+18175551234"></div>
+      <div class="wz-msg" id="wz-m"></div>
+    `,{canSkip:true});
+    wzBindNav(async()=>{
+      const on=$("#wz-xon").checked; const num=($("#wz-xnum").value||'').trim().replace(/[\s()\-.]/g,"");
+      state.wz.xfer_on=on; state.wz.xfer_num=num;
+      if((on||num) && !/^\+[1-9]\d{1,14}$/.test(num)){ $("#wz-m").style.color='var(--danger)'; $("#wz-m").textContent='Enter the number in full format, like +18175551234, or turn transfer off.'; return false; }
+      if(!state.assistantId) return true;
+      const routing=Object.assign({}, (state.assistant&&state.assistant.routing)||{}); routing.transfer=Object.assign({}, routing.transfer||{}, {enabled:on, number:num});
+      const { error }=await db.from('assistants').update({routing}).eq('id',state.assistantId);
+      if(error){ $("#wz-m").style.color='var(--danger)'; $("#wz-m").textContent='Could not save. Please try again.'; return false; }
+      if(state.assistant) state.assistant.routing=routing;
+      return true;
+    },{});
+  },
+  7:function(){
+    const g=state.wz;
+    document.getElementById("root").innerHTML=wzShell(`
+      <h1>Notifications</h1>
+      <p class="lede">Where should ${esc(DEFAULT_NAME)} send messages, missed calls, and bookings so you don't miss anything?</p>
+      <div class="wz-field"><label>Your email</label><input class="wz-inp" id="wz-alert" value="${esc(g.alert)}" placeholder="you@yourbusiness.com"></div>
+      <div class="wz-msg" id="wz-m"></div>
+    `,{});
+    wzBindNav(async()=>{
+      const email=$("#wz-alert").value.trim();
+      if(!email || !/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)){ $("#wz-m").style.color='var(--danger)'; $("#wz-m").textContent='Please enter a valid email so you get your messages.'; return false; }
+      state.wz.alert=email;
+      const settings=Object.assign({}, state.account.settings||{}, {alert_email:email});
+      const { error }=await db.from('accounts').update({settings}).eq('id',state.account.id);
+      if(error){ $("#wz-m").style.color='var(--danger)'; $("#wz-m").textContent='Could not save. Please try again.'; return false; }
+      state.account.settings=settings;
+      return true;
+    },{});
+  },
+  8:function(){
+    const g=state.wz;
+    const missing=[];
+    if(!state.account.company) missing.push('business name');
+    if(!state.assistantId) missing.push('assistant');
+    if(!(state.account.settings&&state.account.settings.alert_email)) missing.push('notification email');
+    document.getElementById("root").innerHTML=wzShell(`
+      <h1>Ready to go live</h1>
+      <p class="lede">Here's what ${esc(DEFAULT_NAME)} knows. When you go live she starts answering, and we create your dedicated email address so customers can reach her by email too.</p>
+      <div style="font-size:14px;line-height:1.9;margin-bottom:6px">
+        <div><b>Business:</b> ${esc(state.account.company||'not set')}</div>
+        <div><b>Assistant:</b> ${esc(g.aname)} (${esc((VOICES.find(v=>v[0]===g.voice)||['','voice'])[1])})</div>
+        <div><b>Open days:</b> ${esc(DAYS.filter((d,i)=>state.wz.days[i]).map(d=>d.slice(0,3)).join(', ')||'set later')} ${state.wz.days.some(Boolean)?(esc(g.hstart)+' to '+esc(g.hend)):''}</div>
+        <div><b>Transfer:</b> ${g.xfer_on&&g.xfer_num?esc(g.xfer_num):'takes a message'}</div>
+        <div><b>Notifications:</b> ${esc((state.account.settings&&state.account.settings.alert_email)||'not set')}</div>
+        <div><b>Appointments:</b> ${(state.types&&state.types.length)?esc(state.types.map(t=>t.name).join(', ')):'none yet'}</div>
+      </div>
+      ${missing.length?`<div class="wz-msg" style="color:var(--danger)">Before going live, please add: ${esc(missing.join(', '))}.</div>`:`<div class="wz-msg" id="wz-m"></div>`}
+    `,{nextLabel: missing.length?'Fix above':'Go live'});
+    wzBindNav(async()=>{
+      if(missing.length){ // jump back to the earliest missing step
+        state.wizStep = !state.account.company?1:(!state.assistantId?2:7); await wzPersist({}); renderWizard(); return false;
+      }
+      const m=$("#wz-m"); if(m){ m.style.color='var(--muted)'; m.textContent='Creating your email address and going live…'; }
+      let address='';
+      try{ const { data }=await db.functions.invoke("provision-email",{ body:{} }); if(data&&data.ok&&data.address){ address=data.address; state.account.settings=Object.assign({}, state.account.settings||{}, {email_address:data.address, email_reply_from:data.reply_from}); } }catch(e){ /* non-fatal, can retry from settings */ }
+      // Apply the industry preset (persona defaults, appointment types, starter FAQ drafts). Idempotent, no-op if no preset.
+      try{ await db.functions.invoke("apply-preset",{ body:{ industry: state.wz.industry||state.account.industry||'' } }); }catch(e){ /* non-fatal */ }
+      await wzPersist({ completed:true, completed_at:new Date().toISOString(), email_address:address, tutorial_done:false });
+      state.wizStep=0; state.wz=null;
+      renderApp();
+      wzStartTutorial(address);
+      return false; // we already moved to the app; do NOT let wzBindNav advance/re-render the wizard
+    },{});
+  }
+};
+function wzStartTutorial(address){
+  const stops=[
+    {t:"You're live.", b:(address?("Customers can now call your number and email "+address+". ") : "Customers can now reach "+aName()+". ")+aName()+" answers and handles the routine, and brings you in when it matters."},
+    {t:"Inbox", b:"Email conversations show up under Inbox. "+aName()+" drafts replies and holds them for your approval, so nothing goes out without you."},
+    {t:"Knowledge", b:"Everything "+aName()+" says comes from Knowledge. Review what we imported from your website, add documents, or type answers. Approve an item before she uses it."},
+    {t:"Messages and Calls", b:"Missed calls, messages, and booking requests land here and get emailed to you, so you can follow up fast."},
+    {t:"Try her now", b:"Call your own number and say hello. That's the fastest way to hear how "+aName()+" sounds to your customers."}
+  ];
+  let i=0;
+  const host=document.createElement('div'); host.id='wz-tour'; document.body.appendChild(host);
+  const paint=()=>{
+    const s=stops[i];
+    host.innerHTML=`
+    <style>
+      #wz-tour{position:fixed;inset:0;background:rgba(17,24,20,.55);display:flex;align-items:center;justify-content:center;z-index:9999}
+      .tour-card{background:#fff;color:#111;max-width:420px;width:calc(100% - 40px);border-radius:16px;padding:24px}
+      .tour-step{font-size:12px;color:#789;font-weight:600;text-transform:uppercase;letter-spacing:.05em}
+      .tour-card h3{font-size:19px;margin:6px 0 8px} .tour-card p{line-height:1.55;color:#445;margin:0 0 18px}
+      .tour-foot{display:flex;align-items:center;gap:8px} .tour-dots{display:flex;gap:5px;margin-right:auto}
+      .tour-d{width:7px;height:7px;border-radius:50%;background:#dfe5e2} .tour-d.on{background:#2f6f4f}
+      .tour-card .btn{border:0;border-radius:9px;padding:9px 16px;font:inherit;font-weight:600;cursor:pointer}
+      .btn-skip{background:transparent;color:#789} .btn-go{background:#2f6f4f;color:#fff}
+    </style>
+    <div class="tour-card">
+      <div class="tour-step">Getting started</div>
+      <h3>${esc(s.t)}</h3><p>${esc(s.b)}</p>
+      <div class="tour-foot"><div class="tour-dots">${stops.map((_,j)=>`<span class="tour-d ${j===i?'on':''}"></span>`).join("")}</div>
+        <button class="btn btn-skip" id="tour-skip">${i===stops.length-1?'Close':'Skip'}</button>
+        <button class="btn btn-go" id="tour-next">${i===stops.length-1?'Done':'Next'}</button></div>
+    </div>`;
+    const close=async()=>{ host.remove(); try{ await wzMarkTutorialDone(); }catch(_e){} };
+    $("#tour-skip").onclick=close;
+    $("#tour-next").onclick=()=>{ if(i>=stops.length-1){ close(); } else { i++; paint(); } };
+  };
+  paint();
+}
+async function wzMarkTutorialDone(){
+  const cur=(state.account.settings&&state.account.settings.onboarding)||{};
+  const onboarding=Object.assign({}, cur, {tutorial_done:true});
+  const settings=Object.assign({}, state.account.settings||{}, {onboarding});
+  await db.from('accounts').update({settings}).eq('id',state.account.id);
+  state.account.settings=settings;
+}
+
 async function boot(){
   if(IMP){ return bootImpersonation(); }
   if(pendingRecovery){ state.authMode="reset"; renderAuth(); return; }
@@ -2182,7 +2582,7 @@ async function boot(){
   if(!session){ renderAuth(); return; }
   let ok = await loadData();
   if(!ok){ await new Promise(r=>setTimeout(r,1200)); ok = await loadData(); } // give the signup trigger a moment
-  if(ok) renderApp(); else renderAuth();
+  if(ok){ if(needsOnboarding()){ renderWizard(); } else { renderApp(); } } else { renderAuth(); }
 }
 db.auth.onAuthStateChange((event)=>{ if(event==='PASSWORD_RECOVERY'){ pendingRecovery=true; state.authMode='reset'; renderAuth(); } });
 if('speechSynthesis' in window){ window.speechSynthesis.getVoices(); window.speechSynthesis.onvoiceschanged=()=>{}; }

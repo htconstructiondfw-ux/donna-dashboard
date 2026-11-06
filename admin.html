@@ -261,8 +261,102 @@ function renderDash(){
         <tbody>${rows}</tbody>
       </table>`:`<div class="empty">No tenants yet.</div>`}
     </div>
+    <h1 class="page" style="margin-top:30px">Needs review</h1>
+    <div class="lede">Interactions worth a look across all tenants, last 30 days. Click a tenant to open it.</div>
+    <div id="review-section" class="tbl"><div class="empty">Loading…</div></div>
+    <h1 class="page" style="margin-top:30px">Invite codes</h1>
+    <div class="lede">Closed beta: only people with a code can sign up. Create one for each person you invite.</div>
+    <div id="invite-section" class="tbl">
+      <style>
+        .iv-form{display:flex;gap:10px;flex-wrap:wrap;align-items:flex-end;margin-bottom:14px}
+        .iv-form label{display:block;font-size:11.5px;color:var(--muted);margin-bottom:4px;font-weight:600}
+        .iv-inp{padding:9px 11px;border:1px solid var(--line);border-radius:8px;font:inherit;font-size:14px;background:var(--surface,#fff);color:var(--ink,#111)}
+        .iv-code{font-variant-numeric:tabular-nums;font-weight:700;letter-spacing:.03em}
+        .iv-copy,.iv-revoke{border:1px solid var(--line);background:var(--surface,#fff);border-radius:7px;padding:5px 10px;font:inherit;font-size:12px;cursor:pointer}
+        .iv-used{color:var(--muted);font-size:12px}
+      </style>
+      <div class="iv-form">
+        <div><label>Label (who it is for)</label><input class="iv-inp" id="iv-label" placeholder="e.g. Ian at Goodwin" style="min-width:220px"></div>
+        <div><label>Uses</label><input class="iv-inp" id="iv-uses" type="number" min="1" value="1" style="width:84px"></div>
+        <button class="btn" id="iv-create">Create code</button>
+        <span class="sub" id="iv-msg"></span>
+      </div>
+      <div id="iv-list"><div class="empty">Loading…</div></div>
+    </div>
   </div>`;
   document.querySelectorAll("tbody tr[data-id]").forEach(tr=>tr.onclick=()=>openTenant(tr.dataset.id));
+  loadReviewQueue();
+  const ivc=document.getElementById("iv-create"); if(ivc) ivc.onclick=createInvite;
+  loadInvites();
+}
+async function createInvite(){
+  const btn=document.getElementById("iv-create"), msg=document.getElementById("iv-msg");
+  const label=(document.getElementById("iv-label").value||"").trim();
+  const uses=Math.max(1, parseInt(document.getElementById("iv-uses").value,10)||1);
+  btn.disabled=true; const o=btn.textContent; btn.textContent="Creating…"; if(msg){msg.style.color="var(--muted)";msg.textContent="";}
+  let r; try{ r=await api("create_invite",{label,max_uses:uses}); }catch(e){ r=null; }
+  btn.disabled=false; btn.textContent=o;
+  if(!r||r.error||!r.data||!r.data.ok){ if(msg){msg.style.color="var(--danger)";msg.textContent=(r&&r.data&&r.data.error)||"Could not create code.";} return; }
+  document.getElementById("iv-label").value="";
+  if(msg){ msg.style.color="var(--ok)"; msg.textContent="Created "+r.data.code; }
+  loadInvites();
+}
+async function loadInvites(){
+  const host=document.getElementById("iv-list"); if(!host) return;
+  let r; try{ r=await api("list_invites"); }catch(e){ host.innerHTML=`<div class="empty">Could not load invite codes.</div>`; return; }
+  if(!r||r.error||!r.data||!r.data.ok){ host.innerHTML=`<div class="empty">${esc((r&&r.data&&r.data.error)||"Could not load invite codes.")}</div>`; return; }
+  paintInvites(r.data.invites||[]);
+}
+function inviteStatus(iv){
+  if(iv.active!==true) return '<span class="pill paused">revoked/used</span>';
+  if(iv.expires_at && new Date(iv.expires_at).getTime()<Date.now()) return '<span class="pill cancelled">expired</span>';
+  return '<span class="pill active">available</span>';
+}
+function paintInvites(list){
+  const host=document.getElementById("iv-list"); if(!host) return;
+  if(!list.length){ host.innerHTML=`<div class="empty">No invite codes yet. Create one above to invite your first tester.</div>`; return; }
+  host.innerHTML=`<table><thead><tr><th>Code</th><th>Label</th><th>Used</th><th>Status</th><th></th></tr></thead><tbody>${
+    list.map(iv=>`<tr>
+      <td><span class="iv-code">${esc(iv.code)}</span></td>
+      <td>${esc(iv.label||"—")}</td>
+      <td class="iv-used">${iv.used_count||0} / ${iv.max_uses||1}${iv.last_used_email?`<div class="sub">${esc(iv.last_used_email)}</div>`:''}</td>
+      <td>${inviteStatus(iv)}</td>
+      <td style="text-align:right;white-space:nowrap">
+        <button class="iv-copy" data-copy="${esc(iv.code)}">Copy</button>
+        ${iv.active===true?`<button class="iv-revoke" data-revoke="${esc(iv.code)}">Revoke</button>`:''}
+      </td>
+    </tr>`).join("")
+  }</tbody></table>`;
+  host.querySelectorAll("[data-copy]").forEach(b=>b.onclick=()=>{ try{ navigator.clipboard.writeText(b.dataset.copy); b.textContent="Copied"; setTimeout(()=>b.textContent="Copy",1200); }catch(e){} });
+  host.querySelectorAll("[data-revoke]").forEach(b=>b.onclick=async()=>{ b.disabled=true; try{ await api("revoke_invite",{code:b.dataset.revoke}); }catch(e){} loadInvites(); });
+}
+const RQ_LABEL={knowledge_gap:["Knowledge gap","warn"],failed_call:["Failed call","cancelled"],abrupt_call:["Abrupt call","starter"],no_action_call:["No action","starter"],emergency_msg:["Emergency","cancelled"],repeat_caller:["Repeat caller","pro"]};
+async function loadReviewQueue(){
+  const host=document.getElementById("review-section"); if(!host) return;
+  let r; try{ r=await api("review_queue",{days:30}); }catch(e){ host.innerHTML=`<div class="empty">Could not load the review queue.</div>`; return; }
+  if(!r || r.error || !r.data || !r.data.ok){ host.innerHTML=`<div class="empty">${esc((r&&r.data&&r.data.error)||"Could not load the review queue.")}</div>`; return; }
+  paintReviewQueue(r.data.items||[]);
+}
+function paintReviewQueue(items){
+  const host=document.getElementById("review-section"); if(!host) return;
+  if(!items.length){ host.innerHTML=`<div class="empty">Nothing needs review. Donna is handling things cleanly.</div>`; return; }
+  // group by account, preserving the API's weight/recency order
+  const groups=[]; const byId={};
+  items.forEach(it=>{ let g=byId[it.account_id]; if(!g){ g={id:it.account_id,name:it.account,items:[]}; byId[it.account_id]=g; groups.push(g); } g.items.push(it); });
+  host.innerHTML=`
+  <style>
+    .rq-acct{border:1px solid var(--line);border-radius:12px;padding:0;margin-bottom:12px;overflow:hidden}
+    .rq-head{display:flex;align-items:center;gap:10px;padding:12px 14px;background:var(--line-2,#f4f6f8);cursor:pointer}
+    .rq-head .co{font-weight:700} .rq-head .cnt{margin-left:auto;color:var(--muted);font-size:12px}
+    .rq-item{display:flex;align-items:center;gap:10px;padding:10px 14px;border-top:1px solid var(--line)}
+    .rq-detail{font-size:13px;color:var(--ink,#111)} .rq-when{margin-left:auto;color:var(--muted);font-size:11.5px;white-space:nowrap}
+  </style>
+  ${groups.map(g=>`
+    <div class="rq-acct">
+      <div class="rq-head" data-id="${esc(g.id)}"><span class="co">${esc(g.name)}</span><span class="cnt">${g.items.length} ${g.items.length===1?'item':'items'}</span></div>
+      ${g.items.slice(0,40).map(it=>{ const lab=RQ_LABEL[it.reason]||[it.reason,"starter"]; return `<div class="rq-item"><span class="pill ${lab[1]}">${esc(lab[0])}</span><span class="rq-detail">${esc(it.detail||"")}</span><span class="rq-when">${esc(ago(it.at))}</span></div>`; }).join("")}
+    </div>`).join("")}`;
+  host.querySelectorAll(".rq-head[data-id]").forEach(el=>el.onclick=()=>openTenant(el.dataset.id));
 }
 
 /* ===================== TENANT DRAWER ===================== */
