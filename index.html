@@ -1476,6 +1476,25 @@ function bindBookingForm(){
   }
   const save=$("#bk-save"); if(save) save.onclick=submitBooking;
 }
+// Is [time, time+dur] on dateStr within this user's set bookable hours? {ok, hasRules}
+async function withinBookableHours(userId, dateStr, timeStr, durMin){
+  let rules=[];
+  try{ const { data }=await db.from('availability_rules').select('day_of_week,start_time,end_time').eq('user_id',userId).eq('rule_type','bookable'); rules=data||[]; }catch(_e){ return {ok:true, hasRules:true}; }
+  if(!rules.length) return {ok:false, hasRules:false};
+  const dow=new Date(dateStr+'T12:00:00').getDay();
+  const [h,mi]=String(timeStr).split(':').map(Number); const startMin=h*60+(mi||0), endMin=startMin+durMin;
+  const toMin=t=>{ const p=String(t).split(':'); return (+p[0])*60+(+p[1]); };
+  const covered=rules.some(r=> Number(r.day_of_week)===dow && toMin(r.start_time)<=startMin && endMin<=toMin(r.end_time));
+  return {ok:covered, hasRules:true};
+}
+function staffFirstName(uid){ const u=(state.staff||[]).find(s=>s.id===uid); return u?((u.full_name||'').split(' ')[0]||u.email||'This stylist'):'This stylist'; }
+async function confirmIfOutsideHours(uid, dateStr, timeStr, durMin, isSelf){
+  const av=await withinBookableHours(uid, dateStr, timeStr, durMin);
+  if(av.ok) return true;
+  const subj = isSelf ? 'You have' : staffFirstName(uid)+' has';
+  const detail = av.hasRules ? 'no availability set for that day and time' : 'no availability hours set yet';
+  return confirm(subj+' '+detail+'. Book anyway?');
+}
 async function submitBooking(){
   const msg=$("#bk-msg"); const set=(t,c)=>{ if(msg){msg.style.color=c||'var(--muted)';msg.textContent=t;} };
   const mgr=isManager();
@@ -1486,6 +1505,7 @@ async function submitBooking(){
   const dur=+$("#bk-dur").value||45;
   const typeSel=$("#bk-type"); const typeId=typeSel&&typeSel.value?typeSel.value:null;
   const o=typeSel&&typeSel.selectedOptions[0]; const mode=o&&o.dataset&&o.dataset.mode?o.dataset.mode:null;
+  if(!(await confirmIfOutsideHours(uid, date, time, dur, !mgr))) return;
   const startIso=zonedToUtcISO(date,time,state.account.timezone);
   const btn=$("#bk-save"); btn.disabled=true; const ob=btn.textContent; btn.textContent="Booking…"; set("Checking the time…");
   let r=null,err=null;
@@ -1601,6 +1621,9 @@ function bindApptActions(){
     const msg=document.getElementById('rb-msg-'+id); const set=(x,c)=>{if(msg){msg.style.color=c||'var(--muted)';msg.textContent=x;}};
     const d=dEl&&dEl.value, t=tEl&&tEl.value;
     if(!d||!t){ set('Pick a date and time.','var(--danger)'); return; }
+    const ap=state.appointments.find(x=>x.id===id);
+    const durMin = (ap&&ap.end) ? Math.max(5,Math.round((new Date(ap.end)-new Date(ap.start))/60000)) : 45;
+    if(ap && ap.userId && !(await confirmIfOutsideHours(ap.userId, d, t, durMin, !isManager()))) return;
     const iso=zonedToUtcISO(d,t,state.account.timezone);
     b.disabled=true; const o=b.textContent; b.textContent='Saving…'; set('Checking the time…');
     let r=null,err=null;
