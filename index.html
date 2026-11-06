@@ -400,7 +400,7 @@ async function loadData(){
     await loadConversations();
   } else {
     state.messages=[]; state.calls=[]; state.contacts=[]; state.gaps=[]; state.conversations=[];
-    if(!['schedule','appointments'].includes(state.view)) state.view='appointments';
+    if(!['schedule','appointments','clients'].includes(state.view)) state.view='appointments';
   }
   return true;
 }
@@ -411,18 +411,18 @@ function salonOn(){ const f=(state.account&&state.account.settings&&state.accoun
 function showStaff(){ return salonOn() && isManager(); }
 function renderApp(){
   const mgr=isManager();
-  if(!mgr && !['schedule','appointments'].includes(state.view)) state.view='appointments';
+  if(!mgr && !['schedule','appointments','clients'].includes(state.view)) state.view='appointments';
   if(mgr && new URLSearchParams(location.search).get('calendar')) state.view='settings';
   let navConfig, navActivity, soon=[];
   if(mgr){
     navConfig=[["assistant","Assistant",I.bot],["schedule","Schedule",I.cal],["types","Appointment types",I.tag]];
     if(showStaff()) navConfig.push(["staff","Staff",I.users]);
     navConfig.push(["knowledge","Knowledge",I.book],["settings","Settings",I.gear]);
-    navActivity=[["calls","Calls",I.phone],["appointments","Appointments",I.appt],["messages","Messages",I.inbox],["contacts","Contacts",I.users],["gaps","Questions",I.book],["conversations","Inbox",I.inbox]];
+    navActivity=[["calls","Calls",I.phone],["appointments","Appointments",I.appt],["messages","Messages",I.inbox],["contacts",salonOn()?"Clients":"Contacts",I.users],["gaps","Questions",I.book],["conversations","Inbox",I.inbox]];
     soon=[["billing","Billing",I.card]];
   } else {
-    // Stylist: focused view — their own bookings and their own availability.
-    navConfig=[["appointments","My appointments",I.appt],["schedule","My availability",I.cal]];
+    // Stylist: focused view — their own bookings, clients, and their own availability.
+    navConfig=[["appointments","My appointments",I.appt],["clients","Clients",I.users],["schedule","My availability",I.cal]];
     navActivity=[];
   }
   const navCount=v=>{ if(v==='messages') return unreadCount(); if(v==='conversations') return (state.conversations||[]).filter(c=>c.status==='awaiting_staff').length; if(v==='gaps') return (state.gaps||[]).length; return 0; };
@@ -443,7 +443,7 @@ function renderApp(){
     </aside>
     <main class="main">
       <div class="topbar">
-        <div class="crumbs">${state.view==='settings'?'Account':(['messages','appointments','calls','contacts','gaps','conversations'].includes(state.view)?'Activity':'Configure')} · <b>${esc(({assistant:"Assistant",schedule:"Schedule",types:"Appointment types",staff:"Staff",messages:"Messages",appointments:"Appointments",settings:"Settings",calls:"Calls",knowledge:"Knowledge",contacts:"Contacts",gaps:"Open questions",conversations:"Inbox"})[state.view])}</b></div>
+        <div class="crumbs">${state.view==='settings'?'Account':(['messages','appointments','calls','contacts','clients','gaps','conversations'].includes(state.view)?'Activity':'Configure')} · <b>${esc(({assistant:"Assistant",schedule:"Schedule",types:"Appointment types",staff:"Staff",messages:"Messages",appointments:"Appointments",settings:"Settings",calls:"Calls",knowledge:"Knowledge",contacts:(salonOn()?"Clients":"Contacts"),clients:"Clients",gaps:"Open questions",conversations:"Inbox"})[state.view])}</b></div>
         <div class="acct-chip"><span class="av">${initials}</span><div class="who"><b>${esc(state.account.company)}</b><span>${esc((state.account.status||'trial'))} · ${esc(state.account.plan||'starter')}</span></div></div>
       </div>
       <div id="approve-banner"></div>
@@ -456,13 +456,13 @@ function renderApp(){
   paintApproveBanner();
 }
 function renderPage(){
-  if(!isManager() && !['schedule','appointments'].includes(state.view)) state.view='appointments';
+  if(!isManager() && !['schedule','appointments','clients'].includes(state.view)) state.view='appointments';
   if('speechSynthesis' in window) window.speechSynthesis.cancel();
   teardownRealtime();
   document.querySelectorAll(".nav-item[data-v]").forEach(b=>b.classList.toggle("active",b.dataset.v===state.view));
-  $(".crumbs").innerHTML=`${state.view==='settings'?'Account':(['messages','appointments','calls','contacts','gaps','conversations'].includes(state.view)?'Activity':'Configure')} · <b>${esc(({assistant:"Assistant",schedule:"Schedule",types:"Appointment types",staff:"Staff",messages:"Messages",appointments:"Appointments",settings:"Settings",calls:"Calls",knowledge:"Knowledge",contacts:"Contacts",gaps:"Open questions",conversations:"Inbox"})[state.view])}</b>`;
-  const PAGES={assistant:pageAssistant, schedule:pageSchedule, types:pageTypes, staff:pageStaff, messages:pageMessages, appointments:renderAppts, settings:pageSettings, calls:pageCalls, knowledge:pageKnowledge, contacts:pageContacts, gaps:pageGaps, conversations:pageConversations};
-  const LOADERS={appointments:loadAppointments, messages:loadMessages, calls:loadCalls, contacts:loadContacts, gaps:loadGaps, conversations:loadConversations, staff:loadStaff};
+  $(".crumbs").innerHTML=`${state.view==='settings'?'Account':(['messages','appointments','calls','contacts','clients','gaps','conversations'].includes(state.view)?'Activity':'Configure')} · <b>${esc(({assistant:"Assistant",schedule:"Schedule",types:"Appointment types",staff:"Staff",messages:"Messages",appointments:"Appointments",settings:"Settings",calls:"Calls",knowledge:"Knowledge",contacts:(salonOn()?"Clients":"Contacts"),clients:"Clients",gaps:"Open questions",conversations:"Inbox"})[state.view])}</b>`;
+  const PAGES={assistant:pageAssistant, schedule:pageSchedule, types:pageTypes, staff:pageStaff, messages:pageMessages, appointments:renderAppts, settings:pageSettings, calls:pageCalls, knowledge:pageKnowledge, contacts:pageContacts, clients:pageClients, gaps:pageGaps, conversations:pageConversations};
+  const LOADERS={appointments:loadAppointments, messages:loadMessages, calls:loadCalls, contacts:loadContacts, clients:loadContacts, gaps:loadGaps, conversations:loadConversations, staff:loadStaff};
   const v=state.view;
   (PAGES[v]||(()=>{}))();
   const ld=LOADERS[v];
@@ -1267,6 +1267,46 @@ function contactHTML(c){
     </div>
   </div>`;
 }
+/* ===================== CLIENTS PAGE (read-only, stylists) ===================== */
+function pageClients(){
+  const q=state._clq||'';
+  const list=(state.contacts||[]).filter(c=>contactMatch(c,q));
+  $("#page").innerHTML=`
+  <style>
+    .c-tools{display:flex;gap:10px;align-items:center;margin-bottom:14px}
+    .c-search{flex:1;max-width:360px;padding:9px 12px;border:1px solid var(--line);border-radius:var(--r-sm);font:inherit;font-size:14px;background:var(--surface);color:var(--ink)}
+    .c-item{border:1px solid var(--line);border-radius:var(--r-sm);padding:13px 15px;margin-bottom:9px;background:var(--surface)}
+    .c-top{display:flex;align-items:center;gap:9px;flex-wrap:wrap}
+    .c-name{font-weight:600;font-size:15px;color:var(--ink)}
+    .c-num{margin-left:auto;font-size:13.5px;color:var(--virtual);text-decoration:none;font-weight:500}
+    .c-meta{color:var(--muted);font-size:13px;margin-top:4px}
+    .c-actions{display:flex;gap:7px;margin-top:11px;flex-wrap:wrap}
+  </style>
+  <div class="page">
+    <div class="page-head"><h1>Clients</h1><p>Look up a client's phone or email, and your visit history with them.</p></div>
+    <div class="card">
+      <div class="card-h"><h2>People${state.contacts&&state.contacts.length?` <span class="hint">${state.contacts.length}</span>`:''}</h2><button class="btn sm" id="cl-refresh">Refresh</button></div>
+      <div class="c-tools"><input class="c-search" id="cl-search" type="search" placeholder="Search name or number…" value="${esc(q)}"></div>
+      <div id="cl-list">${clientsListHTML(list)}</div>
+    </div>
+  </div>`;
+  const s=$("#cl-search"); if(s) s.oninput=()=>{ state._clq=s.value; $("#cl-list").innerHTML=clientsListHTML((state.contacts||[]).filter(c=>contactMatch(c,s.value))); bindClientVisits(); };
+  const rf=$("#cl-refresh"); if(rf) rf.onclick=async()=>{ rf.disabled=true; rf.textContent="…"; await loadContacts(); pageClients(); };
+  bindClientVisits();
+}
+function clientsListHTML(list){
+  if(!list.length) return `<div class="empty">${I.users}<div>${(state.contacts&&state.contacts.length)?'No matches.':'No clients yet.'}</div></div>`;
+  return list.map(c=>{
+    const tel=c.phone?c.phone.replace(/[^\d+]/g,''):'';
+    return `<div class="c-item">
+      <div class="c-top"><span class="c-name">${esc(c.name||'Unknown')}</span>${c.phone?`<a class="c-num" href="tel:${esc(tel)}">${esc(c.phone)}</a>`:''}</div>
+      ${c.email?`<div class="c-meta"><a href="mailto:${esc(c.email)}" style="color:var(--muted)">${esc(c.email)}</a></div>`:''}
+      <div class="c-actions"><button class="btn sm" data-visits="${c.id}">Visits</button></div>
+      <div class="c-visits" id="c-visits-${c.id}" style="display:none;margin-top:11px;border-top:1px solid var(--line-2);padding-top:10px"></div>
+    </div>`;
+  }).join('');
+}
+function bindClientVisits(){ document.querySelectorAll('#cl-list [data-visits]').forEach(b=>b.onclick=()=>{ const id=b.dataset.visits; const p=document.getElementById('c-visits-'+id); if(!p) return; const open=p.style.display!=='none'; p.style.display=open?'none':'block'; if(!open && !p.dataset.loaded){ p.dataset.loaded='1'; loadVisits(id); } }); }
 async function loadVisits(id){
   const el=document.getElementById('c-visits-'+id); if(!el) return;
   el.innerHTML='<div style="color:var(--muted);font-size:12.5px">Loading…</div>';
@@ -1478,6 +1518,8 @@ function calendarCardHTML(){
   }
   const sel=state._calSel; const selAppts=apptsForDay(sel);
   const selLabel=new Date(sel+'T12:00:00').toLocaleDateString('en-US',{weekday:'long',month:'long',day:'numeric'});
+  const stTally=selAppts.reduce((m,a)=>{ const k=(a.status==='confirmed'?'scheduled':a.status); m[k]=(m[k]||0)+1; return m; },{});
+  const stLabel=['scheduled','completed','no_show','cancelled'].filter(k=>stTally[k]).map(k=>`${stTally[k]} ${k.replace('_',' ')}`).join(' · ');
   const detail = selAppts.length ? selAppts.map(apptHTML).join('') : `<div class="empty" style="padding:26px 10px">${I.appt}<div>No appointments on ${esc(selLabel)}.</div></div>`;
   const legend = (salonOn()&&isManager()&&(state.staff||[]).filter(s=>s.is_bookable).length)
     ? `<div class="cal-legend">${(state.staff||[]).filter(s=>s.is_bookable).map(s=>`<span><i class="cal-dot" style="background:${stylistColor(s.id)}"></i>${esc((s.full_name||'').split(' ')[0]||s.email)}</span>`).join('')}</div>` : '';
@@ -1487,7 +1529,7 @@ function calendarCardHTML(){
     <div class="cal-dow">${['Sun','Mon','Tue','Wed','Thu','Fri','Sat'].map(x=>`<span>${x}</span>`).join('')}</div>
     <div class="cal-grid" id="cal-grid">${cells}</div>
     ${legend}
-    <div style="margin-top:16px;border-top:1px solid var(--line-2);padding-top:14px"><h3 style="font-size:13px;margin:0 0 11px;color:var(--ink-2)">${esc(selLabel)}${selAppts.length?` · ${selAppts.length} appointment${selAppts.length>1?'s':''}`:''}</h3>${detail}</div>
+    <div style="margin-top:16px;border-top:1px solid var(--line-2);padding-top:14px"><h3 style="font-size:13px;margin:0 0 11px;color:var(--ink-2)">${esc(selLabel)}${stLabel?` · ${stLabel}`:''}</h3>${detail}</div>
   </div>`;
 }
 function renderAppts(){
