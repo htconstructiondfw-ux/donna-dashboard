@@ -1230,10 +1230,12 @@ function contactHTML(c){
     ${c.memory?`<div class="c-sum" style="font-style:normal;color:var(--ink-2);line-height:1.5"><strong style="color:var(--muted);font-weight:600;font-size:10px;text-transform:uppercase;letter-spacing:.05em;margin-right:6px">Remembers</strong>${esc(c.memory)}</div>`:''}
     <div class="c-actions">
       <button class="btn sm" data-act="edit" data-id="${c.id}">Edit</button>
+      <button class="btn sm" data-act="visits" data-id="${c.id}">Visits</button>
       <button class="btn sm" data-act="vip" data-id="${c.id}">${vip?'Remove VIP':'Mark VIP'}</button>
       <button class="btn sm" data-act="block" data-id="${c.id}">${blocked?'Unblock':'Block'}</button>
       <button class="btn sm danger" data-act="del" data-id="${c.id}">Delete</button>
     </div>
+    <div class="c-visits" id="c-visits-${c.id}" style="display:none;margin-top:11px;border-top:1px solid var(--line-2);padding-top:10px"></div>
     <div class="c-edit" id="c-edit-${c.id}">
       <div><label>Name</label><input data-f="name" value="${esc(c.name)}"></div>
       <div><label>Name ${esc(aName())} says</label><input data-f="preferred_name" value="${esc(c.preferredName)}" placeholder="first name she says"></div>
@@ -1251,11 +1253,25 @@ function contactHTML(c){
     </div>
   </div>`;
 }
+async function loadVisits(id){
+  const el=document.getElementById('c-visits-'+id); if(!el) return;
+  el.innerHTML='<div style="color:var(--muted);font-size:12.5px">Loading…</div>';
+  let rows=[];
+  try{ const { data }=await db.from('appointments').select('starts_at,title,status,user_id,appointment_type_id').eq('contact_id',id).order('starts_at',{ascending:false}).limit(50); rows=data||[]; }catch(_e){ rows=[]; }
+  if(!rows.length){ el.innerHTML='<div style="color:var(--muted);font-size:12.5px">No appointments on record for this client yet.</div>'; return; }
+  const typeName=tid=>{ const t=(state.types||[]).find(x=>x.id===tid); return t?t.name:''; };
+  el.innerHTML='<div style="font-size:11px;text-transform:uppercase;letter-spacing:.05em;color:var(--muted);font-weight:600;margin-bottom:6px">Visit history</div>'+rows.map(a=>{
+    const svc=typeName(a.appointment_type_id)||a.title||'Appointment';
+    const who=staffName(a.user_id);
+    return `<div style="display:flex;justify-content:space-between;gap:10px;padding:6px 0;border-bottom:1px solid var(--line-2);font-size:12.5px"><span>${esc(fmtAppt(a.starts_at))} · ${esc(svc)}${who?` · <b>${esc(who)}</b>`:''}</span><span class="appt-status s-${a.status}" style="flex:none">${esc(a.status)}</span></div>`;
+  }).join('');
+}
 function bindContactActions(){
   document.querySelectorAll('#c-list [data-act]').forEach(b=>b.onclick=async()=>{
     const id=b.dataset.id, act=b.dataset.act;
     const c=state.contacts.find(x=>x.id===id); if(!c && act!=='del') return;
     if(act==='edit'){ const p=$("#c-edit-"+id); if(p) p.classList.toggle('open'); return; }
+    if(act==='visits'){ const p=document.getElementById('c-visits-'+id); if(!p) return; const open=p.style.display!=='none'; p.style.display=open?'none':'block'; if(!open && !p.dataset.loaded){ p.dataset.loaded='1'; loadVisits(id); } return; }
     if(act==='canceledit'){ const p=$("#c-edit-"+id); if(p) p.classList.remove('open'); return; }
     if(act==='suggest'){ const w=$("#c-edit-"+id); if(!w) return; const gv=f=>{const el=w.querySelector('[data-f="'+f+'"]');return el?el.value.trim():"";}; ctSuggest(gv('name'),gv('language'),w.querySelector('[data-f="pronunciation"]'),b); return; }
     if(act==='say'){ const w=$("#c-edit-"+id); if(!w) return; const gv=f=>{const el=w.querySelector('[data-f="'+f+'"]');return el?el.value.trim():"";}; ctSpeak(gv('pronunciation')||gv('preferred_name')||(gv('name').split(/\s+/)[0]||'')); return; }
