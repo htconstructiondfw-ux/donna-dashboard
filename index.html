@@ -408,7 +408,15 @@ async function loadData(){
 /* ===================== APP SHELL ===================== */
 function isManager(){ return ['owner','admin'].includes((state.owner&&state.owner.role)||'owner'); }
 function salonOn(){ const f=(state.account&&state.account.settings&&state.account.settings.features)||{}; return !!f.salon; }
-function showStaff(){ return salonOn() && isManager(); }
+// Solo vs team. Explicit setting wins (billing keys off it later); otherwise infer from bookable headcount.
+function salonMode(){
+  const m=(state.account&&state.account.settings&&state.account.settings.salon_mode)||'';
+  if(m==='solo'||m==='team') return m;
+  const bk=(state.staff||[]).filter(s=>s.is_bookable).length;
+  return bk>1 ? 'team' : 'solo';
+}
+function isSolo(){ return salonOn() && salonMode()==='solo'; }
+function showStaff(){ return salonOn() && isManager() && salonMode()==='team'; }
 function renderApp(){
   const mgr=isManager();
   if(!mgr && !['schedule','appointments','clients'].includes(state.view)) state.view='appointments';
@@ -1396,7 +1404,7 @@ function bookingCardHTML(){
   const mgr=isManager();
   const all=(state.staff||[]);
   const people = all.filter(u=>u.is_bookable).length ? all.filter(u=>u.is_bookable) : all;
-  const stylistField = mgr ? `<div class="field"><label class="lab">Stylist</label><select class="inp" id="bk-user">${people.map(u=>`<option value="${u.id}">${esc(u.full_name||u.email)}${u.is_bookable?'':' (not bookable)'}</option>`).join("")||`<option value="">No staff yet</option>`}</select></div>` : '';
+  const stylistField = (mgr && !isSolo()) ? `<div class="field"><label class="lab">Stylist</label><select class="inp" id="bk-user">${people.map(u=>`<option value="${u.id}">${esc(u.full_name||u.email)}${u.is_bookable?'':' (not bookable)'}</option>`).join("")||`<option value="">No staff yet</option>`}</select></div>` : '';
   const typeOpts=`<option value="">No specific service</option>`+ (state.types||[]).map(t=>`<option value="${t.id}" data-dur="${t.dur}" data-mode="${t.mode}" data-name="${esc(t.name)}">${esc(t.name)} · ${t.dur} min</option>`).join("");
   return `
   <div class="card">
@@ -1515,8 +1523,8 @@ async function confirmIfOutsideHours(uid, dateStr, timeStr, durMin, isSelf){
 async function submitBooking(){
   const msg=$("#bk-msg"); const set=(t,c)=>{ if(msg){msg.style.color=c||'var(--muted)';msg.textContent=t;} };
   const mgr=isManager();
-  const uid = mgr ? ($("#bk-user")&&$("#bk-user").value) : state.owner.id;
-  if(mgr && !uid){ set("Pick a staff member.","var(--danger)"); return; }
+  const uid = ($("#bk-user")&&$("#bk-user").value) || state.owner.id;
+  if(!uid){ set("Pick a staff member.","var(--danger)"); return; }
   const date=$("#bk-date").value, time=$("#bk-time").value;
   if(!date||!time){ set("Pick a date and time.","var(--danger)"); return; }
   const dur=+$("#bk-dur").value||45;
@@ -1550,7 +1558,7 @@ function calendarCardHTML(){
     const k=calKey(d), inM=d.getMonth()===m.getMonth();
     const day=apptsForDay(k).filter(a=>a.status!=='cancelled'); const n=day.length;
     const uids=[...new Set(day.map(a=>a.userId).filter(Boolean))].slice(0,4);
-    const dots=(salonOn()&&isManager())?uids.map(u=>`<i class="cal-dot" style="background:${stylistColor(u)}"></i>`).join(''):'';
+    const dots=(salonOn()&&isManager()&&!isSolo())?uids.map(u=>`<i class="cal-dot" style="background:${stylistColor(u)}"></i>`).join(''):'';
     cells+=`<div class="cal-cell${inM?'':' out'}${k===state._calSel?' sel':''}${k===todayKey?' today':''}" data-day="${k}"><span class="cal-dnum">${d.getDate()}</span>${n?`<span class="cal-cnt">${n}</span>`:''}${dots?`<div class="cal-dots">${dots}</div>`:''}</div>`;
   }
   const sel=state._calSel; const selAppts=apptsForDay(sel);
@@ -1558,7 +1566,7 @@ function calendarCardHTML(){
   const stTally=selAppts.reduce((m,a)=>{ const k=(a.status==='confirmed'?'scheduled':a.status); m[k]=(m[k]||0)+1; return m; },{});
   const stLabel=['scheduled','completed','no_show','cancelled'].filter(k=>stTally[k]).map(k=>`${stTally[k]} ${k.replace('_',' ')}`).join(' · ');
   const detail = selAppts.length ? selAppts.map(apptHTML).join('') : `<div class="empty" style="padding:26px 10px">${I.appt}<div>No appointments on ${esc(selLabel)}.</div></div>`;
-  const legend = (salonOn()&&isManager()&&(state.staff||[]).filter(s=>s.is_bookable).length)
+  const legend = (salonOn()&&isManager()&&!isSolo()&&(state.staff||[]).filter(s=>s.is_bookable).length)
     ? `<div class="cal-legend">${(state.staff||[]).filter(s=>s.is_bookable).map(s=>`<span><i class="cal-dot" style="background:${stylistColor(s.id)}"></i>${esc((s.full_name||'').split(' ')[0]||s.email)}</span>`).join('')}</div>` : '';
   return `
   <div class="card">
@@ -1591,7 +1599,7 @@ function apptHTML(a){
   const cancelled=a.status==='cancelled';
   const upcoming = !cancelled && new Date(a.end||a.start).getTime()>=Date.now();
   const modeLbl={phone:'Phone',virtual:'Video',in_person:'On-site'}[a.mode]||'';
-  const who = (salonOn()&&isManager()&&a.userId) ? staffName(a.userId) : '';
+  const who = (salonOn()&&isManager()&&!isSolo()&&a.userId) ? staffName(a.userId) : '';
   let detail='';
   if(modeLbl){
     let extra='';
@@ -1690,6 +1698,23 @@ async function saveAlertEmail(){
   if(!error){ state.account.settings=settings; if(msg){ msg.style.color='var(--muted)'; msg.textContent=email?('Messages will be emailed to '+email+'.'):'General inbox cleared.'; } }
   else if(msg){ msg.style.color='var(--danger)'; msg.textContent='Could not save. Try again.'; }
   btn.disabled=false; btn.textContent=error?"Error — retry":"Saved ✓"; setTimeout(()=>btn.textContent=o,1300);
+}
+async function saveSalonMode(){
+  const sel=document.querySelector('input[name="salonmode"]:checked'); const msg=$("#salonmode-msg"), btn=$("#salonmode-save");
+  if(!sel) return;
+  const mode=sel.value;
+  btn.disabled=true; const o=btn.textContent; btn.textContent="Saving…";
+  const settings = Object.assign({}, state.account.settings||{}, { salon_mode: mode });
+  const { error } = await db.from('accounts').update({settings}).eq('id',state.account.id);
+  if(error){ if(msg){ msg.style.color='var(--danger)'; msg.textContent='Could not save. Try again.'; } btn.disabled=false; btn.textContent="Error — retry"; setTimeout(()=>btn.textContent=o,1300); return; }
+  state.account.settings=settings;
+  // Solo means the owner is the one bookable person. Make sure Donna can book them.
+  if(mode==='solo' && !state.owner.bookable){
+    const { error:be } = await db.from('users').update({is_bookable:true}).eq('id',state.owner.id);
+    if(!be){ state.owner.bookable=true; if(state.staff){ const r=state.staff.find(s=>s.id===state.owner.id); if(r) r.is_bookable=true; } }
+  }
+  if(msg){ msg.style.color='var(--muted)'; msg.textContent = mode==='solo' ? (aName()+' will book everything to you. Staff tools are hidden.') : ('Staff tools are on. Add your stylists on the Staff page.'); }
+  btn.disabled=false; btn.textContent="Saved ✓"; setTimeout(()=>{ renderApp(); },900);
 }
 async function saveReminders(){
   const modeEl=$("#rem-mode"), timeEl=$("#rem-time"), msg=$("#rem-msg"), btn=$("#rem-save");
@@ -1817,6 +1842,16 @@ function pageSettings(){
       <p style="font-size:12px;color:var(--muted-2);margin-top:2px">The business name is what ${esc(aName())} says she's answering for and shows across your dashboard.</p>
     </div>
 
+    ${(salonOn()&&isManager())?(()=>{ const mode=salonMode(); return `
+    <div class="card"><div class="card-h"><h2>Who does the services</h2><button class="btn sm primary" id="salonmode-save">Save</button></div>
+      <p style="font-size:13px;color:var(--muted);margin-bottom:12px">This tells ${esc(aName())} whether you work on your own or with a team. On a team, she asks which stylist a caller wants and can transfer to them; solo, she books everything straight to you and hides the staff tools.</p>
+      <div style="display:flex;flex-direction:column;gap:10px">
+        <label style="display:flex;align-items:flex-start;gap:10px;cursor:pointer;font-size:13.5px;color:var(--ink)"><input type="radio" name="salonmode" value="solo" style="margin-top:3px" ${mode==='solo'?'checked':''}><span>I do the services myself<span style="display:block;font-weight:400;color:var(--muted);font-size:11.5px;margin-top:2px">You are the only one taking appointments. ${esc(aName())} books everything to you, and the Staff section is hidden.</span></span></label>
+        <label style="display:flex;align-items:flex-start;gap:10px;cursor:pointer;font-size:13.5px;color:var(--ink)"><input type="radio" name="salonmode" value="team" style="margin-top:3px" ${mode==='team'?'checked':''}><span>I have a team<span style="display:block;font-weight:400;color:var(--muted);font-size:11.5px;margin-top:2px">You have stylists taking appointments. The Staff section appears so you can add them, and ${esc(aName())} routes callers to the right person.</span></span></label>
+      </div>
+      <div id="salonmode-msg" style="font-size:12.5px;color:var(--muted);margin-top:10px"></div>
+    </div>`; })():''}
+
     <div class="card"><div class="card-h"><h2>Time zone</h2><button class="btn sm" id="tz-save">Save</button></div>
       <p style="font-size:13px;color:var(--muted);margin-bottom:12px">${esc(aName())} books appointments and tells callers times in this zone. Set it to where your business operates.</p>
       <select class="inp" id="tz-select" style="max-width:340px">${TZS.map(t=>`<option value="${t[0]}" ${ac.timezone===t[0]?'selected':''}>${t[1]}</option>`).join("")}</select>
@@ -1917,6 +1952,7 @@ function pageSettings(){
     </div>
   </div>`;
   $("#set-biz-save").onclick=saveBusiness;
+  { const sm=$("#salonmode-save"); if(sm) sm.onclick=saveSalonMode; }
   $("#tz-save").onclick=saveTimezone;
   { const ae=$("#alert-save"); if(ae) ae.onclick=saveAlertEmail; }
   { const is=$("#inbound-save"); if(is) is.onclick=saveInbound; const ic=$("#inbound-copy"); if(ic) ic.onclick=()=>{ const a=$("#inbound-addr"); if(a&&a.value){ try{ navigator.clipboard&&navigator.clipboard.writeText(a.value.trim()); }catch(e){} const m=$("#inbound-msg"); if(m){ m.style.color='var(--muted)'; m.textContent='Copied.'; } } }; }
