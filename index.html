@@ -159,6 +159,11 @@
   .type-item .ic svg{width:17px;height:17px}
   .type-item .nm{font-weight:600;font-size:14px} .type-item .nm small{display:block;color:var(--muted);font-weight:400;font-size:12px;margin-top:1px}
   .type-item .mode{margin-left:auto;font-size:11px;letter-spacing:.06em;text-transform:uppercase;color:var(--muted-2);font-weight:600;white-space:nowrap}
+  .staff-row{display:flex;align-items:center;gap:14px;padding:13px 16px;border:1px solid var(--line);border-radius:var(--r-sm);margin-bottom:9px;background:#fbfcfe}
+  .staff-row .staff-main{min-width:0} .staff-row .staff-main b{font-weight:600;font-size:14px} .staff-row .staff-main small{display:block;color:var(--muted);font-weight:400;font-size:12px;margin-top:1px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .staff-row .staff-meta{margin-left:auto;display:flex;gap:6px;align-items:center;flex:none} .staff-row .staff-act{flex:none}
+  .pill{font-size:10.5px;letter-spacing:.04em;text-transform:uppercase;font-weight:600;color:var(--muted-2);border:1px solid var(--line);border-radius:20px;padding:2px 8px;white-space:nowrap}
+  .pill.ok{color:var(--ok);border-color:#bfe3d0;background:#f1faf5} .pill.mgr{color:var(--ink-2);border-color:#c9d6ea;background:#eef3fb}
   .empty{text-align:center;padding:46px 20px;color:var(--muted)} .empty svg{width:34px;height:34px;color:var(--muted-2);margin-bottom:10px}
   .gate{min-height:100vh;display:grid;place-items:center;padding:24px;background:radial-gradient(120% 90% at 50% -10%,#1b3258 0%,var(--canvas) 46%)}
   .gate-card{background:var(--surface);border:1px solid var(--line);border-radius:18px;padding:34px 34px 30px;width:100%;max-width:460px;box-shadow:0 24px 60px -28px rgba(19,36,61,.4)}
@@ -351,7 +356,7 @@ async function loadData(){
   if(!user) return false;
   const { data: me } = await db.from('users').select('*').eq('id', user.id).maybeSingle();
   if(!me){ return false; }   // trigger may still be settling
-  state.owner = { id:me.id, name:me.full_name||"Owner", email:me.email, title:me.title||"Owner", phone:me.phone||"" };
+  state.owner = { id:me.id, name:me.full_name||"Owner", email:me.email, title:me.title||"Owner", phone:me.phone||"", role:me.role||"owner", bookable:!!me.is_bookable };
   const { data: acct } = await db.from('accounts').select('*').eq('id', me.account_id).single();
   state.account = { id:acct.id, company:acct.name, industry:acct.industry, plan:acct.plan, status:acct.status, settings:acct.settings||{}, timezone:(acct.settings&&acct.settings.timezone)||'America/Chicago' };
   const { data: asst } = await db.from('assistants').select('*').eq('account_id', acct.id).order('created_at').limit(1).maybeSingle();
@@ -371,21 +376,41 @@ async function loadData(){
   (rules||[]).forEach(r=>{ const w = r.rule_type==='working'?state.schedule[r.day_of_week].working:state.schedule[r.day_of_week].bookable; w.on=true; w.start=(r.start_time||"08:00").slice(0,5); w.end=(r.end_time||"18:00").slice(0,5); });
   const { data: blocks } = await db.from('calendar_blocks').select('*').eq('user_id', me.id).order('starts_at');
   state.blocks = (blocks||[]).map(b=>({ id:b.id, type:b.block_type, start:(b.starts_at||"").slice(0,10), end:(b.ends_at||"").slice(0,10), reason:b.reason||"" }));
-  await loadMessages();
   await loadAppointments();
-  await loadCalls();
-  await loadContacts();
-  await loadGaps();
-  await loadConversations();
+  // Reception/business activity is for managers only; stylists get a focused, own-schedule view.
+  if(isManager()){
+    await loadMessages();
+    await loadCalls();
+    await loadContacts();
+    await loadGaps();
+    await loadConversations();
+  } else {
+    state.messages=[]; state.calls=[]; state.contacts=[]; state.gaps=[]; state.conversations=[];
+    if(!['schedule','appointments'].includes(state.view)) state.view='appointments';
+  }
   return true;
 }
 
 /* ===================== APP SHELL ===================== */
+function isManager(){ return ['owner','admin'].includes((state.owner&&state.owner.role)||'owner'); }
+function salonOn(){ const f=(state.account&&state.account.settings&&state.account.settings.features)||{}; return !!f.salon; }
+function showStaff(){ return salonOn() && isManager(); }
 function renderApp(){
-  if(new URLSearchParams(location.search).get('calendar')) state.view='settings';
-  const navConfig=[["assistant","Assistant",I.bot],["schedule","Schedule",I.cal],["types","Appointment types",I.tag],["knowledge","Knowledge",I.book],["settings","Settings",I.gear]];
-  const navActivity=[["calls","Calls",I.phone],["appointments","Appointments",I.appt],["messages","Messages",I.inbox],["contacts","Contacts",I.users],["gaps","Questions",I.book],["conversations","Inbox",I.inbox]];
-  const soon=[["billing","Billing",I.card]];
+  const mgr=isManager();
+  if(!mgr && !['schedule','appointments'].includes(state.view)) state.view='appointments';
+  if(mgr && new URLSearchParams(location.search).get('calendar')) state.view='settings';
+  let navConfig, navActivity, soon=[];
+  if(mgr){
+    navConfig=[["assistant","Assistant",I.bot],["schedule","Schedule",I.cal],["types","Appointment types",I.tag]];
+    if(showStaff()) navConfig.push(["staff","Staff",I.users]);
+    navConfig.push(["knowledge","Knowledge",I.book],["settings","Settings",I.gear]);
+    navActivity=[["calls","Calls",I.phone],["appointments","Appointments",I.appt],["messages","Messages",I.inbox],["contacts","Contacts",I.users],["gaps","Questions",I.book],["conversations","Inbox",I.inbox]];
+    soon=[["billing","Billing",I.card]];
+  } else {
+    // Stylist: focused view — their own bookings and their own availability.
+    navConfig=[["appointments","My appointments",I.appt],["schedule","My availability",I.cal]];
+    navActivity=[];
+  }
   const navCount=v=>{ if(v==='messages') return unreadCount(); if(v==='conversations') return (state.conversations||[]).filter(c=>c.status==='awaiting_staff').length; if(v==='gaps') return (state.gaps||[]).length; return 0; };
   const navBtn=n=>{ const _c=navCount(n[0]); return `<button class="nav-item ${state.view===n[0]?'active':''}" data-v="${n[0]}">${n[2]}<span>${n[1]}</span>${_c?`<span class="tag unread">${_c}</span>`:''}</button>`; };
   const initials=(state.owner.name||"O").split(" ").map(w=>w[0]).slice(0,2).join("").toUpperCase();
@@ -394,17 +419,17 @@ function renderApp(){
   <div class="app">
     <aside class="side">
       <div class="brand"><span class="mark">${I.bot}</span><div><b id="brand-name">${esc(aName())}</b><small>${esc(state.account.company)}</small></div></div>
-      <div class="nav-label">Configure</div>
+      ${mgr?`<div class="nav-label">Configure</div>`:``}
       ${navConfig.map(navBtn).join("")}
-      <div class="nav-label">Activity</div>
+      ${mgr?`<div class="nav-label">Activity</div>`:``}
       ${navActivity.map(navBtn).join("")}
-      <div class="nav-label" id="run-label">Running ${esc(aName())}</div>
+      ${mgr?`<div class="nav-label" id="run-label">Running ${esc(aName())}</div>`:``}
       ${soon.map(n=>`<button class="nav-item soon">${n[2]}<span>${n[1]}</span><span class="tag">soon</span></button>`).join("")}
       <div class="side-foot"><b>${esc(state.owner.name)}</b>${esc(state.owner.title||"Owner")}<br><button class="out" id="signout">Sign out</button></div>
     </aside>
     <main class="main">
       <div class="topbar">
-        <div class="crumbs">${state.view==='settings'?'Account':(['messages','appointments','calls','contacts','gaps','conversations'].includes(state.view)?'Activity':'Configure')} · <b>${esc(({assistant:"Assistant",schedule:"Schedule",types:"Appointment types",messages:"Messages",appointments:"Appointments",settings:"Settings",calls:"Calls",knowledge:"Knowledge",contacts:"Contacts",gaps:"Open questions",conversations:"Inbox"})[state.view])}</b></div>
+        <div class="crumbs">${state.view==='settings'?'Account':(['messages','appointments','calls','contacts','gaps','conversations'].includes(state.view)?'Activity':'Configure')} · <b>${esc(({assistant:"Assistant",schedule:"Schedule",types:"Appointment types",staff:"Staff",messages:"Messages",appointments:"Appointments",settings:"Settings",calls:"Calls",knowledge:"Knowledge",contacts:"Contacts",gaps:"Open questions",conversations:"Inbox"})[state.view])}</b></div>
         <div class="acct-chip"><span class="av">${initials}</span><div class="who"><b>${esc(state.account.company)}</b><span>${esc((state.account.status||'trial'))} · ${esc(state.account.plan||'starter')}</span></div></div>
       </div>
       <div id="approve-banner"></div>
@@ -417,12 +442,13 @@ function renderApp(){
   paintApproveBanner();
 }
 function renderPage(){
+  if(!isManager() && !['schedule','appointments'].includes(state.view)) state.view='appointments';
   if('speechSynthesis' in window) window.speechSynthesis.cancel();
   teardownRealtime();
   document.querySelectorAll(".nav-item[data-v]").forEach(b=>b.classList.toggle("active",b.dataset.v===state.view));
-  $(".crumbs").innerHTML=`${state.view==='settings'?'Account':(['messages','appointments','calls','contacts','gaps','conversations'].includes(state.view)?'Activity':'Configure')} · <b>${esc(({assistant:"Assistant",schedule:"Schedule",types:"Appointment types",messages:"Messages",appointments:"Appointments",settings:"Settings",calls:"Calls",knowledge:"Knowledge",contacts:"Contacts",gaps:"Open questions",conversations:"Inbox"})[state.view])}</b>`;
-  const PAGES={assistant:pageAssistant, schedule:pageSchedule, types:pageTypes, messages:pageMessages, appointments:renderAppts, settings:pageSettings, calls:pageCalls, knowledge:pageKnowledge, contacts:pageContacts, gaps:pageGaps, conversations:pageConversations};
-  const LOADERS={appointments:loadAppointments, messages:loadMessages, calls:loadCalls, contacts:loadContacts, gaps:loadGaps, conversations:loadConversations};
+  $(".crumbs").innerHTML=`${state.view==='settings'?'Account':(['messages','appointments','calls','contacts','gaps','conversations'].includes(state.view)?'Activity':'Configure')} · <b>${esc(({assistant:"Assistant",schedule:"Schedule",types:"Appointment types",staff:"Staff",messages:"Messages",appointments:"Appointments",settings:"Settings",calls:"Calls",knowledge:"Knowledge",contacts:"Contacts",gaps:"Open questions",conversations:"Inbox"})[state.view])}</b>`;
+  const PAGES={assistant:pageAssistant, schedule:pageSchedule, types:pageTypes, staff:pageStaff, messages:pageMessages, appointments:renderAppts, settings:pageSettings, calls:pageCalls, knowledge:pageKnowledge, contacts:pageContacts, gaps:pageGaps, conversations:pageConversations};
+  const LOADERS={appointments:loadAppointments, messages:loadMessages, calls:loadCalls, contacts:loadContacts, gaps:loadGaps, conversations:loadConversations, staff:loadStaff};
   const v=state.view;
   (PAGES[v]||(()=>{}))();
   const ld=LOADERS[v];
@@ -700,6 +726,70 @@ async function addType(){
   if(!error && data){ state.types.push({id:data.id,name:data.name,mode:data.mode,dur:data.default_duration_min,before:data.buffer_before_min,after:data.buffer_after_min,travel:data.requires_travel}); pageTypes(); }
 }
 async function removeType(id){ if(id){ await db.from('appointment_types').delete().eq('id',id); } state.types=state.types.filter(t=>t.id!==id); pageTypes(); }
+
+/* ===================== STAFF PAGE (salon) ===================== */
+async function loadStaff(){
+  const { data } = await db.from('users').select('id,full_name,email,title,role,is_bookable').eq('account_id', state.account.id).order('created_at');
+  state.staff = data||[];
+}
+function roleLabel(u){ return ['owner','admin'].includes(u.role) ? (u.role==='owner'?'Owner':'Manager') : 'Stylist'; }
+function staffRowHTML(u){
+  const you=u.id===state.owner.id, mgr=['owner','admin'].includes(u.role), lbl=roleLabel(u);
+  const book = u.is_bookable ? '<span class="pill ok">Takes bookings</span>' : '<span class="pill">Not bookable</span>';
+  const toggle = you ? '' : `<button class="btn sm" data-book="${u.id}" data-val="${u.is_bookable?'0':'1'}">${u.is_bookable?'Stop bookings':'Make bookable'}</button>`;
+  return `<div class="staff-row">
+    <div class="staff-main"><b>${esc(u.full_name||u.email)}${you?' <small style="display:inline;color:var(--muted-2)">(you)</small>':''}</b><small>${esc(u.email)}${u.title?' · '+esc(u.title):''}</small></div>
+    <div class="staff-meta"><span class="pill ${mgr?'mgr':''}">${lbl}</span>${book}</div>
+    <div class="staff-act">${toggle}</div>
+  </div>`;
+}
+function pageStaff(){
+  const staff=state.staff||[];
+  $("#page").innerHTML=`
+  <div class="page">
+    <div class="page-head"><h1>Staff</h1><p>Give each stylist their own login. They see only their own schedule and bookings; you see everyone's. Mark who takes appointments so ${esc(aName())} books the right person.</p></div>
+    <div class="card"><div class="card-h"><h2>Your team</h2><button class="btn sm" id="st-refresh">Refresh</button></div>
+      <div id="staff-list">${staff.length?staff.map(staffRowHTML).join(""):`<div class="empty">${I.users}<div>Loading your team…</div></div>`}</div>
+    </div>
+    <div class="card">
+      <div class="card-h"><h2>Add a stylist</h2></div>
+      <div class="grid-2">
+        <div class="field"><label class="lab">Full name</label><input class="inp" id="st-name" placeholder="e.g. Jordan Lee"></div>
+        <div class="field"><label class="lab">Login email</label><input class="inp" id="st-email" type="email" placeholder="jordan@yoursalon.com"></div>
+      </div>
+      <div class="grid-2">
+        <div class="field"><label class="lab">Temporary password <span class="sub">Share it with them; they can change it later</span></label>
+          <div style="display:flex;gap:8px"><input class="inp" id="st-pass" placeholder="at least 8 characters"><button class="btn sm" id="st-gen" type="button">Generate</button></div>
+        </div>
+        <div class="field"><label class="switch" style="margin-top:22px"><input type="checkbox" id="st-book" checked><span class="track"></span><span class="txt">Takes appointments<small>${esc(aName())} can book clients with this person.</small></span></label></div>
+      </div>
+      <div id="st-msg" style="font-size:12.5px;color:var(--muted);min-height:16px;margin:4px 0"></div>
+      <div><button class="btn primary" id="st-add">+ Add stylist</button></div>
+    </div>
+  </div>`;
+  $("#st-refresh").onclick=async()=>{ const b=$("#st-refresh"); b.disabled=true; b.textContent="…"; await loadStaff(); pageStaff(); };
+  $("#st-gen").onclick=()=>{ $("#st-pass").value=genPassword(); };
+  $("#st-add").onclick=addStaff;
+  bindBookToggles();
+}
+function bindBookToggles(){ document.querySelectorAll('#staff-list [data-book]').forEach(b=>b.onclick=()=>toggleBookable(b.dataset.book, b.dataset.val==='1')); }
+function genPassword(){ const c="ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnpqrstuvwxyz23456789"; let s=""; const a=crypto.getRandomValues(new Uint32Array(12)); for(let i=0;i<12;i++) s+=c[a[i]%c.length]; return s; }
+async function toggleBookable(id,val){ await db.from('users').update({is_bookable:val}).eq('id',id); await loadStaff(); const el=$("#staff-list"); if(el){ el.innerHTML=(state.staff||[]).map(staffRowHTML).join(""); bindBookToggles(); } }
+async function addStaff(){
+  const name=$("#st-name").value.trim(), email=$("#st-email").value.trim().toLowerCase(), pass=$("#st-pass").value, book=$("#st-book").checked;
+  const msg=$("#st-msg"); const set=(t,c)=>{ if(msg){ msg.style.color=c||"var(--muted)"; msg.textContent=t; } };
+  if(!name){ set("Enter their name.","var(--danger)"); return; }
+  if(!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)){ set("Enter a valid login email.","var(--danger)"); return; }
+  if((pass||"").length<8){ set("Password must be at least 8 characters.","var(--danger)"); return; }
+  const btn=$("#st-add"); btn.disabled=true; btn.textContent="Adding…"; set("Creating the login…");
+  let r=null; try{ r=(await db.functions.invoke("create-staff",{body:{full_name:name,email,password:pass,is_bookable:book}})).data; }catch(_e){ r=null; }
+  btn.disabled=false; btn.textContent="+ Add stylist";
+  if(r&&r.ok){
+    set(`Added ${name}. Share these so they can sign in — email: ${email}  ·  password: ${pass}`,"var(--ok)");
+    $("#st-name").value=""; $("#st-email").value=""; $("#st-pass").value="";
+    await loadStaff(); const el=$("#staff-list"); if(el){ el.innerHTML=(state.staff||[]).map(staffRowHTML).join(""); bindBookToggles(); }
+  } else { set((r&&r.error)||"Couldn't add the stylist. Try again.","var(--danger)"); }
+}
 
 /* ===================== MESSAGES PAGE ===================== */
 async function loadMessages(){
