@@ -1342,7 +1342,7 @@ function bookingCardHTML(){
         <div class="field"><label class="lab">Time</label><input class="inp" type="time" id="bk-time"></div>
       </div>
       <div class="grid-2">
-        <div class="field"><label class="lab">Title / client</label><input class="inp" id="bk-title" placeholder="e.g. Haircut — Jane D."></div>
+        <div class="field"><label class="lab">Client name</label><input class="inp" id="bk-client" placeholder="e.g. Jane Doe"></div>
         <div class="field"><label class="lab">Client email <span class="sub">optional — sends a confirmation</span></label><input class="inp" type="email" id="bk-email" placeholder="optional"></div>
       </div>
       <div class="field"><label class="lab">Notes <span class="sub">optional</span></label><input class="inp" id="bk-notes" placeholder="optional"></div>
@@ -1355,7 +1355,7 @@ function bindBookingForm(){
   const tog=$("#bk-toggle"); if(!tog) return;
   tog.onclick=()=>{ const f=$("#bk-form"); const open=f.style.display!=='none'; f.style.display=open?'none':'block'; tog.textContent=open?'+ New booking':'Close'; };
   const typeSel=$("#bk-type");
-  if(typeSel) typeSel.onchange=()=>{ const o=typeSel.selectedOptions[0]; if(o&&o.value){ $("#bk-dur").value=o.dataset.dur||45; const t=$("#bk-title"); if(!t.value) t.value=o.dataset.name||''; } };
+  if(typeSel) typeSel.onchange=()=>{ const o=typeSel.selectedOptions[0]; if(o&&o.value){ $("#bk-dur").value=o.dataset.dur||45; } };
   const save=$("#bk-save"); if(save) save.onclick=submitBooking;
 }
 async function submitBooking(){
@@ -1371,7 +1371,7 @@ async function submitBooking(){
   const startIso=zonedToUtcISO(date,time,state.account.timezone);
   const btn=$("#bk-save"); btn.disabled=true; const ob=btn.textContent; btn.textContent="Booking…"; set("Checking the time…");
   let r=null,err=null;
-  try{ const res=await db.functions.invoke('staff-book',{ body:{ action:'book', user_id:uid, start_iso:startIso, dur_min:dur, type_id:typeId, mode, title:$("#bk-title").value.trim()||null, customer_email:$("#bk-email").value.trim()||null, notes:$("#bk-notes").value.trim()||null, tz:state.account.timezone } }); r=res.data; err=res.error; }catch(e){ err=e; }
+  try{ const res=await db.functions.invoke('staff-book',{ body:{ action:'book', user_id:uid, start_iso:startIso, dur_min:dur, type_id:typeId, mode, client_name:$("#bk-client").value.trim()||null, customer_email:$("#bk-email").value.trim()||null, notes:$("#bk-notes").value.trim()||null, tz:state.account.timezone } }); r=res.data; err=res.error; }catch(e){ err=e; }
   btn.disabled=false; btn.textContent=ob;
   if(err){ set("Could not book. Try again.","var(--danger)"); return; }
   if(r&&r.ok){ set(`Booked for ${r.when_label||'the selected time'}.`,"var(--ok)"); await loadAppointments(); renderAppts(); return; }
