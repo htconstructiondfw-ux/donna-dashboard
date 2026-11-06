@@ -801,7 +801,7 @@ async function removeType(id){ if(id){ await db.from('appointment_types').delete
 
 /* ===================== STAFF PAGE (salon) ===================== */
 async function loadStaff(){
-  const { data } = await db.from('users').select('id,full_name,email,title,role,is_bookable').eq('account_id', state.account.id).order('created_at');
+  const { data } = await db.from('users').select('id,full_name,email,title,role,is_bookable,phone').eq('account_id', state.account.id).order('created_at');
   state.staff = data||[];
 }
 function roleLabel(u){ return ['owner','admin'].includes(u.role) ? (u.role==='owner'?'Owner':'Manager') : 'Stylist'; }
@@ -809,11 +809,21 @@ function staffRowHTML(u){
   const you=u.id===state.owner.id, mgr=['owner','admin'].includes(u.role), lbl=roleLabel(u);
   const book = u.is_bookable ? '<span class="pill ok">Takes bookings</span>' : '<span class="pill">Not bookable</span>';
   const toggle = you ? '' : `<button class="btn sm" data-book="${u.id}" data-val="${u.is_bookable?'0':'1'}">${u.is_bookable?'Stop bookings':'Make bookable'}</button>`;
+  const xfer=`<div style="margin-top:7px;display:flex;gap:6px;align-items:center;flex-wrap:wrap"><span style="font-size:11.5px;color:var(--muted)">Transfer calls to</span><input class="inp" data-phone="${u.id}" value="${esc(u.phone||'')}" placeholder="+18175551234" style="max-width:168px;font-size:12.5px;padding:5px 9px"><button class="btn sm" data-savephone="${u.id}">Save</button><span class="phone-msg" data-msg="${u.id}" style="font-size:11.5px;color:var(--muted)"></span></div>`;
   return `<div class="staff-row">
-    <div class="staff-main"><b>${esc(u.full_name||u.email)}${you?' <small style="display:inline;color:var(--muted-2)">(you)</small>':''}</b><small>${esc(u.email)}${u.title?' · '+esc(u.title):''}</small></div>
+    <div class="staff-main"><b>${esc(u.full_name||u.email)}${you?' <small style="display:inline;color:var(--muted-2)">(you)</small>':''}</b><small>${esc(u.email)}${u.title?' · '+esc(u.title):''}</small>${xfer}</div>
     <div class="staff-meta"><span class="pill ${mgr?'mgr':''}">${lbl}</span>${book}</div>
     <div class="staff-act">${toggle}</div>
   </div>`;
+}
+function normPhone(s){ let v=String(s||'').trim(); if(!v) return ''; if(v[0]==='+') return '+'+v.slice(1).replace(/\D/g,''); const d=v.replace(/\D/g,''); return d.length===10 ? '+1'+d : (d?('+'+d):''); }
+async function saveStaffPhone(id){
+  const inp=document.querySelector(`[data-phone="${id}"]`); const m=document.querySelector(`[data-msg="${id}"]`);
+  if(!inp) return; const val=normPhone(inp.value); inp.value=val;
+  if(m){ m.style.color='var(--muted)'; m.textContent='Saving…'; }
+  const { error }=await db.from('users').update({phone:val||null}).eq('id',id);
+  if(!error){ const r=(state.staff||[]).find(s=>s.id===id); if(r) r.phone=val; if(id===state.owner.id) state.owner.phone=val; if(m){ m.style.color='var(--ok)'; m.textContent=val?'Saved':'Cleared'; setTimeout(()=>{ if(m) m.textContent=''; },1400); } }
+  else if(m){ m.style.color='var(--danger)'; m.textContent='Error'; }
 }
 function pageStaff(){
   const staff=state.staff||[];
@@ -844,7 +854,7 @@ function pageStaff(){
   $("#st-add").onclick=addStaff;
   bindBookToggles();
 }
-function bindBookToggles(){ document.querySelectorAll('#staff-list [data-book]').forEach(b=>b.onclick=()=>toggleBookable(b.dataset.book, b.dataset.val==='1')); }
+function bindBookToggles(){ document.querySelectorAll('#staff-list [data-book]').forEach(b=>b.onclick=()=>toggleBookable(b.dataset.book, b.dataset.val==='1')); document.querySelectorAll('#staff-list [data-savephone]').forEach(b=>b.onclick=()=>saveStaffPhone(b.dataset.savephone)); }
 function genPassword(){ const c="ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnpqrstuvwxyz23456789"; let s=""; const a=crypto.getRandomValues(new Uint32Array(12)); for(let i=0;i<12;i++) s+=c[a[i]%c.length]; return s; }
 async function toggleBookable(id,val){ await db.from('users').update({is_bookable:val}).eq('id',id); await loadStaff(); const el=$("#staff-list"); if(el){ el.innerHTML=(state.staff||[]).map(staffRowHTML).join(""); bindBookToggles(); } }
 async function addStaff(){
