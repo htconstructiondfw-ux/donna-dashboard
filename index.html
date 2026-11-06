@@ -1341,11 +1341,15 @@ function bookingCardHTML(){
         <div class="field"><label class="lab">Date</label><input class="inp" type="date" id="bk-date"></div>
         <div class="field"><label class="lab">Time</label><input class="inp" type="time" id="bk-time"></div>
       </div>
+      <div class="field" style="position:relative"><label class="lab">Find existing client <span class="sub">search by name or phone</span></label><input class="inp" id="bk-search" placeholder="Start typing a name or phone" autocomplete="off"><div id="bk-results" style="position:absolute;z-index:5;left:0;right:0;top:100%;background:#fff;border:1px solid var(--line);border-radius:var(--r-sm);box-shadow:0 8px 24px rgba(16,24,40,.12);display:none;max-height:220px;overflow:auto"></div></div>
       <div class="grid-2">
         <div class="field"><label class="lab">Client name</label><input class="inp" id="bk-client" placeholder="e.g. Jane Doe"></div>
-        <div class="field"><label class="lab">Client email <span class="sub">optional — sends a confirmation</span></label><input class="inp" type="email" id="bk-email" placeholder="optional"></div>
+        <div class="field"><label class="lab">Client phone <span class="sub">optional</span></label><input class="inp" id="bk-phone" placeholder="optional"></div>
       </div>
-      <div class="field"><label class="lab">Notes <span class="sub">optional</span></label><input class="inp" id="bk-notes" placeholder="optional"></div>
+      <div class="grid-2">
+        <div class="field"><label class="lab">Client email <span class="sub">optional — sends a confirmation</span></label><input class="inp" type="email" id="bk-email" placeholder="optional"></div>
+        <div class="field"><label class="lab">Notes <span class="sub">optional</span></label><input class="inp" id="bk-notes" placeholder="optional"></div>
+      </div>
       <div id="bk-msg" style="font-size:12.5px;color:var(--muted);min-height:16px;margin:4px 0"></div>
       <div><button class="btn primary" id="bk-save">Book it</button></div>
     </div>
@@ -1356,6 +1360,20 @@ function bindBookingForm(){
   tog.onclick=()=>{ const f=$("#bk-form"); const open=f.style.display!=='none'; f.style.display=open?'none':'block'; tog.textContent=open?'+ New booking':'Close'; };
   const typeSel=$("#bk-type");
   if(typeSel) typeSel.onchange=()=>{ const o=typeSel.selectedOptions[0]; if(o&&o.value){ $("#bk-dur").value=o.dataset.dur||45; } };
+  const srch=$("#bk-search"), results=$("#bk-results");
+  if(srch&&results){ let tmr=null;
+    srch.oninput=()=>{ const q=srch.value.trim(); clearTimeout(tmr); if(q.length<2){ results.style.display='none'; results.innerHTML=''; return; }
+      tmr=setTimeout(async()=>{
+        const qf=q.replace(/[,()*%]/g,' ').trim(); let rows=[];
+        try{ const { data }=await db.from('contacts').select('id,name,phone,email').eq('account_id',state.account.id).or(`name.ilike.%${qf}%,phone.ilike.%${qf}%`).limit(6); rows=data||[]; }catch(_e){ rows=[]; }
+        if(!rows.length){ results.innerHTML='<div style="padding:9px 12px;color:var(--muted);font-size:12.5px">No match. Fill in the fields below for a new client.</div>'; results.style.display='block'; return; }
+        results.innerHTML=rows.map((c,i)=>`<div class="bk-res" data-i="${i}" style="padding:9px 12px;cursor:pointer;border-bottom:1px solid var(--line-2);font-size:13px"><b>${esc(c.name||'Unknown')}</b>${c.phone?` · ${esc(c.phone)}`:''}${c.email?`<br><span style="color:var(--muted);font-size:12px">${esc(c.email)}</span>`:''}</div>`).join('');
+        results.style.display='block';
+        results.querySelectorAll('.bk-res').forEach(el=>el.onclick=()=>{ const c=rows[+el.dataset.i]; $("#bk-client").value=c.name||''; $("#bk-phone").value=c.phone||''; $("#bk-email").value=c.email||''; srch.value=c.name||c.phone||''; results.style.display='none'; });
+      },250);
+    };
+    srch.onblur=()=>setTimeout(()=>{ if(results) results.style.display='none'; },200);
+  }
   const save=$("#bk-save"); if(save) save.onclick=submitBooking;
 }
 async function submitBooking(){
@@ -1371,7 +1389,8 @@ async function submitBooking(){
   const startIso=zonedToUtcISO(date,time,state.account.timezone);
   const btn=$("#bk-save"); btn.disabled=true; const ob=btn.textContent; btn.textContent="Booking…"; set("Checking the time…");
   let r=null,err=null;
-  try{ const res=await db.functions.invoke('staff-book',{ body:{ action:'book', user_id:uid, start_iso:startIso, dur_min:dur, type_id:typeId, mode, client_name:$("#bk-client").value.trim()||null, customer_email:$("#bk-email").value.trim()||null, notes:$("#bk-notes").value.trim()||null, tz:state.account.timezone } }); r=res.data; err=res.error; }catch(e){ err=e; }
+  const phRaw=$("#bk-phone")?$("#bk-phone").value.trim():""; const phone=phRaw?((typeof normPhone==='function'&&normPhone(phRaw))||phRaw):null;
+  try{ const res=await db.functions.invoke('staff-book',{ body:{ action:'book', user_id:uid, start_iso:startIso, dur_min:dur, type_id:typeId, mode, client_name:$("#bk-client").value.trim()||null, client_phone:phone, customer_email:$("#bk-email").value.trim()||null, notes:$("#bk-notes").value.trim()||null, tz:state.account.timezone } }); r=res.data; err=res.error; }catch(e){ err=e; }
   btn.disabled=false; btn.textContent=ob;
   if(err){ set("Could not book. Try again.","var(--danger)"); return; }
   if(r&&r.ok){ set(`Booked for ${r.when_label||'the selected time'}.`,"var(--ok)"); await loadAppointments(); renderAppts(); return; }
