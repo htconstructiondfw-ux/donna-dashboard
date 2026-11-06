@@ -247,7 +247,7 @@ function renderAuth(){
     <div class="field"><label class="lab">Invite code <span class="sub">Donna is in closed beta</span></label><input class="inp" id="f-invite" placeholder="DONNA-XXXX-XXXX" autocapitalize="characters"></div>
     <div class="field"><label class="lab">Business name</label><input class="inp" id="f-company" placeholder="e.g. HT Construction DFW"></div>
     <div class="grid-2">
-      <div class="field"><label class="lab">Industry</label><select class="inp" id="f-industry"><option value="">Choose…</option><option>Construction</option><option>Property management</option><option>Dental / medical</option><option>HVAC / plumbing</option><option>Professional services</option><option>Other</option></select></div>
+      <div class="field"><label class="lab">Industry</label><select class="inp" id="f-industry"><option value="">Choose…</option>${WZ_INDUSTRIES.map(x=>`<option value="${x[0]}">${esc(x[1])}</option>`).join("")}</select></div>
       <div class="field"><label class="lab">Your title</label><input class="inp" id="f-title" placeholder="e.g. Owner"></div>
     </div>
     <div class="grid-2">
