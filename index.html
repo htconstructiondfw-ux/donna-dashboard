@@ -1248,12 +1248,84 @@ const TZS = [
 function tzLabel(tz){ const f=TZS.find(t=>t[0]===tz); return f?f[1]:tz; }
 async function loadAppointments(){
   const { data } = await db.from('appointments').select('*').eq('account_id', state.account.id).order('starts_at',{ascending:true});
-  state.appointments = (data||[]).map(a=>({ id:a.id, title:a.title, status:a.status, mode:a.mode, start:a.starts_at, end:a.ends_at, notes:a.notes||"", language:a.language||null, location:a.location_address||null, meetingUrl:a.meeting_url||null }));
+  state.appointments = (data||[]).map(a=>({ id:a.id, title:a.title, status:a.status, mode:a.mode, start:a.starts_at, end:a.ends_at, notes:a.notes||"", language:a.language||null, location:a.location_address||null, meetingUrl:a.meeting_url||null, userId:a.user_id||null }));
+  // Managers booking on a stylist's behalf need the staff roster for the picker and name labels.
+  if(isManager() && salonOn() && !(state.staff&&state.staff.length)){ try{ await loadStaff(); }catch(_e){} }
 }
 function fmtAppt(iso, withDate=true){
   const tz=state.account.timezone;
   const o = withDate ? {timeZone:tz, weekday:'short', month:'short', day:'numeric', hour:'numeric', minute:'2-digit'} : {timeZone:tz, hour:'numeric', minute:'2-digit'};
   return new Intl.DateTimeFormat('en-US', o).format(new Date(iso));
+}
+function staffName(uid){ const u=(state.staff||[]).find(s=>s.id===uid); return u?(u.full_name||u.email||''):''; }
+// Interpret a wall date+time in the given IANA tz and return the matching UTC ISO instant.
+function zonedToUtcISO(dateStr, timeStr, tz){
+  const [y,mo,d]=String(dateStr).split('-').map(Number); const [h,mi]=String(timeStr||'0:0').split(':').map(Number);
+  const guess=Date.UTC(y,(mo||1)-1,d||1,h||0,mi||0);
+  const p=new Intl.DateTimeFormat('en-US',{timeZone:tz,hour12:false,year:'numeric',month:'2-digit',day:'2-digit',hour:'2-digit',minute:'2-digit'}).formatToParts(new Date(guess)).reduce((a,x)=>{a[x.type]=x.value;return a;},{});
+  const asUTC=Date.UTC(+p.year,+p.month-1,+p.day,(+p.hour)%24,+p.minute);
+  return new Date(guess-(asUTC-guess)).toISOString();
+}
+function utcToZonedParts(iso,tz){
+  const p=new Intl.DateTimeFormat('en-US',{timeZone:tz,hour12:false,year:'numeric',month:'2-digit',day:'2-digit',hour:'2-digit',minute:'2-digit'}).formatToParts(new Date(iso)).reduce((a,x)=>{a[x.type]=x.value;return a;},{});
+  return { date:`${p.year}-${p.month}-${p.day}`, time:`${((+p.hour)%24).toString().padStart(2,'0')}:${p.minute}` };
+}
+const BOOK_ERR={ conflict:"That time overlaps another appointment for this person. Pick a different time.", blocked:"That falls in a time-off block. Pick a different time.", in_past:"Pick a time in the future.", forbidden:"You can only manage your own appointments.", no_staff:"Pick a staff member.", bad_time:"Pick a valid date and time.", insert_failed:"Could not save the booking. Try again.", not_signed_in:"Please sign in again." };
+function bookingCardHTML(){
+  if(!salonOn()) return '';
+  const mgr=isManager();
+  const all=(state.staff||[]);
+  const people = all.filter(u=>u.is_bookable).length ? all.filter(u=>u.is_bookable) : all;
+  const stylistField = mgr ? `<div class="field"><label class="lab">Stylist</label><select class="inp" id="bk-user">${people.map(u=>`<option value="${u.id}">${esc(u.full_name||u.email)}${u.is_bookable?'':' (not bookable)'}</option>`).join("")||`<option value="">No staff yet</option>`}</select></div>` : '';
+  const typeOpts=`<option value="">No specific service</option>`+ (state.types||[]).map(t=>`<option value="${t.id}" data-dur="${t.dur}" data-mode="${t.mode}" data-name="${esc(t.name)}">${esc(t.name)} · ${t.dur} min</option>`).join("");
+  return `
+  <div class="card">
+    <div class="card-h"><h2>Book an appointment</h2><button class="btn sm" id="bk-toggle">+ New booking</button></div>
+    <div id="bk-form" style="display:none">
+      ${stylistField}
+      <div class="grid-2">
+        <div class="field"><label class="lab">Service</label><select class="inp" id="bk-type">${typeOpts}</select></div>
+        <div class="field"><label class="lab">Length (min)</label><input class="inp" type="number" id="bk-dur" value="45" min="5" step="5"></div>
+      </div>
+      <div class="grid-2">
+        <div class="field"><label class="lab">Date</label><input class="inp" type="date" id="bk-date"></div>
+        <div class="field"><label class="lab">Time</label><input class="inp" type="time" id="bk-time"></div>
+      </div>
+      <div class="grid-2">
+        <div class="field"><label class="lab">Title / client</label><input class="inp" id="bk-title" placeholder="e.g. Haircut — Jane D."></div>
+        <div class="field"><label class="lab">Client email <span class="sub">optional — sends a confirmation</span></label><input class="inp" type="email" id="bk-email" placeholder="optional"></div>
+      </div>
+      <div class="field"><label class="lab">Notes <span class="sub">optional</span></label><input class="inp" id="bk-notes" placeholder="optional"></div>
+      <div id="bk-msg" style="font-size:12.5px;color:var(--muted);min-height:16px;margin:4px 0"></div>
+      <div><button class="btn primary" id="bk-save">Book it</button></div>
+    </div>
+  </div>`;
+}
+function bindBookingForm(){
+  const tog=$("#bk-toggle"); if(!tog) return;
+  tog.onclick=()=>{ const f=$("#bk-form"); const open=f.style.display!=='none'; f.style.display=open?'none':'block'; tog.textContent=open?'+ New booking':'Close'; };
+  const typeSel=$("#bk-type");
+  if(typeSel) typeSel.onchange=()=>{ const o=typeSel.selectedOptions[0]; if(o&&o.value){ $("#bk-dur").value=o.dataset.dur||45; const t=$("#bk-title"); if(!t.value) t.value=o.dataset.name||''; } };
+  const save=$("#bk-save"); if(save) save.onclick=submitBooking;
+}
+async function submitBooking(){
+  const msg=$("#bk-msg"); const set=(t,c)=>{ if(msg){msg.style.color=c||'var(--muted)';msg.textContent=t;} };
+  const mgr=isManager();
+  const uid = mgr ? ($("#bk-user")&&$("#bk-user").value) : state.owner.id;
+  if(mgr && !uid){ set("Pick a staff member.","var(--danger)"); return; }
+  const date=$("#bk-date").value, time=$("#bk-time").value;
+  if(!date||!time){ set("Pick a date and time.","var(--danger)"); return; }
+  const dur=+$("#bk-dur").value||45;
+  const typeSel=$("#bk-type"); const typeId=typeSel&&typeSel.value?typeSel.value:null;
+  const o=typeSel&&typeSel.selectedOptions[0]; const mode=o&&o.dataset&&o.dataset.mode?o.dataset.mode:null;
+  const startIso=zonedToUtcISO(date,time,state.account.timezone);
+  const btn=$("#bk-save"); btn.disabled=true; const ob=btn.textContent; btn.textContent="Booking…"; set("Checking the time…");
+  let r=null,err=null;
+  try{ const res=await db.functions.invoke('staff-book',{ body:{ action:'book', user_id:uid, start_iso:startIso, dur_min:dur, type_id:typeId, mode, title:$("#bk-title").value.trim()||null, customer_email:$("#bk-email").value.trim()||null, notes:$("#bk-notes").value.trim()||null, tz:state.account.timezone } }); r=res.data; err=res.error; }catch(e){ err=e; }
+  btn.disabled=false; btn.textContent=ob;
+  if(err){ set("Could not book. Try again.","var(--danger)"); return; }
+  if(r&&r.ok){ set(`Booked for ${r.when_label||'the selected time'}.`,"var(--ok)"); await loadAppointments(); renderAppts(); return; }
+  set(BOOK_ERR[r&&r.error]||"Could not book. Try again.","var(--danger)");
 }
 function renderAppts(){
   const now=Date.now();
@@ -1262,32 +1334,47 @@ function renderAppts(){
   const past = active.filter(a=> new Date(a.end||a.start).getTime()<now);
   const cancelled = state.appointments.filter(a=>a.status==='cancelled');
   const card = list => list.map(apptHTML).join("");
+  const lede = isManager()
+    ? `Appointments across your salon. Add or move one here and ${esc(aName())} treats it like any booking: it syncs to your connected calendar and the client gets a confirmation and reminder.`
+    : `Your appointments. Add or move one here and it is handled like any booking: it syncs to the connected calendar and the client gets a confirmation and reminder.`;
   $("#page").innerHTML=`
   <div class="page">
-    <div class="page-head"><h1>Appointments</h1><p>Consultations ${esc(aName())} has booked. Times shown in ${esc(tzLabel(state.account.timezone))} — your dashboard time zone.</p></div>
+    <div class="page-head"><h1>Appointments</h1><p>${lede} Times shown in ${esc(tzLabel(state.account.timezone))}.</p></div>
+    ${bookingCardHTML()}
     <div class="card"><div class="card-h"><h2>Upcoming${upcoming.length?` (${upcoming.length})`:''}</h2><button class="btn sm" id="ap-refresh">Refresh</button></div>
-      <div>${upcoming.length?card(upcoming):`<div class="empty">${I.appt}<div>No upcoming appointments. When ${esc(aName())} books one, it shows here.</div></div>`}</div></div>
+      <div>${upcoming.length?card(upcoming):`<div class="empty">${I.appt}<div>No upcoming appointments yet.</div></div>`}</div></div>
     ${past.length?`<div class="card"><div class="card-h"><h2>Past</h2><span class="hint">${past.length}</span></div><div>${card(past)}</div></div>`:''}
     ${cancelled.length?`<div class="card"><div class="card-h"><h2>Cancelled</h2><span class="hint">${cancelled.length}</span></div><div>${card(cancelled)}</div></div>`:''}
   </div>`;
   $("#ap-refresh").onclick=async()=>{ const b=$("#ap-refresh"); b.disabled=true; b.textContent="…"; await loadAppointments(); renderAppts(); };
+  bindBookingForm();
   bindApptActions();
 }
 function apptHTML(a){
   const cancelled=a.status==='cancelled';
+  const upcoming = !cancelled && new Date(a.end||a.start).getTime()>=Date.now();
   const modeLbl={phone:'Phone',virtual:'Video',in_person:'On-site'}[a.mode]||'';
+  const who = (salonOn()&&isManager()&&a.userId) ? staffName(a.userId) : '';
   let detail='';
   if(modeLbl){
     let extra='';
     if(a.mode==='in_person'&&a.location) extra=` · ${esc(a.location)}`;
     else if(a.mode==='virtual'&&a.meetingUrl) extra=` · <a href="${esc(a.meetingUrl)}" target="_blank" rel="noopener">Join link</a>`;
-    detail=`<div class="m-text" style="opacity:.85">${modeLbl}${extra}</div>`;
-  }
+    detail=`<div class="m-text" style="opacity:.85">${modeLbl}${extra}${who?` · <b>${esc(who)}</b>`:''}</div>`;
+  } else if(who){ detail=`<div class="m-text" style="opacity:.85"><b>${esc(who)}</b></div>`; }
   return `<div class="m-item ${cancelled?'done':''}">
     <div class="m-top"><span class="m-who">${esc(a.title||'Consultation')}${langBadge(a.language)}</span><span class="m-when">${esc(fmtAppt(a.start))}${a.end?` – ${esc(fmtAppt(a.end,false))}`:''}</span></div>
     ${detail}
     ${a.notes?`<div class="m-text">${esc(a.notes)}</div>`:''}
-    <div class="m-actions"><span class="appt-status s-${a.status}">${esc(a.status)}</span>${cancelled?'':`<button class="btn sm" data-cancel="${a.id}" style="margin-left:10px">Cancel</button>`}</div>
+    <div class="m-actions"><span class="appt-status s-${a.status}">${esc(a.status)}</span>${upcoming?`<button class="btn sm" data-resched="${a.id}" style="margin-left:10px">Reschedule</button>`:''}${cancelled?'':`<button class="btn sm" data-cancel="${a.id}" style="margin-left:10px">Cancel</button>`}</div>
+    ${upcoming?`<div id="rb-${a.id}" style="display:none;margin-top:10px;border-top:1px solid var(--line);padding-top:10px">
+      <div class="grid-2">
+        <div class="field"><label class="lab">New date</label><input class="inp" type="date" id="rb-date-${a.id}"></div>
+        <div class="field"><label class="lab">New time</label><input class="inp" type="time" id="rb-time-${a.id}"></div>
+      </div>
+      <div id="rb-msg-${a.id}" style="font-size:12px;color:var(--muted);min-height:14px;margin-bottom:6px"></div>
+      <button class="btn sm primary" data-resched-save="${a.id}">Save new time</button>
+    </div>`:''}
   </div>`;
 }
 function bindApptActions(){
@@ -1302,6 +1389,25 @@ function bindApptActions(){
       b.disabled=false; b.textContent="Cancel";
       alert("Sorry, that cancellation didn't go through. Please try again.");
     }
+  });
+  document.querySelectorAll('#page [data-resched]').forEach(b=>b.onclick=()=>{
+    const id=b.dataset.resched; const box=document.getElementById('rb-'+id); if(!box) return;
+    const open=box.style.display!=='none'; box.style.display=open?'none':'block';
+    if(!open){ const a=state.appointments.find(x=>x.id===id); if(a){ const pz=utcToZonedParts(a.start,state.account.timezone); const d=document.getElementById('rb-date-'+id), t=document.getElementById('rb-time-'+id); if(d&&!d.value)d.value=pz.date; if(t&&!t.value)t.value=pz.time; } }
+  });
+  document.querySelectorAll('#page [data-resched-save]').forEach(b=>b.onclick=async()=>{
+    const id=b.dataset.reschedSave; const dEl=document.getElementById('rb-date-'+id), tEl=document.getElementById('rb-time-'+id);
+    const msg=document.getElementById('rb-msg-'+id); const set=(x,c)=>{if(msg){msg.style.color=c||'var(--muted)';msg.textContent=x;}};
+    const d=dEl&&dEl.value, t=tEl&&tEl.value;
+    if(!d||!t){ set('Pick a date and time.','var(--danger)'); return; }
+    const iso=zonedToUtcISO(d,t,state.account.timezone);
+    b.disabled=true; const o=b.textContent; b.textContent='Saving…'; set('Checking the time…');
+    let r=null,err=null;
+    try{ const res=await db.functions.invoke('staff-book',{ body:{ action:'reschedule', appointment_id:id, start_iso:iso, tz:state.account.timezone } }); r=res.data; err=res.error; }catch(e){ err=e; }
+    b.disabled=false; b.textContent=o;
+    if(err){ set('Could not reschedule. Try again.','var(--danger)'); return; }
+    if(r&&r.ok){ await loadAppointments(); renderAppts(); return; }
+    set(BOOK_ERR[r&&r.error]||'Could not reschedule. Try again.','var(--danger)');
   });
 }
 async function saveTimezone(){
