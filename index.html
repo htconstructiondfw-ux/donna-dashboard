@@ -1395,7 +1395,7 @@ function bindBookingForm(){
     if(exBlk) exBlk.style.display=isNew?'none':'block';
     if(mNew){ mNew.style.background=isNew?'var(--ink)':'#fff'; mNew.style.color=isNew?'#fff':'var(--ink-2)'; }
     if(mEx){ mEx.style.background=isNew?'#fff':'var(--ink)'; mEx.style.color=isNew?'var(--ink-2)':'#fff'; }
-    clearClient();
+    // Keep whatever the user has already entered when switching tabs; only the Change button clears.
   };
   if(mNew) mNew.onclick=()=>setMode('new');
   if(mEx) mEx.onclick=()=>setMode('existing');
