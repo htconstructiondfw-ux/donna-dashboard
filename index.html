@@ -714,8 +714,52 @@ async function verifyVideo(provider){
   if(reason==="auth_failed"){ setMsg("Please reconnect "+pname+" and try again.","var(--danger)"); connectCalendar(provider); return; }
   setMsg("Couldn't verify "+pname+". Try again.","var(--danger)");
 }
-function typeHTML(t){ const lbl={phone:"Phone",virtual:"Virtual",in_person:"In person"}[t.mode]; const icon={phone:I.phone,virtual:I.vid,in_person:I.pin}[t.mode]; return `<div class="type-item"><span class="ic ${t.mode}">${icon}</span><span class="nm">${esc(t.name)}<small>${t.dur} min${t.after?` · ${t.after} min buffer`:""}${t.travel?" · travel reserved":""}${t.overlap?` · ${t.overlap} min can overlap`:""}</small></span><span class="mode">${lbl}</span><button class="rm" data-id="${t.id||''}" title="Remove" style="margin-left:12px;background:none;border:none;color:var(--muted-2);font-size:13px">✕</button></div>`; }
-function bindTypeRemovers(){ document.querySelectorAll("#types .rm").forEach(b=>b.onclick=()=>removeType(b.dataset.id)); }
+function typeHTML(t){
+  const lbl={phone:"Phone",virtual:"Virtual",in_person:"In person"}[t.mode]; const icon={phone:I.phone,virtual:I.vid,in_person:I.pin}[t.mode]; const id=t.id||'';
+  return `<div class="type-wrap">
+    <div class="type-item"><span class="ic ${t.mode}">${icon}</span><span class="nm">${esc(t.name)}<small>${t.dur} min${t.after?` · ${t.after} min buffer`:""}${t.travel?" · travel reserved":""}${t.overlap?` · ${t.overlap} min can overlap`:""}</small></span><span class="mode">${lbl}</span>
+      <button class="btn sm" data-edit="${id}" style="margin-left:12px">Edit</button>
+      <button class="rm" data-id="${id}" title="Remove" style="margin-left:8px;background:none;border:none;color:var(--muted-2);font-size:13px">✕</button></div>
+    <div class="type-edit" id="te-${id}" style="display:none;border:1px solid var(--line);border-top:none;border-radius:0 0 var(--r-sm) var(--r-sm);padding:12px 14px;margin:-7px 0 9px;background:#fbfcfe">
+      <div class="grid-2">
+        <div class="field"><label class="lab">Name</label><input class="inp" id="te-name-${id}" value="${esc(t.name)}"></div>
+        <div class="field"><label class="lab">Mode</label><select class="inp" id="te-mode-${id}"><option value="in_person"${t.mode==='in_person'?' selected':''}>In person</option><option value="phone"${t.mode==='phone'?' selected':''}>Phone</option><option value="virtual"${t.mode==='virtual'?' selected':''}>Virtual</option></select></div>
+      </div>
+      <div class="grid-2">
+        <div class="field"><label class="lab">Length (min)</label><input class="inp" type="number" id="te-dur-${id}" value="${t.dur}" min="5" step="5"></div>
+        <div class="field"><label class="lab">Buffer after (min)</label><input class="inp" type="number" id="te-after-${id}" value="${t.after||0}" min="0" step="5"></div>
+      </div>
+      <div class="field"><label class="switch"><input type="checkbox" id="te-travel-${id}"${t.travel?' checked':''}><span class="track"></span><span class="txt">Reserve travel time</span></label></div>
+      <div class="field"><label class="switch"><input type="checkbox" id="te-ov-${id}"${t.overlap?' checked':''}><span class="track"></span><span class="txt">Allow overlap during processing</span></label></div>
+      <div class="field" id="te-ovrow-${id}" style="display:${t.overlap?'block':'none'}"><label class="lab">Overlap minutes <span class="sub">processing tail that can overlap another booking</span></label><input class="inp" type="number" id="te-ovmin-${id}" value="${t.overlap||60}" min="0" step="5"></div>
+      <div id="te-msg-${id}" style="font-size:12px;color:var(--muted);min-height:14px"></div>
+      <div style="display:flex;gap:8px"><button class="btn sm primary" data-save-type="${id}">Save changes</button><button class="btn sm" data-cancel-type="${id}">Cancel</button></div>
+    </div>
+  </div>`;
+}
+function bindTypeRemovers(){
+  document.querySelectorAll("#types .rm").forEach(b=>b.onclick=()=>removeType(b.dataset.id));
+  document.querySelectorAll("#types [data-edit]").forEach(b=>b.onclick=()=>{ const p=document.getElementById('te-'+b.dataset.edit); if(p) p.style.display=p.style.display==='none'?'block':'none'; });
+  document.querySelectorAll("#types [data-cancel-type]").forEach(b=>b.onclick=()=>{ const p=document.getElementById('te-'+b.dataset.cancelType); if(p) p.style.display='none'; });
+  document.querySelectorAll("#types [data-save-type]").forEach(b=>b.onclick=()=>saveTypeEdit(b.dataset.saveType));
+  (state.types||[]).forEach(t=>{ const c=document.getElementById('te-ov-'+t.id), r=document.getElementById('te-ovrow-'+t.id); if(c&&r) c.onchange=()=>{ r.style.display=c.checked?'block':'none'; }; });
+}
+async function saveTypeEdit(id){
+  const g=s=>document.getElementById('te-'+s+'-'+id); const msg=document.getElementById('te-msg-'+id);
+  const set=(t,c)=>{ if(msg){ msg.style.color=c||'var(--muted)'; msg.textContent=t; } };
+  const name=(g('name').value||'').trim(); if(!name){ set('Give it a name.','var(--danger)'); return; }
+  const mode=g('mode').value;
+  if(mode==='virtual'){ let vp=state.videoProvider; if(!vp){ try{ const r=await db.functions.invoke('donna-video',{body:{action:'status'}}); if(r.data&&r.data.ok) vp=r.data.video_provider; }catch(_e){} state.videoProvider=vp; } if(!vp){ set('Verify a video provider before using Virtual.','var(--danger)'); return; } }
+  const dur=+g('dur').value||30;
+  const ovOn=g('ov').checked; let overlap=ovOn?(+g('ovmin').value||0):0; if(overlap>dur) overlap=dur; if(overlap<0) overlap=0;
+  const patch={ name, mode, default_duration_min:dur, buffer_after_min:+g('after').value||0, requires_travel:g('travel').checked, overlap_minutes:overlap };
+  const btn=document.querySelector('#types [data-save-type="'+id+'"]'); if(btn){ btn.disabled=true; btn.textContent='Saving…'; } set('Saving…');
+  const { data, error } = await db.from('appointment_types').update(patch).eq('id',id).select().single();
+  if(error||!data){ set('Could not save. Try again.','var(--danger)'); if(btn){ btn.disabled=false; btn.textContent='Save changes'; } return; }
+  const i=state.types.findIndex(x=>x.id===id);
+  if(i>=0) state.types[i]={id:data.id,name:data.name,mode:data.mode,dur:data.default_duration_min,before:data.buffer_before_min,after:data.buffer_after_min,travel:data.requires_travel,overlap:data.overlap_minutes||0};
+  pageTypes();
+}
 async function addType(){
   const name=$("#t-name").value.trim(); if(!name){ const b=$("#t-add"); const o=b.textContent; b.textContent="Name it first"; setTimeout(()=>b.textContent=o,1100); return; }
   const mode=$("#t-mode").value;
