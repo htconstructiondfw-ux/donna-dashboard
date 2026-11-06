@@ -420,6 +420,8 @@ function showStaff(){ return salonOn() && isManager() && salonMode()==='team'; }
 function renderApp(){
   const mgr=isManager();
   if(!mgr && !['schedule','appointments','clients'].includes(state.view)) state.view='appointments';
+  // A solo owner lives in their appointments; land there on first load, then leave navigation free.
+  if(mgr && isSolo() && !state._homed){ state._homed=true; if(state.view==='assistant') state.view='appointments'; }
   if(mgr && new URLSearchParams(location.search).get('calendar')) state.view='settings';
   let navConfig, navActivity, soon=[];
   if(mgr){
