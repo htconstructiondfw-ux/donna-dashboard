@@ -2518,11 +2518,14 @@ const WZ_RENDER={
         state.wizStep = !state.account.company?1:(!state.assistantId?2:7); await wzPersist({}); renderWizard(); return false;
       }
       const m=$("#wz-m"); if(m){ m.style.color='var(--muted)'; m.textContent='Creating your email address and going live…'; }
+      // Mark onboarding complete FIRST so the server-side calls below merge onto fresh settings (no clobber).
+      await wzPersist({ completed:true, completed_at:new Date().toISOString(), tutorial_done:false });
       let address='';
-      try{ const { data }=await db.functions.invoke("provision-email",{ body:{} }); if(data&&data.ok&&data.address){ address=data.address; state.account.settings=Object.assign({}, state.account.settings||{}, {email_address:data.address, email_reply_from:data.reply_from}); } }catch(e){ /* non-fatal, can retry from settings */ }
+      try{ const { data }=await db.functions.invoke("provision-email",{ body:{} }); if(data&&data.ok&&data.address){ address=data.address; } }catch(e){ /* non-fatal, can retry from settings */ }
       // Apply the industry preset (persona defaults, appointment types, starter FAQ drafts). Idempotent, no-op if no preset.
       try{ await db.functions.invoke("apply-preset",{ body:{ industry: state.wz.industry||state.account.industry||'' } }); }catch(e){ /* non-fatal */ }
-      await wzPersist({ completed:true, completed_at:new Date().toISOString(), email_address:address, tutorial_done:false });
+      // Refresh local settings so the app reflects the new email + preset.
+      try{ const { data:acct }=await db.from('accounts').select('settings').eq('id',state.account.id).maybeSingle(); if(acct&&acct.settings) state.account.settings=acct.settings; }catch(e){}
       state.wizStep=0; state.wz=null;
       renderApp();
       wzStartTutorial(address);
