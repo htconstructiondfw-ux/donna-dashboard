@@ -68,6 +68,9 @@
   .pg{width:auto!important;padding:11px 16px;font-size:14px}
   .back{background:none;border:none;color:var(--muted);font:inherit;font-size:13.5px;font-weight:500;cursor:pointer;padding:2px 0;margin-bottom:14px;transition:.14s}
   .back:hover{color:var(--accent-deep)}
+  .wl-cta{margin-top:20px;padding-top:16px;border-top:1px solid var(--line2);font-size:13.5px;color:var(--muted);text-align:center}
+  .linkbtn{background:none;border:none;color:var(--accent-deep);font:inherit;font-weight:600;cursor:pointer;text-decoration:underline;text-underline-offset:2px;padding:0}
+  .linkbtn:hover{color:var(--accent)}
   .summary{font-family:'Fraunces',Georgia,serif;font-style:italic;font-size:15px;color:var(--ink2);margin-bottom:18px}
   .msg{font-size:13.5px;margin-top:12px}
   .msg.err{color:var(--danger)}
@@ -192,10 +195,12 @@ async function stepTime(){
       (nextStart?`<button class="btn ghost pg" data-start="${esc(nextStart)}">Later dates &rarr;</button>`:`<span></span>`)+
       `</div>`;
   }
+  html+=`<div class="wl-cta">${slots.length?"Don't see a time that works?":'Want a spot the moment one opens up?'} <button class="linkbtn" id="wl-go">Join the waitlist</button></div>`;
   card(html);
   $("#bk2").onclick=goBack;
   document.querySelectorAll('[data-iso]').forEach(el=>el.onclick=()=>{ S.slot=el.dataset.iso; stepDetails(); });
   document.querySelectorAll('.pg').forEach(el=>el.onclick=()=>{ S.slotStart=el.dataset.start; stepTime(); });
+  { const w=$("#wl-go"); if(w) w.onclick=stepWaitlist; }
 }
 
 function stepDetails(){
@@ -257,6 +262,42 @@ async function confirmCode(){
   const reasons={wrong_code:'That code is not right. Try again.',expired:'That code expired. Please resend.',locked:'Too many tries. Please start over.',used:'That code was already used.',slot_gone:'Sorry, that time was just taken. Please pick another.'};
   msg.className='msg err'; msg.textContent=reasons[r&&r.reason]||'Could not confirm. Try again.';
   if(r&&(r.reason==='slot_gone')){ setTimeout(stepTime,1400); }
+}
+
+function stepWaitlist(){
+  const who = S.stylist? (' with '+S.stylist.name) : '';
+  card(`<button class="back" id="bk">&larr; Times</button><div class="step-label">Join the waitlist</div>
+    <div class="summary">${esc(S.service.name)}${esc(who)}</div>
+    <p style="font-size:13px;color:var(--ink2);margin:-8px 0 16px;line-height:1.5">We'll text you the moment a matching spot opens up, so you can grab it first.</p>
+    <label class="f">Your name</label><input class="inp" id="w-name" autocomplete="name" placeholder="First and last name">
+    <label class="f">Mobile number</label><input class="inp" id="w-phone" inputmode="tel" autocomplete="tel" placeholder="(555) 123-4567">
+    <label class="f">Email <span style="color:var(--muted);font-weight:400">(optional)</span></label><input class="inp" id="w-email" type="email" autocomplete="email" placeholder="you@email.com">
+    <label class="f">Anything we should know? <span style="color:var(--muted);font-weight:400">(optional)</span></label><input class="inp" id="w-note" placeholder="e.g. mornings work best">
+    <input class="hp" id="w-hp" tabindex="-1" autocomplete="off" placeholder="Leave this blank">
+    <button class="btn" id="w-go">Join the waitlist</button>
+    <div class="msg" id="w-msg"></div>`);
+  $("#bk").onclick=stepTime;
+  $("#w-go").onclick=joinWaitlist;
+}
+
+async function joinWaitlist(){
+  const btn=$("#w-go"), msg=$("#w-msg");
+  const name=$("#w-name").value.trim(), phone=$("#w-phone").value.trim(), email=$("#w-email").value.trim(), note=$("#w-note").value.trim();
+  const setErr=t=>{ msg.className='msg err'; msg.textContent=t; };
+  if(!name){ setErr('Please enter your name.'); return; }
+  if(!phone){ setErr('Please enter your mobile number.'); return; }
+  btn.disabled=true; const o=btn.textContent; btn.textContent='Adding…'; msg.textContent='';
+  const r=await api('waitlist',{service_id:S.service.id, stylist_id:S.stylist?S.stylist.id:null, name, phone, email, note, hp:$("#w-hp").value});
+  btn.disabled=false; btn.textContent=o;
+  if(r&&r.ok){ waitlistDone(r.already); return; }
+  const reasons={need_phone:'Please enter your mobile number.',missing:'Please enter your name.',spam:'Something went wrong. Please try again.',failed:'We could not add you right now. Please try again.'};
+  setErr(reasons[r&&r.reason]||'Something went wrong. Please try again.');
+}
+
+function waitlistDone(already){
+  const who = S.stylist? (' with '+S.stylist.name) : '';
+  card(`<div class="center"><div class="big">&#10003;</div><h3>${already?"You're already on the list":"You're on the waitlist!"}</h3>
+    <p>${esc(S.service.name)}${esc(who)}<br>We'll text you as soon as a matching spot opens up.</p></div>`);
 }
 
 function success(whenLabel){
