@@ -1716,6 +1716,20 @@ async function saveAlertEmail(){
   else if(msg){ msg.style.color='var(--danger)'; msg.textContent='Could not save. Try again.'; }
   btn.disabled=false; btn.textContent=error?"Error — retry":"Saved ✓"; setTimeout(()=>btn.textContent=o,1300);
 }
+async function saveProviderLabel(){
+  const inp=$("#prov-label"), msg=$("#prov-label-msg"), btn=$("#prov-label-save");
+  if(!inp) return;
+  let v=String(inp.value||'').trim().toLowerCase().replace(/\s+/g,' ').slice(0,24);
+  if(!v) v='stylist';
+  inp.value=v;
+  btn.disabled=true; const o=btn.textContent; btn.textContent='Saving…';
+  const settings=Object.assign({}, state.account.settings||{}, {provider_label:v});
+  const { error }=await db.from('accounts').update({settings}).eq('id',state.account.id);
+  if(error){ if(msg){ msg.style.color='var(--danger)'; msg.textContent='Could not save'; } btn.disabled=false; btn.textContent=o; return; }
+  state.account.settings=settings;
+  if(msg){ msg.style.color='var(--ok)'; msg.textContent='Saved'; }
+  btn.disabled=false; btn.textContent='Saved ✓'; setTimeout(()=>{ renderApp(); },800);
+}
 async function saveReminders(){
   const modeEl=$("#rem-mode"), timeEl=$("#rem-time"), msg=$("#rem-msg"), btn=$("#rem-save");
   if(!modeEl) return;
@@ -1847,6 +1861,11 @@ function pageSettings(){
       <p style="font-size:13px;color:var(--muted)">${isSolo()
         ? `You are on the starter plan, so ${esc(aName())} books everything straight to you. A Pro plan adds a team: individual ${providerLabel()} logins, per-${providerLabel()} booking and call transfer, and message inboxes.`
         : `Your plan includes a team. Add your ${providerLabelPlural()} on the Staff page, each with their own login, and ${esc(aName())} routes callers and books with the right person.`}</p>
+      <div class="field" style="margin-top:16px;max-width:360px">
+        <label class="lab">What you call the people who do the services</label>
+        <div style="display:flex;gap:8px;align-items:center"><input class="inp" id="prov-label" value="${esc(providerLabel())}" placeholder="stylist" maxlength="24" style="max-width:200px"><button class="btn sm primary" id="prov-label-save">Save</button><span id="prov-label-msg" style="font-size:12px;color:var(--muted)"></span></div>
+        <p style="font-size:11.5px;color:var(--muted-2);margin-top:5px">${esc(aName())} uses this word on calls and across your dashboard. Singular and lowercase, for example stylist, technician, barber, or therapist.</p>
+      </div>
     </div>`:''}
 
     <div class="card"><div class="card-h"><h2>Time zone</h2><button class="btn sm" id="tz-save">Save</button></div>
@@ -1949,6 +1968,7 @@ function pageSettings(){
     </div>
   </div>`;
   $("#set-biz-save").onclick=saveBusiness;
+  { const pl=$("#prov-label-save"); if(pl) pl.onclick=saveProviderLabel; }
   $("#tz-save").onclick=saveTimezone;
   { const ae=$("#alert-save"); if(ae) ae.onclick=saveAlertEmail; }
   { const is=$("#inbound-save"); if(is) is.onclick=saveInbound; const ic=$("#inbound-copy"); if(ic) ic.onclick=()=>{ const a=$("#inbound-addr"); if(a&&a.value){ try{ navigator.clipboard&&navigator.clipboard.writeText(a.value.trim()); }catch(e){} const m=$("#inbound-msg"); if(m){ m.style.color='var(--muted)'; m.textContent='Copied.'; } } }; }
