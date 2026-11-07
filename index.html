@@ -243,7 +243,10 @@ const I = {
   vid:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="6" width="14" height="12" rx="2"/><path d="m22 8-6 4 6 4V8z"/></svg>',
   inbox:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 12h-6l-2 3h-4l-2-3H2"/><path d="M5.5 5.5 2 12v6a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2v-6l-3.5-6.5A2 2 0 0 0 16.8 4H7.2a2 2 0 0 0-1.7 1.5z"/></svg>',
   appt:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="5" width="18" height="16" rx="2"/><path d="M3 9h18M8 3v4M16 3v4M9 14l2 2 4-4"/></svg>',
-  gear:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>'
+  gear:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>',
+  msg:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>',
+  mail:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="5" width="18" height="14" rx="2"/><path d="m3 7 9 6 9-6"/></svg>',
+  bell:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 8a6 6 0 0 0-12 0c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/></svg>'
 };
 
 /* ===================== AUTH ===================== */
@@ -429,12 +432,12 @@ function renderApp(){
   if(mgr){
     navConfig=[["assistant","Assistant",I.bot],["schedule","Schedule",I.cal],["types","Appointment types",I.tag]];
     if(showStaff()) navConfig.push(["staff","Staff",I.users]);
-    navConfig.push(["knowledge","Knowledge",I.book],["settings","Settings",I.gear]);
-    navActivity=[["calls","Calls",I.phone],["appointments","Appointments",I.appt],["messages","Messages",I.inbox],["contacts",salonOn()?"Clients":"Contacts",I.users],["gaps","Questions",I.book],["conversations","Inbox",I.inbox]];
+    navConfig.push(["knowledge","Knowledge",I.book],["notifications","Notifications",I.bell],["settings","Settings",I.gear]);
+    navActivity=[["calls","Calls",I.phone],["appointments","Appointments",I.appt],["messages","Phone messages",I.msg],["contacts",salonOn()?"Clients":"Contacts",I.users],["gaps","Questions",I.book],["conversations","Email inbox",I.mail]];
     soon=[["billing","Billing",I.card]];
   } else {
     // Stylist: focused view — their own bookings, messages, clients, and their own availability.
-    navConfig=[["appointments","My appointments",I.appt],["messages","Messages",I.inbox],["clients","Clients",I.users],["schedule","My availability",I.cal]];
+    navConfig=[["appointments","My appointments",I.appt],["messages","Phone messages",I.msg],["clients","Clients",I.users],["schedule","My availability",I.cal]];
     navActivity=[];
   }
   const navCount=v=>{ if(v==='messages') return unreadCount(); if(v==='conversations') return (state.conversations||[]).filter(c=>c.status==='awaiting_staff').length; if(v==='gaps') return (state.gaps||[]).length; return 0; };
@@ -455,7 +458,7 @@ function renderApp(){
     </aside>
     <main class="main">
       <div class="topbar">
-        <div class="crumbs">${state.view==='settings'?'Account':(['messages','appointments','calls','contacts','clients','gaps','conversations'].includes(state.view)?'Activity':'Configure')} · <b>${esc(({assistant:"Assistant",schedule:"Schedule",types:"Appointment types",staff:"Staff",messages:"Messages",appointments:"Appointments",settings:"Settings",calls:"Calls",knowledge:"Knowledge",contacts:(salonOn()?"Clients":"Contacts"),clients:"Clients",gaps:"Open questions",conversations:"Inbox"})[state.view])}</b></div>
+        <div class="crumbs">${['settings','notifications'].includes(state.view)?'Account':(['messages','appointments','calls','contacts','clients','gaps','conversations'].includes(state.view)?'Activity':'Configure')} · <b>${esc(({assistant:"Assistant",schedule:"Schedule",types:"Appointment types",staff:"Staff",messages:"Phone messages",appointments:"Appointments",settings:"Settings",notifications:"Notifications",calls:"Calls",knowledge:"Knowledge",contacts:(salonOn()?"Clients":"Contacts"),clients:"Clients",gaps:"Open questions",conversations:"Email inbox"})[state.view])}</b></div>
         <div class="acct-chip"><span class="av">${initials}</span><div class="who"><b>${esc(state.account.company)}</b><span>${esc((state.account.status||'trial'))} · ${esc(state.account.plan||'starter')}</span></div></div>
       </div>
       <div id="approve-banner"></div>
@@ -472,8 +475,8 @@ function renderPage(){
   if('speechSynthesis' in window) window.speechSynthesis.cancel();
   teardownRealtime();
   document.querySelectorAll(".nav-item[data-v]").forEach(b=>b.classList.toggle("active",b.dataset.v===state.view));
-  $(".crumbs").innerHTML=`${state.view==='settings'?'Account':(['messages','appointments','calls','contacts','clients','gaps','conversations'].includes(state.view)?'Activity':'Configure')} · <b>${esc(({assistant:"Assistant",schedule:"Schedule",types:"Appointment types",staff:"Staff",messages:"Messages",appointments:"Appointments",settings:"Settings",calls:"Calls",knowledge:"Knowledge",contacts:(salonOn()?"Clients":"Contacts"),clients:"Clients",gaps:"Open questions",conversations:"Inbox"})[state.view])}</b>`;
-  const PAGES={assistant:pageAssistant, schedule:pageSchedule, types:pageTypes, staff:pageStaff, messages:pageMessages, appointments:renderAppts, settings:pageSettings, calls:pageCalls, knowledge:pageKnowledge, contacts:pageContacts, clients:pageClients, gaps:pageGaps, conversations:pageConversations};
+  $(".crumbs").innerHTML=`${['settings','notifications'].includes(state.view)?'Account':(['messages','appointments','calls','contacts','clients','gaps','conversations'].includes(state.view)?'Activity':'Configure')} · <b>${esc(({assistant:"Assistant",schedule:"Schedule",types:"Appointment types",staff:"Staff",messages:"Phone messages",appointments:"Appointments",settings:"Settings",notifications:"Notifications",calls:"Calls",knowledge:"Knowledge",contacts:(salonOn()?"Clients":"Contacts"),clients:"Clients",gaps:"Open questions",conversations:"Email inbox"})[state.view])}</b>`;
+  const PAGES={assistant:pageAssistant, schedule:pageSchedule, types:pageTypes, staff:pageStaff, messages:pageMessages, appointments:renderAppts, settings:pageSettings, notifications:pageNotifications, calls:pageCalls, knowledge:pageKnowledge, contacts:pageContacts, clients:pageClients, gaps:pageGaps, conversations:pageConversations};
   const LOADERS={appointments:loadAppointments, messages:loadMessages, calls:loadCalls, contacts:loadContacts, clients:loadContacts, gaps:loadGaps, conversations:loadConversations, staff:loadStaff};
   const v=state.view;
   (PAGES[v]||(()=>{}))();
@@ -498,7 +501,7 @@ function pageAssistant(){
   const isActive=state.account.status==='active';
   $("#page").innerHTML=`
   <div class="page">
-    <div class="page-head"><h1>Assistant</h1><p id="assist-lede">Configure how ${esc(aName())} introduces herself and answers. The name you set here flows across your whole dashboard and is what callers hear. On the Enterprise plan each person can have their own.</p></div>
+    <div class="page-head"><h1>Assistant</h1><p id="assist-lede">Set how ${esc(aName())} introduces herself on calls and the name callers hear, used across your whole dashboard. On Enterprise, each person can have their own.</p></div>
     <div class="card">
       <div class="card-h"><h2>What callers hear</h2><span class="hint">Updates live</span></div>
       <div class="preview ${a.active?'':'off'}" id="prev">
@@ -610,7 +613,7 @@ async function saveAssistant(){
 function pageSchedule(){
   $("#page").innerHTML=`
   <div class="page">
-    <div class="page-head"><h1>Schedule</h1><p style="margin-bottom:6px">Two separate schedules, both different from your general hours of operation, which live in Knowledge.</p><p><b>Live transfer hours</b> are when a person is available, so ${esc(aName())} can transfer a live call to someone. <b>Booking hours</b> are when ${esc(aName())} can place an appointment, enforced on every booking.</p></div>
+    <div class="page-head"><h1>Schedule</h1><p style="margin-bottom:6px">Two separate schedules, both different from your general hours of operation (those live in Knowledge).</p><p><b>Live transfer hours</b> are when someone is available for ${esc(aName())} to transfer a live call to. <b>Booking hours</b> are when ${esc(aName())} is allowed to schedule an appointment, checked on every booking.</p></div>
     <div class="card">
       <div class="card-h"><h2>Weekly hours</h2><button class="btn sm" id="hours-save">Save hours</button></div>
       <div class="col-h"><span></span><span>Live transfer hours</span><span>Booking hours</span></div>
@@ -671,7 +674,7 @@ async function removeBlock(id,idx){
 function pageTypes(){
   $("#page").innerHTML=`
   <div class="page">
-    <div class="page-head"><h1>Appointment types</h1><p>Each type carries its own length and buffers. In-person types get travel time reserved automatically when ${esc(aName())} books them.</p></div>
+    <div class="page-head"><h1>Appointment types</h1><p>The services customers can book, each with its own length and buffer time. In-person types reserve travel time automatically when ${esc(aName())} books them.</p></div>
     <div class="card"><div class="card-h"><h2>Your types</h2></div><div id="types">${state.types.map(typeHTML).join("")||`<div class="empty">${I.tag}<div>No appointment types yet.</div></div>`}</div></div>
     <div class="card">
       <div class="card-h"><h2>Add a type</h2></div>
@@ -902,7 +905,7 @@ function pageMessages(){
   const render = list => list.map(msgHTML).join("");
   $("#page").innerHTML=`
   <div class="page">
-    <div class="page-head"><h1>Messages</h1><p>Calls ${esc(aName())} couldn't fully handle, saved here with a callback number. New ones are highlighted — mark them resolved once you've followed up.</p></div>
+    <div class="page-head"><h1>Phone messages</h1><p>Call-backs ${esc(aName())} saved for you, each with a phone number. She takes one when a caller asks, or when she can't answer or reach the right person. Mark them resolved once you have followed up.</p></div>
     <div class="card">
       <div class="card-h"><h2>To follow up${open.length?` <span style="color:var(--signal)">(${open.length})</span>`:''}</h2><button class="btn sm" id="m-refresh">Refresh</button></div>
       <div id="m-open">${open.length?render(open):`<div class="empty">${I.inbox}<div>No messages waiting. When a caller leaves one, it shows up here.</div></div>`}</div>
@@ -997,7 +1000,7 @@ function pageConversations(){
     .th-msgtxt{font-size:12.5px;margin-right:auto}
   </style>
   <div class="page">
-    <div class="page-head"><h1>Inbox</h1><p>Email conversations ${esc(aName())} is handling. Drafts marked "Needs you" are waiting for your review before they send.</p></div>
+    <div class="page-head"><h1>Email inbox</h1><p>Email threads with customers. ${esc(aName())} drafts replies here, and anything marked "Needs you" is waiting for your review before it sends.</p></div>
     <div class="card">
       <div class="card-h"><h2>Conversations${needs?` <span class="hint">${needs} need you</span>`:''}</h2><button class="btn sm" id="cv-refresh">Refresh</button></div>
       <div id="cv-list">${rows.length?rows.map(convRow).join(""):`<div class="empty">${I.inbox}<div>No email conversations yet. When a customer emails, ${esc(aName())} will draft a reply here for you.</div></div>`}</div>
@@ -1108,7 +1111,7 @@ function pageGaps(){
     .g-msg{font-size:12.5px;margin-left:auto}
   </style>
   <div class="page">
-    <div class="page-head"><h1>Open questions</h1><p>Questions phone callers asked that ${esc(aName())} could not answer on a call. Answer one and it goes straight into her knowledge base, so she handles it on every call after. (Email questions are handled in the Inbox, not here.)</p></div>
+    <div class="page-head"><h1>Open questions</h1><p>Questions callers asked that ${esc(aName())} could not answer. Answer one and it goes into her knowledge base, so she handles it herself next time.</p></div>
     <div class="card">
       <div class="card-h"><h2>Needs an answer${rows.length?` <span class="hint">${rows.length}</span>`:''}</h2><button class="btn sm" id="g-refresh">Refresh</button></div>
       <div id="g-list">${rows.length?rows.map(gapHTML).join(""):`<div class="empty">${I.book}<div>No open questions yet. When a caller asks something ${esc(aName())} can't answer, it appears here for you to answer once.</div></div>`}</div>
@@ -1747,16 +1750,21 @@ async function saveReminders(){
 }
 async function saveScheduling(){
   const enEl=$("#sched-enabled"), autoEl=$("#sched-auto"), msg=$("#sched-msg"), btn=$("#sched-save");
-  if(!enEl) return;
-  btn.disabled=true; const o=btn.textContent; btn.textContent="Saving…";
-  const settings = Object.assign({}, state.account.settings||{}, { scheduling_enabled: !!enEl.checked, scheduling_auto_send: autoEl?!!autoEl.checked:true });
+  if(!enEl && !autoEl) return;
+  const o=btn?btn.textContent:''; if(btn){ btn.disabled=true; btn.textContent="Saving…"; }
+  const patch={};
+  if(enEl) patch.scheduling_enabled=!!enEl.checked;
+  if(autoEl) patch.scheduling_auto_send=!!autoEl.checked;
+  const settings = Object.assign({}, state.account.settings||{}, patch);
   const { error } = await db.from('accounts').update({settings}).eq('id',state.account.id);
   if(!error){
     state.account.settings=settings;
-    if(msg){ msg.style.color='var(--muted)'; msg.textContent = enEl.checked ? ((autoEl&&autoEl.checked) ? aName()+' will propose times and book automatically over email.' : aName()+' will propose times and confirm, but each booking waits for your approval.') : aName()+' will pass email booking requests to you.'; }
+    if(msg){ msg.style.color='var(--muted)'; msg.textContent = enEl
+      ? (enEl.checked ? aName()+' will handle scheduling over email.' : aName()+' will pass email booking requests to you.')
+      : (autoEl&&autoEl.checked ? aName()+' will book automatically and send you a heads up.' : aName()+' will confirm each booking with you before it is set.'); }
   }
   else if(msg){ msg.style.color='var(--danger)'; msg.textContent='Could not save. Try again.'; }
-  btn.disabled=false; btn.textContent=error?"Error — retry":"Saved ✓"; setTimeout(()=>btn.textContent=o,1300);
+  if(btn){ btn.disabled=false; btn.textContent=error?"Try again":"Saved ✓"; setTimeout(()=>{ if(btn) btn.textContent=o; },1300); }
 }
 async function saveTransfer(){
   const msg=$("#xfer-msg"), btn=$("#xfer-save"), numEl=$("#xfer-num"), enEl=$("#xfer-on");
@@ -1840,6 +1848,70 @@ async function saveDirectory(){
   else { msg.style.color='var(--danger)'; msg.textContent='Could not save. Try again.'; }
   btn.disabled=false; btn.textContent=error?"Error — retry":"Saved ✓"; setTimeout(()=>btn.textContent=o,1300);
 }
+function pageNotifications(){
+  const ac=state.account;
+  const notify=(ac.settings&&ac.settings.notify)||{};
+  const msgOn=!!(ac.settings&&ac.settings.messaging_enabled);
+  const schedOn=!(ac.settings&&ac.settings.scheduling_enabled===false);
+  const team=salonOn()&&teamAllowed();
+  const pro=teamAllowed();
+  const rem=(ac.settings&&ac.settings.reminders)||{mode:"off"};
+  const remOpt=(v,l)=>`<option value="${v}" ${rem.mode===v?"selected":""}>${l}</option>`;
+  const remTime=esc(rem.time||"18:00");
+  $("#page").innerHTML=`
+  <div class="page">
+    <div class="page-head"><h1>Notifications</h1><p>Choose where ${esc(aName())} sends alerts and which of her emails you are copied on. ${esc(aName())} always logs everything in your dashboard, so turning a copy off just keeps it out of your inbox.</p></div>
+
+    <div class="card"><div class="card-h"><h2>Message alerts</h2><button class="btn sm" id="alert-save">Save</button></div>
+      <p style="font-size:13px;color:var(--muted);margin-bottom:12px">When ${esc(aName())} takes a phone message, it is emailed here. If a caller asks for someone by name, that person is emailed directly and this inbox is copied. Use an address you actually check.</p>
+      <div class="field" style="max-width:340px;margin:0"><label class="lab">General inbox email</label><input class="inp" id="alert-email" type="email" placeholder="you@yourcompany.com" value="${esc((ac.settings&&ac.settings.alert_email)||'')}"></div>
+      ${msgOn?`<div class="field" style="max-width:340px;margin:14px 0 0"><label class="lab">Escalation inbox <span style="display:block;font-weight:400;color:var(--muted);font-size:11.5px;margin-top:2px">When email is on, ${esc(aName())} sends questions she cannot answer and replies to review here. Must be a different address from the general inbox, which ${esc(aName())} answers.</span></label><input class="inp" id="esc-email" type="email" placeholder="you@yourcompany.com" value="${esc((ac.settings&&ac.settings.escalation_email)||'')}"></div><label style="display:flex;align-items:flex-start;gap:10px;margin:16px 0 0;cursor:pointer;font-size:13.5px;color:var(--ink)"><input type="checkbox" id="auto-send" style="margin-top:3px" ${(ac.settings&&ac.settings.email_auto_send)?'checked':''}><span>Let ${esc(aName())} send confident replies automatically<span style="display:block;font-weight:400;color:var(--muted);font-size:11.5px;margin-top:2px">When on, ${esc(aName())} sends email answers she is confident about without waiting, and still escalates anything she is unsure about. When off, every reply waits for your approval.</span></span></label>`:''}
+      <div id="alert-msg" style="font-size:12.5px;color:var(--muted);margin-top:8px"></div>
+    </div>
+
+    ${msgOn?`
+    <div class="card"><div class="card-h"><h2>Automatic email booking</h2><button class="btn sm" id="sched-save">Save</button></div>
+      <p style="font-size:13px;color:var(--muted);margin-bottom:12px">When ${esc(aName())} handles scheduling over email, this decides whether she books on her own or waits for you.${schedOn?'':' Email scheduling is currently off, so this has no effect until you turn it on under Settings.'}</p>
+      <label style="display:flex;align-items:flex-start;gap:10px;margin:0;cursor:pointer;font-size:13.5px;color:var(--ink);${schedOn?'':'opacity:.5'}"><input type="checkbox" id="sched-auto" style="margin-top:3px" ${(!ac.settings||ac.settings.scheduling_auto_send!==false)?'checked':''} ${schedOn?'':'disabled'}><span>Book automatically without my approval<span style="display:block;font-weight:400;color:var(--muted);font-size:11.5px;margin-top:2px">When on, she books the time as soon as the customer replies, like she does on calls, and sends you a heads up. When off, she proposes and confirms, but each booking waits for you to approve by reply.</span></span></label>
+      <div id="sched-msg" style="font-size:12.5px;color:var(--muted);margin-top:8px"></div>
+    </div>`:''}
+
+    <div class="card"><div class="card-h"><h2>Appointment reminders</h2><button class="btn sm" id="rem-save">Save</button></div>
+      <p style="font-size:13px;color:var(--muted);margin-bottom:12px">Email customers a reminder before their appointment, to the address they gave when booking. It includes the video link or the address, and ${esc(aName())} checks the calendar first so a rescheduled time is reflected.</p>
+      <div class="grid-2">
+        <div class="field" style="margin:0"><label class="lab">When to remind</label><select class="inp" id="rem-mode">${remOpt("off","Off")}${remOpt("day_before","The day before")}${remOpt("morning_of","The morning of")}</select></div>
+        <div class="field" id="rem-time-field" style="margin:0${rem.mode==="off"?";opacity:.45":""}"><label class="lab">Time</label><input class="inp" id="rem-time" type="time" value="${remTime}"></div>
+      </div>
+      <div id="rem-msg" style="font-size:12.5px;color:var(--muted);margin-top:8px"></div>
+    </div>
+
+    <div class="card"><div class="card-h"><h2>What ${esc(aName())} copies you on</h2><button class="btn sm" id="ncopy-save">Save</button></div>
+      <p style="font-size:13px;color:var(--muted);margin-bottom:12px">Turn off anything you do not want landing in your inbox. Everything stays in your dashboard either way.</p>
+      <label style="display:flex;align-items:flex-start;gap:10px;margin:0 0 14px;cursor:pointer;font-size:13.5px;color:var(--ink)"><input type="checkbox" id="ncopy-appt" style="margin-top:3px" ${notify.copy_appt_changes!==false?'checked':''}><span>Bookings, cancellations, and reschedules<span style="display:block;font-weight:400;color:var(--muted);font-size:11.5px;margin-top:2px">A heads up whenever ${esc(aName())} books, cancels, or moves an appointment over email.</span></span></label>
+      ${msgOn?`<label style="display:flex;align-items:flex-start;gap:10px;margin:0 0 14px;cursor:pointer;font-size:13.5px;color:var(--ink)"><input type="checkbox" id="ncopy-auto" style="margin-top:3px" ${notify.copy_auto_replies===true?'checked':''}><span>A copy of every reply she sends on her own<span style="display:block;font-weight:400;color:var(--muted);font-size:11.5px;margin-top:2px">Get a copy of each email ${esc(aName())} auto sends. Off by default, since she already logs them.</span></span></label>`:''}
+      ${pro?`<label style="display:flex;align-items:flex-start;gap:10px;margin:0 0 14px;cursor:pointer;font-size:13.5px;color:var(--ink)"><input type="checkbox" id="ncopy-stylmsg" style="margin-top:3px" ${notify.copy_stylist_messages!==false?'checked':''}><span>Messages taken for a specific person<span style="display:block;font-weight:400;color:var(--muted);font-size:11.5px;margin-top:2px">When a caller leaves a message for one of your team, copy your general inbox too. That person is always emailed directly.</span></span></label>`:''}
+      ${team?`<label style="display:flex;align-items:flex-start;gap:10px;margin:0;cursor:pointer;font-size:13.5px;color:var(--ink)"><input type="checkbox" id="ncopy-stylconv" style="margin-top:3px" ${notify.copy_stylist_conversations!==false?'checked':''}><span>A ${esc(providerLabel())}'s own bookings<span style="display:block;font-weight:400;color:var(--muted);font-size:11.5px;margin-top:2px">When ${esc(aName())} books with a specific ${esc(providerLabel())} over email, copy you too. The ${esc(providerLabel())} always sees it on their dashboard.</span></span></label>`:''}
+      <div id="ncopy-msg" style="font-size:12.5px;color:var(--muted);margin-top:8px"></div>
+    </div>
+  </div>`;
+  { const ae=$("#alert-save"); if(ae) ae.onclick=saveAlertEmail; }
+  { const ss=$("#sched-save"); if(ss) ss.onclick=saveScheduling; }
+  { const rs=$("#rem-save"); if(rs) rs.onclick=saveReminders; const rm=$("#rem-mode"); if(rm){ const upd=()=>{ const f=$("#rem-time-field"); if(f) f.style.opacity=rm.value==="off"?".45":"1"; const ri=$("#rem-time"); if(ri) ri.disabled=rm.value==="off"; }; rm.addEventListener("change",upd); upd(); } }
+  { const ns=$("#ncopy-save"); if(ns) ns.onclick=saveNotifyCopies; }
+}
+async function saveNotifyCopies(){
+  const btn=$("#ncopy-save"), msg=$("#ncopy-msg");
+  const cur=(state.account.settings&&state.account.settings.notify)||{};
+  const patch=Object.assign({}, cur);
+  const map={ 'ncopy-appt':'copy_appt_changes','ncopy-auto':'copy_auto_replies','ncopy-stylmsg':'copy_stylist_messages','ncopy-stylconv':'copy_stylist_conversations' };
+  Object.keys(map).forEach(id=>{ const el=$("#"+id); if(el) patch[map[id]]=!!el.checked; });
+  const o=btn?btn.textContent:''; if(btn){ btn.disabled=true; btn.textContent="Saving…"; }
+  const settings=Object.assign({}, state.account.settings||{}, { notify:patch });
+  const { error }=await db.from('accounts').update({settings}).eq('id',state.account.id);
+  if(!error){ state.account.settings=settings; if(msg){ msg.style.color='var(--muted)'; msg.textContent='Saved.'; } }
+  else if(msg){ msg.style.color='var(--danger)'; msg.textContent='Could not save. Try again.'; }
+  if(btn){ btn.disabled=false; btn.textContent=error?"Try again":"Saved ✓"; setTimeout(()=>{ if(btn) btn.textContent=o; },1300); }
+}
 function pageSettings(){
   const ac=state.account;
   const xfer=(state.assistant&&state.assistant.routing&&state.assistant.routing.transfer)||{};
@@ -1879,13 +1951,6 @@ function pageSettings(){
       <div style="display:flex;gap:8px;align-items:center;max-width:480px"><input class="inp" id="donna-email" type="email" readonly value="${esc(ac.settings.email_address)}" style="flex:1;font-weight:600"><button type="button" class="btn sm" id="donna-email-copy">Copy</button></div>
     </div>`:''}
 
-    <div class="card"><div class="card-h"><h2>Message alerts</h2><button class="btn sm" id="alert-save">Save</button></div>
-      <p style="font-size:13px;color:var(--muted);margin-bottom:12px">When ${esc(aName())} takes a message, it is emailed here. If a caller asks for someone by name, that person is emailed directly and this inbox is copied. Use an address you actually check.</p>
-      <div class="field" style="max-width:340px;margin:0"><label class="lab">General inbox email</label><input class="inp" id="alert-email" type="email" placeholder="you@yourcompany.com" value="${esc((ac.settings&&ac.settings.alert_email)||'')}"></div>
-      ${(ac.settings&&ac.settings.messaging_enabled)?`<div class="field" style="max-width:340px;margin:14px 0 0"><label class="lab">Escalation inbox <span style="display:block;font-weight:400;color:var(--muted);font-size:11.5px;margin-top:2px">When email is on, ${esc(aName())} sends questions she cannot answer and replies to review here. Must be a different address from the general inbox, which ${esc(aName())} answers.</span></label><input class="inp" id="esc-email" type="email" placeholder="you@yourcompany.com" value="${esc((ac.settings&&ac.settings.escalation_email)||'')}"></div><label style="display:flex;align-items:flex-start;gap:10px;margin:16px 0 0;cursor:pointer;font-size:13.5px;color:var(--ink)"><input type="checkbox" id="auto-send" style="margin-top:3px" ${(ac.settings&&ac.settings.email_auto_send)?'checked':''}><span>Let ${esc(aName())} send confident replies automatically<span style="display:block;font-weight:400;color:var(--muted);font-size:11.5px;margin-top:2px">When on, ${esc(aName())} sends email answers she is confident about without waiting, and still escalates anything she is unsure about. When off, every reply waits for your approval.</span></span></label>`:''}
-      <div id="alert-msg" style="font-size:12.5px;color:var(--muted);margin-top:8px"></div>
-    </div>
-
     ${(ac.settings&&ac.settings.messaging_enabled)?`
     <div class="card"><div class="card-h"><h2>Email forwarding</h2><button class="btn sm" id="inbound-save">Save</button></div>
       <p style="font-size:13px;color:var(--muted);margin-bottom:12px">For ${esc(aName())} to answer your email, forward your business inbox to your ${esc(aName())} address below. Customers keep emailing your normal address, and ${esc(aName())} replies from it. Your other addresses stay where they are, only what you forward reaches ${esc(aName())}.</p>
@@ -1905,8 +1970,7 @@ function pageSettings(){
     ${(ac.settings&&ac.settings.messaging_enabled)?`
     <div class="card"><div class="card-h"><h2>Email scheduling</h2><button class="btn sm" id="sched-save">Save</button></div>
       <p style="font-size:13px;color:var(--muted);margin-bottom:12px">Controls how ${esc(aName())} handles booking requests that arrive by email. She only offers real open times from your booking hours and appointment types, re-checks the slot when the customer replies, and never double books.</p>
-      <label style="display:flex;align-items:flex-start;gap:10px;margin:0 0 14px;cursor:pointer;font-size:13.5px;color:var(--ink)"><input type="checkbox" id="sched-enabled" style="margin-top:3px" ${(!ac.settings||ac.settings.scheduling_enabled!==false)?'checked':''}><span>Let ${esc(aName())} handle scheduling over email<span style="display:block;font-weight:400;color:var(--muted);font-size:11.5px;margin-top:2px">When on, she proposes open times and books appointments by email. When off, she passes booking requests to you instead.</span></span></label>
-      <label id="sched-auto-row" style="display:flex;align-items:flex-start;gap:10px;margin:0;cursor:pointer;font-size:13.5px;color:var(--ink)"><input type="checkbox" id="sched-auto" style="margin-top:3px" ${(!ac.settings||ac.settings.scheduling_auto_send!==false)?'checked':''}><span>Book automatically without my approval<span style="display:block;font-weight:400;color:var(--muted);font-size:11.5px;margin-top:2px">When on, she books the time as soon as the customer replies, like she does on calls, and sends you a heads up. When off, she still proposes and confirms, but each booking waits for your approve by reply. This is separate from the email auto reply setting above.</span></span></label>
+      <label style="display:flex;align-items:flex-start;gap:10px;margin:0;cursor:pointer;font-size:13.5px;color:var(--ink)"><input type="checkbox" id="sched-enabled" style="margin-top:3px" ${(!ac.settings||ac.settings.scheduling_enabled!==false)?'checked':''}><span>Let ${esc(aName())} handle scheduling over email<span style="display:block;font-weight:400;color:var(--muted);font-size:11.5px;margin-top:2px">When on, she proposes open times and books appointments by email. When off, she passes booking requests to you instead. Whether she books automatically or waits for your approval is set under Notifications.</span></span></label>
       <div id="sched-msg" style="font-size:12.5px;color:var(--muted);margin-top:8px"></div>
     </div>`:''}
 
@@ -1934,15 +1998,6 @@ function pageSettings(){
       <div id="cal-card-body"></div>
     </div>
 
-    <div class="card"><div class="card-h"><h2>Appointment reminders</h2><button class="btn sm" id="rem-save">Save</button></div>
-      <p style="font-size:13px;color:var(--muted);margin-bottom:12px">Email customers a reminder before their appointment, to the address they gave when booking. It includes the video link or the address, and ${esc(aName())} checks the calendar first so a rescheduled time is reflected.</p>
-      ${(()=>{ const rem=(ac.settings&&ac.settings.reminders)||{mode:"off"}; const t=esc(rem.time||"18:00"); const opt=(v,l)=>`<option value="${v}" ${rem.mode===v?"selected":""}>${l}</option>`; return `
-      <div class="grid-2">
-        <div class="field" style="margin:0"><label class="lab">When to remind</label><select class="inp" id="rem-mode">${opt("off","Off")}${opt("day_before","The day before")}${opt("morning_of","The morning of")}</select></div>
-        <div class="field" id="rem-time-field" style="margin:0${rem.mode==="off"?";opacity:.45":""}"><label class="lab">Time</label><input class="inp" id="rem-time" type="time" value="${t}"></div>
-      </div>`; })()}
-      <div id="rem-msg" style="font-size:12.5px;color:var(--muted);margin-top:8px"></div>
-    </div>
 
     <div class="card"><div class="card-h"><h2>Login &amp; password</h2></div>
       <div class="set-rows" style="margin-bottom:14px">
@@ -2028,7 +2083,7 @@ function pageKnowledge(){
   state.kbEdit=null;
   $("#page").innerHTML=`
   <div class="page">
-    <div class="page-head"><h1>Knowledge</h1><p>Teach ${esc(aName())} about your business. She uses this to answer callers' questions — hours, services, pricing, policies, directions. If she doesn't know something, she takes a message instead of guessing.</p></div>
+    <div class="page-head"><h1>Knowledge</h1><p>Teach ${esc(aName())} about your business. She uses this to answer callers' questions about hours, services, pricing, policies, and directions. If she doesn't know something, she takes a message instead of guessing.</p></div>
     <div class="card">
       <div class="card-h"><h2 id="kb-form-title">Add knowledge</h2><span class="hint">Donna learns it on save</span></div>
       <div class="grid-2">
@@ -2557,7 +2612,7 @@ function fmtDateTime(iso){ if(!iso) return ''; return new Intl.DateTimeFormat('e
 function pageCalls(){
   $("#page").innerHTML=`
   <div class="page">
-    <div class="page-head"><h1>Calls</h1><p>Every call ${esc(aName())} handles, with the full conversation. This page updates on its own — a call appears the moment it starts, and the transcript fills in when it wraps.</p></div>
+    <div class="page-head"><h1>Calls</h1><p>Every call ${esc(aName())} handles, with the full conversation. This page updates on its own: a call appears the moment it starts, and the transcript fills in when it wraps.</p></div>
     <div class="card">
       <div class="card-h"><h2>Recent calls</h2><span class="calls-live"><span class="d"></span>Live</span></div>
       <div id="calls-list"></div>
