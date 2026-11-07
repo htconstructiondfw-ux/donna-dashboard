@@ -388,7 +388,7 @@ async function loadData(){
     };
   }
   const { data: types } = await db.from('appointment_types').select('*').eq('account_id', acct.id).order('created_at');
-  state.types = (types||[]).map(t=>({ id:t.id, name:t.name, mode:t.mode, dur:t.default_duration_min, before:t.buffer_before_min, after:t.buffer_after_min, travel:t.requires_travel, overlap:t.overlap_minutes||0, recall:t.rebook_after_days||0 }));
+  state.types = (types||[]).map(typeFromRow);
   const { data: rules } = await db.from('availability_rules').select('*').eq('user_id', me.id);
   state.schedule = DAYS.map(()=>({ working:{on:false,start:"08:00",end:"18:00"}, bookable:{on:false,start:"09:00",end:"15:00"} }));
   (rules||[]).forEach(r=>{ const w = r.rule_type==='working'?state.schedule[r.day_of_week].working:state.schedule[r.day_of_week].bookable; w.on=true; w.start=(r.start_time||"08:00").slice(0,5); w.end=(r.end_time||"18:00").slice(0,5); });
@@ -674,6 +674,7 @@ async function removeBlock(id,idx){
 }
 
 /* ===================== APPOINTMENT TYPES PAGE ===================== */
+function typeFromRow(t){ return { id:t.id, name:t.name, mode:t.mode, dur:t.default_duration_min, before:t.buffer_before_min, after:t.buffer_after_min, travel:t.requires_travel, overlap:t.overlap_minutes||0, recall:t.rebook_after_days||0, desc:t.description||'', price:t.price||'', category:t.category||'', includes:(t.includes||[]), special:!!t.is_special, sstart:t.special_starts||'', send:t.special_ends||'', newonly:!!t.new_clients_only }; }
 function pageTypes(){
   $("#page").innerHTML=`
   <div class="page">
@@ -693,6 +694,20 @@ function pageTypes(){
       <div class="field"><label class="switch"><input type="checkbox" id="t-overlap-on"><span class="track"></span><span class="txt">Allow overlap during processing<small>For services with wait time, like color developing. Only the hands-on part blocks the ${providerLabel()}; they can start another client during the overlap.</small></span></label></div>
       <div class="field" id="t-overlap-row" style="display:none"><label class="lab">Overlap minutes <span class="sub">the processing tail that can overlap another booking</span></label><input class="inp" type="number" id="t-overlap" value="60" min="0" step="5"></div>
       <div class="field"><label class="lab">Remind to rebook after <span class="sub">days — ${esc(aName())} nudges a client to come back for this service that many days after their last one, if they have nothing booked. Leave blank for off.</span></label><input class="inp" type="number" id="t-recall" placeholder="e.g. 14" min="0" step="1" style="max-width:200px"></div>
+      <div class="field"><label class="lab">Description <span class="sub">what it is / what's included — ${esc(aName())} shares this when asked, and it shows on your booking page</span></label><textarea class="inp" id="t-desc" rows="2" placeholder="e.g. A 60-minute massage, express facial, and foot scrub"></textarea></div>
+      <div class="field"><label class="lab">What's included <span class="sub">optional, one per line — shows as a checklist on your booking page</span></label><textarea class="inp" id="t-includes" rows="2" placeholder="60-min massage&#10;Express facial&#10;Foot scrub"></textarea></div>
+      <div class="grid-2">
+        <div class="field"><label class="lab">Price <span class="sub">optional, e.g. $120 or from $90</span></label><input class="inp" id="t-price" placeholder="optional"></div>
+        <div class="field"><label class="lab">Category <span class="sub">optional group, e.g. Color, Packages, Specials</span></label><input class="inp" id="t-category" placeholder="optional"></div>
+      </div>
+      <div class="field"><label class="switch"><input type="checkbox" id="t-special"><span class="track"></span><span class="txt">Special offer<small>Feature it as a deal. Optionally set dates and limit to new clients.</small></span></label></div>
+      <div id="t-special-row" style="display:none;padding-left:4px">
+        <div class="grid-2">
+          <div class="field" style="margin:0"><label class="lab">Offer starts <span class="sub">optional</span></label><input class="inp" type="date" id="t-sstart"></div>
+          <div class="field" style="margin:0"><label class="lab">Offer ends <span class="sub">optional</span></label><input class="inp" type="date" id="t-send"></div>
+        </div>
+        <div class="field" style="margin-top:8px"><label class="switch"><input type="checkbox" id="t-newonly"><span class="track"></span><span class="txt">New clients only</span></label></div>
+      </div>
       <div style="margin-top:8px"><button class="btn primary" id="t-add">+ Add type</button></div>
     </div>
     <div class="card">
@@ -703,6 +718,7 @@ function pageTypes(){
   const modeSel=$("#t-mode"), travel=$("#t-travel");
   modeSel.onchange=()=>{ travel.checked = modeSel.value==="in_person"; };
   const ovOn=$("#t-overlap-on"); if(ovOn) ovOn.onchange=()=>{ const r=$("#t-overlap-row"); if(r) r.style.display=ovOn.checked?'block':'none'; };
+  const sp=$("#t-special"); if(sp) sp.onchange=()=>{ const r=$("#t-special-row"); if(r) r.style.display=sp.checked?'block':'none'; };
   $("#t-add").onclick=addType;
   bindTypeRemovers();
   paintVideoCard();
@@ -750,7 +766,7 @@ async function verifyVideo(provider){
 function typeHTML(t){
   const lbl={phone:"Phone",virtual:"Virtual",in_person:"In person"}[t.mode]; const icon={phone:I.phone,virtual:I.vid,in_person:I.pin}[t.mode]; const id=t.id||'';
   return `<div class="type-wrap">
-    <div class="type-item"><span class="ic ${t.mode}">${icon}</span><span class="nm">${esc(t.name)}<small>${t.dur} min${t.after?` · ${t.after} min buffer`:""}${t.travel?" · travel reserved":""}${t.overlap?` · ${t.overlap} min can overlap`:""}${t.recall?` · rebook reminder ${t.recall}d`:""}</small></span><span class="mode">${lbl}</span>
+    <div class="type-item"><span class="ic ${t.mode}">${icon}</span><span class="nm">${esc(t.name)}${t.special?` <span style="display:inline-block;font-size:9.5px;font-weight:700;letter-spacing:.03em;text-transform:uppercase;padding:1px 6px;border-radius:999px;background:#fef3c7;color:#92400e;vertical-align:middle">Special</span>`:""}<small>${t.dur} min${t.price?` · ${esc(t.price)}`:""}${t.category?` · ${esc(t.category)}`:""}${t.after?` · ${t.after} min buffer`:""}${t.travel?" · travel reserved":""}${t.overlap?` · ${t.overlap} min can overlap`:""}${t.recall?` · rebook reminder ${t.recall}d`:""}</small></span><span class="mode">${lbl}</span>
       <button class="btn sm" data-edit="${id}" style="margin-left:12px">Edit</button>
       <button class="rm" data-id="${id}" title="Remove" style="margin-left:8px;background:none;border:none;color:var(--muted-2);font-size:13px">✕</button></div>
     <div class="type-edit" id="te-${id}" style="display:none;border:1px solid var(--line);border-top:none;border-radius:0 0 var(--r-sm) var(--r-sm);padding:12px 14px;margin:-7px 0 9px;background:#fbfcfe">
@@ -766,6 +782,20 @@ function typeHTML(t){
       <div class="field"><label class="switch"><input type="checkbox" id="te-ov-${id}"${t.overlap?' checked':''}><span class="track"></span><span class="txt">Allow overlap during processing</span></label></div>
       <div class="field" id="te-ovrow-${id}" style="display:${t.overlap?'block':'none'}"><label class="lab">Overlap minutes <span class="sub">processing tail that can overlap another booking</span></label><input class="inp" type="number" id="te-ovmin-${id}" value="${t.overlap||60}" min="0" step="5"></div>
       <div class="field"><label class="lab">Remind to rebook after <span class="sub">days — nudge past clients back for this service; blank for off</span></label><input class="inp" type="number" id="te-recall-${id}" value="${t.recall||''}" placeholder="off" min="0" step="1" style="max-width:180px"></div>
+      <div class="field"><label class="lab">Description</label><textarea class="inp" id="te-desc-${id}" rows="2">${esc(t.desc||'')}</textarea></div>
+      <div class="field"><label class="lab">What's included <span class="sub">one per line</span></label><textarea class="inp" id="te-includes-${id}" rows="2">${esc((t.includes||[]).join('\n'))}</textarea></div>
+      <div class="grid-2">
+        <div class="field"><label class="lab">Price</label><input class="inp" id="te-price-${id}" value="${esc(t.price||'')}" placeholder="optional"></div>
+        <div class="field"><label class="lab">Category</label><input class="inp" id="te-category-${id}" value="${esc(t.category||'')}" placeholder="optional"></div>
+      </div>
+      <div class="field"><label class="switch"><input type="checkbox" id="te-special-${id}"${t.special?' checked':''}><span class="track"></span><span class="txt">Special offer</span></label></div>
+      <div id="te-special-row-${id}" style="display:${t.special?'block':'none'};padding-left:4px">
+        <div class="grid-2">
+          <div class="field" style="margin:0"><label class="lab">Offer starts</label><input class="inp" type="date" id="te-sstart-${id}" value="${t.sstart||''}"></div>
+          <div class="field" style="margin:0"><label class="lab">Offer ends</label><input class="inp" type="date" id="te-send-${id}" value="${t.send||''}"></div>
+        </div>
+        <div class="field" style="margin-top:8px"><label class="switch"><input type="checkbox" id="te-newonly-${id}"${t.newonly?' checked':''}><span class="track"></span><span class="txt">New clients only</span></label></div>
+      </div>
       <div id="te-msg-${id}" style="font-size:12px;color:var(--muted);min-height:14px"></div>
       <div style="display:flex;gap:8px"><button class="btn sm primary" data-save-type="${id}">Save changes</button><button class="btn sm" data-cancel-type="${id}">Cancel</button></div>
     </div>
@@ -776,7 +806,7 @@ function bindTypeRemovers(){
   document.querySelectorAll("#types [data-edit]").forEach(b=>b.onclick=()=>{ const p=document.getElementById('te-'+b.dataset.edit); if(p) p.style.display=p.style.display==='none'?'block':'none'; });
   document.querySelectorAll("#types [data-cancel-type]").forEach(b=>b.onclick=()=>{ const p=document.getElementById('te-'+b.dataset.cancelType); if(p) p.style.display='none'; });
   document.querySelectorAll("#types [data-save-type]").forEach(b=>b.onclick=()=>saveTypeEdit(b.dataset.saveType));
-  (state.types||[]).forEach(t=>{ const c=document.getElementById('te-ov-'+t.id), r=document.getElementById('te-ovrow-'+t.id); if(c&&r) c.onchange=()=>{ r.style.display=c.checked?'block':'none'; }; });
+  (state.types||[]).forEach(t=>{ const c=document.getElementById('te-ov-'+t.id), r=document.getElementById('te-ovrow-'+t.id); if(c&&r) c.onchange=()=>{ r.style.display=c.checked?'block':'none'; }; const sc=document.getElementById('te-special-'+t.id), sr=document.getElementById('te-special-row-'+t.id); if(sc&&sr) sc.onchange=()=>{ sr.style.display=sc.checked?'block':'none'; }; });
 }
 async function saveTypeEdit(id){
   const g=s=>document.getElementById('te-'+s+'-'+id); const msg=document.getElementById('te-msg-'+id);
@@ -787,12 +817,16 @@ async function saveTypeEdit(id){
   const dur=+g('dur').value||30;
   const ovOn=g('ov').checked; let overlap=ovOn?(+g('ovmin').value||0):0; if(overlap>dur) overlap=dur; if(overlap<0) overlap=0;
   const recall=(+g('recall').value||0);
-  const patch={ name, mode, default_duration_min:dur, buffer_after_min:+g('after').value||0, requires_travel:g('travel').checked, overlap_minutes:overlap, rebook_after_days: recall>0?recall:null };
+  const incl=((g('includes')&&g('includes').value)||'').split('\n').map(s=>s.trim()).filter(Boolean);
+  const special=!!(g('special')&&g('special').checked);
+  const patch={ name, mode, default_duration_min:dur, buffer_after_min:+g('after').value||0, requires_travel:g('travel').checked, overlap_minutes:overlap, rebook_after_days: recall>0?recall:null,
+    description:((g('desc')&&g('desc').value.trim())||null), price:((g('price')&&g('price').value.trim())||null), category:((g('category')&&g('category').value.trim())||null), includes: incl.length?incl:null,
+    is_special:special, special_starts: special?((g('sstart')&&g('sstart').value)||null):null, special_ends: special?((g('send')&&g('send').value)||null):null, new_clients_only: special?!!(g('newonly')&&g('newonly').checked):false };
   const btn=document.querySelector('#types [data-save-type="'+id+'"]'); if(btn){ btn.disabled=true; btn.textContent='Saving…'; } set('Saving…');
   const { data, error } = await db.from('appointment_types').update(patch).eq('id',id).select().single();
   if(error||!data){ set('Could not save. Try again.','var(--danger)'); if(btn){ btn.disabled=false; btn.textContent='Save changes'; } return; }
   const i=state.types.findIndex(x=>x.id===id);
-  if(i>=0) state.types[i]={id:data.id,name:data.name,mode:data.mode,dur:data.default_duration_min,before:data.buffer_before_min,after:data.buffer_after_min,travel:data.requires_travel,overlap:data.overlap_minutes||0,recall:data.rebook_after_days||0};
+  if(i>=0) state.types[i]=typeFromRow(data);
   pageTypes();
 }
 async function addType(){
@@ -807,9 +841,13 @@ async function addType(){
   const ovOn=$("#t-overlap-on")&&$("#t-overlap-on").checked;
   let overlap=ovOn?(+$("#t-overlap").value||0):0; if(overlap>dur) overlap=dur; if(overlap<0) overlap=0;
   const recall=(+$("#t-recall").value||0);
-  const row={ account_id:state.account.id, name, mode, default_duration_min:dur, buffer_before_min:0, buffer_after_min:+$("#t-after").value||0, requires_travel:$("#t-travel").checked, overlap_minutes:overlap, rebook_after_days: recall>0?recall:null };
+  const incl=(($("#t-includes")&&$("#t-includes").value)||'').split('\n').map(s=>s.trim()).filter(Boolean);
+  const special=!!($("#t-special")&&$("#t-special").checked);
+  const row={ account_id:state.account.id, name, mode, default_duration_min:dur, buffer_before_min:0, buffer_after_min:+$("#t-after").value||0, requires_travel:$("#t-travel").checked, overlap_minutes:overlap, rebook_after_days: recall>0?recall:null,
+    description:(($("#t-desc")&&$("#t-desc").value.trim())||null), price:(($("#t-price")&&$("#t-price").value.trim())||null), category:(($("#t-category")&&$("#t-category").value.trim())||null), includes: incl.length?incl:null,
+    is_special:special, special_starts: special?((($("#t-sstart")&&$("#t-sstart").value)||null)):null, special_ends: special?((($("#t-send")&&$("#t-send").value)||null)):null, new_clients_only: special?!!($("#t-newonly")&&$("#t-newonly").checked):false };
   const { data, error } = await db.from('appointment_types').insert(row).select().single();
-  if(!error && data){ state.types.push({id:data.id,name:data.name,mode:data.mode,dur:data.default_duration_min,before:data.buffer_before_min,after:data.buffer_after_min,travel:data.requires_travel,overlap:data.overlap_minutes||0,recall:data.rebook_after_days||0}); pageTypes(); }
+  if(!error && data){ state.types.push(typeFromRow(data)); pageTypes(); }
 }
 async function removeType(id){ if(id){ await db.from('appointment_types').delete().eq('id',id); } state.types=state.types.filter(t=>t.id!==id); pageTypes(); }
 
