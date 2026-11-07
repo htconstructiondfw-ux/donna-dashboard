@@ -4,41 +4,52 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1">
 <title>Before your visit</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,400;0,9..144,500;0,9..144,600;1,9..144,500&family=Figtree:wght@400;500;600;700&display=swap" rel="stylesheet">
 <style>
-  :root{ --ink:#0e1b2e; --ink2:#47566b; --muted:#6b7a90; --line:#e6ebf2; --bg:#f3f5f9; --card:#fff; --accent:#0e1b2e; --accent-ink:#fff; --ok:#166534; --okbg:#ecfdf3; --danger:#b42318; }
+  :root{
+    --ink:#2b2228; --ink2:#5c5057; --muted:#978a90; --line:#ece3db; --line2:#f4ede6;
+    --bg:#f4efe9; --card:#fffdfb; --accent:#a05c6b; --accent-deep:#834655; --accent-soft:#f6e9ec;
+    --ok:#4e7a5a; --danger:#b4443a; --shadow:0 12px 42px -14px rgba(74,45,55,.20);
+  }
   *{box-sizing:border-box}
-  body{margin:0;background:var(--bg);color:var(--ink);font:15px/1.5 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;-webkit-font-smoothing:antialiased}
-  .wrap{max-width:560px;margin:0 auto;padding:20px 16px 48px}
-  .brand{display:flex;align-items:center;gap:10px;margin:8px 2px 18px}
-  .brand .dot{width:34px;height:34px;border-radius:9px;background:var(--accent);color:var(--accent-ink);display:flex;align-items:center;justify-content:center;font-weight:800}
-  .brand b{font-size:19px}
-  .brand small{display:block;color:var(--muted);font-size:12px;font-weight:500}
-  .card{background:var(--card);border:1px solid var(--line);border-radius:16px;padding:18px;box-shadow:0 1px 2px rgba(16,24,40,.04);margin-bottom:14px}
-  .intro{font-size:13px;color:var(--ink2);margin:0 0 4px}
+  body{margin:0;background:var(--bg);color:var(--ink);font:16px/1.55 'Figtree',-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;-webkit-font-smoothing:antialiased}
+  .wrap{max-width:540px;margin:0 auto;padding:30px 18px 48px}
+  .brand{display:flex;align-items:center;gap:13px;margin:6px 2px 20px}
+  .brand .dot{width:50px;height:50px;border-radius:15px;background:linear-gradient(140deg,var(--accent),var(--accent-deep));color:#fff;display:flex;align-items:center;justify-content:center;font-weight:600;font-size:23px;font-family:'Fraunces',Georgia,serif;box-shadow:0 7px 20px -7px rgba(131,69,86,.55)}
+  .brand b{font-family:'Fraunces',Georgia,serif;font-size:27px;font-weight:600;letter-spacing:-.015em;line-height:1.08;display:block}
+  .brand small{display:block;color:var(--muted);font-size:13px;font-weight:500;margin-top:4px}
+  .card{background:var(--card);border:1px solid var(--line);border-radius:18px;padding:22px;box-shadow:var(--shadow);margin-bottom:14px}
+  .intro{font-size:13.5px;color:var(--ink2);margin:0 0 4px;line-height:1.5}
+  h2.title{font-family:'Fraunces',Georgia,serif;font-weight:500;font-size:20px;margin:14px 0 18px}
   .q{margin-bottom:20px}
   .q:last-of-type{margin-bottom:8px}
-  label.f{display:block;font-size:14px;font-weight:600;color:var(--ink);margin:0 0 7px}
-  label.f .req{color:var(--danger);margin-left:3px}
-  .help{font-size:12px;color:var(--muted);margin:-3px 0 7px}
-  input.inp,textarea.inp{width:100%;border:1px solid var(--line);border-radius:10px;padding:11px 12px;font:inherit;background:#fcfdff}
-  textarea.inp{min-height:84px;resize:vertical}
-  input.inp:focus,textarea.inp:focus{outline:none;border-color:var(--accent);background:#fff}
-  .opts{display:flex;flex-direction:column;gap:8px}
-  .optbtn{border:1px solid var(--line);border-radius:10px;padding:11px 13px;font:inherit;background:#fff;cursor:pointer;text-align:left;transition:.12s}
-  .optbtn:hover{border-color:#cdd6e4}
-  .optbtn.sel{border-color:var(--accent);box-shadow:0 0 0 2px rgba(14,27,46,.08);font-weight:600}
+  label.f{display:block;font-size:14px;font-weight:600;color:var(--ink);margin:0 0 8px}
+  label.f .req{color:var(--accent-deep);margin-left:3px}
+  .help{font-size:12px;color:var(--muted);margin:-4px 0 8px}
+  input.inp,textarea.inp{width:100%;border:1px solid var(--line);border-radius:12px;padding:12px 13px;font:inherit;background:#fffefc;transition:.14s}
+  textarea.inp{min-height:92px;resize:vertical}
+  input.inp:focus,textarea.inp:focus{outline:none;border-color:var(--accent);box-shadow:0 0 0 3px var(--accent-soft);background:#fff}
+  .opts{display:flex;flex-direction:column;gap:9px}
+  .optbtn{border:1px solid var(--line);border-radius:12px;padding:12px 14px;font:inherit;background:#fff;cursor:pointer;text-align:left;transition:.14s;color:var(--ink)}
+  .optbtn:hover{border-color:var(--accent);color:var(--accent-deep)}
+  .optbtn.sel{border-color:var(--accent);background:var(--accent-soft);box-shadow:0 0 0 2px rgba(160,92,107,.12);font-weight:600;color:var(--accent-deep)}
   .yn{display:flex;gap:10px}
   .yn .optbtn{flex:1;text-align:center}
-  .btn{width:100%;border:none;border-radius:12px;padding:14px;font:inherit;font-weight:700;background:var(--accent);color:var(--accent-ink);cursor:pointer}
-  .btn:disabled{opacity:.55;cursor:default}
-  .msg{font-size:13px;margin-top:10px}
+  .btn{width:100%;border:none;border-radius:13px;padding:15px;font:inherit;font-weight:600;font-size:15.5px;background:var(--accent);color:#fff;cursor:pointer;transition:.14s;box-shadow:0 8px 20px -8px rgba(131,69,86,.55)}
+  .btn:hover{background:var(--accent-deep)}
+  .btn:disabled{opacity:.5;cursor:default;box-shadow:none}
+  .msg{font-size:13.5px;margin-top:12px}
   .msg.err{color:var(--danger)}
-  .center{text-align:center;padding:14px 4px}
-  .center .big{font-size:40px;line-height:1;margin-bottom:10px}
-  .center h3{margin:0 0 6px;font-size:18px}
-  .center p{color:var(--muted);margin:0}
-  .foot{text-align:center;color:#9aa6b6;font-size:11px;margin-top:18px}
-  .spin{color:var(--muted);font-size:13px;text-align:center;padding:16px}
+  .center{text-align:center;padding:22px 8px}
+  .center .big{width:68px;height:68px;margin:0 auto 18px;border-radius:50%;background:linear-gradient(140deg,var(--accent),var(--accent-deep));color:#fff;display:flex;align-items:center;justify-content:center;font-size:32px;box-shadow:0 10px 28px -8px rgba(131,69,86,.6)}
+  .center h3{margin:0 0 8px;font-size:23px;font-family:'Fraunces',Georgia,serif;font-weight:500}
+  .center p{color:var(--muted);margin:0;line-height:1.6}
+  .foot{text-align:center;color:#b3a7ad;font-size:11.5px;margin-top:22px}
+  .foot a{color:#8a7d83}
+  .spin{color:var(--muted);font-size:13.5px;text-align:center;padding:20px}
+  @media (prefers-reduced-motion: reduce){ *{transition:none!important} }
 </style>
 </head>
 <body>
@@ -75,7 +86,7 @@ function render(){
   const d=S.data, qsn=d.questions||[];
   const hi = d.first_name ? `Hi ${esc(d.first_name)} — ` : '';
   let html=`<p class="intro">${hi}${esc(d.business||'We')} asked a few quick questions to get ready for your visit. Takes under a minute.</p>`;
-  html+=`<h2 style="font-size:15px;margin:14px 0 16px">${esc(d.title||'A few quick questions')}</h2>`;
+  html+=`<h2 class="title">${esc(d.title||'A few quick questions')}</h2>`;
   qsn.forEach((q,i)=>{ html+=renderQ(q,i); });
   html+=`<button class="btn" id="go">Submit</button><div class="msg" id="msg"></div>`;
   app.innerHTML=`<div class="card">${html}</div>`;
@@ -99,11 +110,9 @@ function renderQ(q,i){
 }
 
 function bind(qsn){
-  // text/textarea
   document.querySelectorAll('input.inp[data-q],textarea.inp[data-q]').forEach(el=>{
     el.oninput=()=>{ S.answers[el.dataset.q]=el.value; };
   });
-  // buttons (yesno / choice) — single select
   document.querySelectorAll('.optbtn[data-q]').forEach(el=>{
     el.onclick=()=>{
       const qid=el.dataset.q;
@@ -128,7 +137,7 @@ async function submit(){
 }
 
 function done(already){
-  card(`<div class="center"><div class="big">✓</div><h3>${already?'Already done':'All set'}</h3>
+  card(`<div class="center"><div class="big">&#10003;</div><h3>${already?'Already done':'All set'}</h3>
     <p>${already?'You already filled this out — nothing more to do.':'Thanks! Your answers are saved. See you at your appointment.'}</p></div>`);
 }
 
