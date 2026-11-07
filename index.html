@@ -247,7 +247,8 @@ const I = {
   msg:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>',
   mail:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="5" width="18" height="14" rx="2"/><path d="m3 7 9 6 9-6"/></svg>',
   bell:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 8a6 6 0 0 0-12 0c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/></svg>',
-  clock:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg>'
+  clock:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg>',
+  promo:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 11v2a1 1 0 0 0 1 1h3l4 4V6L7 10H4a1 1 0 0 0-1 1z"/><path d="M15 8a5 5 0 0 1 0 8"/></svg>'
 };
 
 /* ===================== AUTH ===================== */
@@ -433,7 +434,7 @@ function renderApp(){
   if(mgr){
     navConfig=[["assistant","Assistant",I.bot],["schedule","Schedule",I.cal],["types","Appointment types",I.tag]];
     if(showStaff()) navConfig.push(["staff","Staff",I.users]);
-    navConfig.push(["knowledge","Knowledge",I.book],["notifications","Notifications",I.bell],["settings","Settings",I.gear]);
+    navConfig.push(["knowledge","Knowledge",I.book],["promotions","Promotions",I.promo],["notifications","Notifications",I.bell],["settings","Settings",I.gear]);
     navActivity=[["calls","Calls",I.phone],["appointments","Appointments",I.appt],["messages","Phone messages",I.msg],["contacts",salonOn()?"Clients":"Contacts",I.users],["gaps","Questions",I.book],["conversations","Email inbox",I.mail]];
     if(salonOn()) navActivity.splice(2,0,["waitlist","Waitlist",I.clock]);
     soon=[["billing","Billing",I.card]];
@@ -461,7 +462,7 @@ function renderApp(){
     </aside>
     <main class="main">
       <div class="topbar">
-        <div class="crumbs">${['settings','notifications'].includes(state.view)?'Account':(['messages','appointments','waitlist','calls','contacts','clients','gaps','conversations'].includes(state.view)?'Activity':'Configure')} · <b>${esc(({assistant:"Assistant",schedule:"Schedule",types:"Appointment types",staff:"Staff",messages:"Phone messages",appointments:"Appointments",settings:"Settings",notifications:"Notifications",calls:"Calls",knowledge:"Knowledge",contacts:(salonOn()?"Clients":"Contacts"),clients:"Clients",gaps:"Open questions",conversations:"Email inbox",waitlist:"Waitlist"})[state.view])}</b></div>
+        <div class="crumbs">${['settings','notifications'].includes(state.view)?'Account':(['messages','appointments','waitlist','calls','contacts','clients','gaps','conversations'].includes(state.view)?'Activity':'Configure')} · <b>${esc(({assistant:"Assistant",schedule:"Schedule",types:"Appointment types",staff:"Staff",messages:"Phone messages",appointments:"Appointments",settings:"Settings",notifications:"Notifications",calls:"Calls",knowledge:"Knowledge",contacts:(salonOn()?"Clients":"Contacts"),clients:"Clients",gaps:"Open questions",conversations:"Email inbox",waitlist:"Waitlist",promotions:"Promotions"})[state.view])}</b></div>
         <div class="acct-chip"><span class="av">${initials}</span><div class="who"><b>${esc(state.account.company)}</b><span>${esc((state.account.status||'trial'))} · ${esc(state.account.plan||'starter')}</span></div></div>
       </div>
       <div id="approve-banner"></div>
@@ -478,8 +479,8 @@ function renderPage(){
   if('speechSynthesis' in window) window.speechSynthesis.cancel();
   teardownRealtime();
   document.querySelectorAll(".nav-item[data-v]").forEach(b=>b.classList.toggle("active",b.dataset.v===state.view));
-  $(".crumbs").innerHTML=`${['settings','notifications'].includes(state.view)?'Account':(['messages','appointments','waitlist','calls','contacts','clients','gaps','conversations'].includes(state.view)?'Activity':'Configure')} · <b>${esc(({assistant:"Assistant",schedule:"Schedule",types:"Appointment types",staff:"Staff",messages:"Phone messages",appointments:"Appointments",settings:"Settings",notifications:"Notifications",calls:"Calls",knowledge:"Knowledge",contacts:(salonOn()?"Clients":"Contacts"),clients:"Clients",gaps:"Open questions",conversations:"Email inbox",waitlist:"Waitlist"})[state.view])}</b>`;
-  const PAGES={assistant:pageAssistant, schedule:pageSchedule, types:pageTypes, staff:pageStaff, messages:pageMessages, appointments:renderAppts, settings:pageSettings, notifications:pageNotifications, calls:pageCalls, knowledge:pageKnowledge, contacts:pageContacts, clients:pageClients, gaps:pageGaps, conversations:pageConversations, waitlist:pageWaitlist};
+  $(".crumbs").innerHTML=`${['settings','notifications'].includes(state.view)?'Account':(['messages','appointments','waitlist','calls','contacts','clients','gaps','conversations'].includes(state.view)?'Activity':'Configure')} · <b>${esc(({assistant:"Assistant",schedule:"Schedule",types:"Appointment types",staff:"Staff",messages:"Phone messages",appointments:"Appointments",settings:"Settings",notifications:"Notifications",calls:"Calls",knowledge:"Knowledge",contacts:(salonOn()?"Clients":"Contacts"),clients:"Clients",gaps:"Open questions",conversations:"Email inbox",waitlist:"Waitlist",promotions:"Promotions"})[state.view])}</b>`;
+  const PAGES={assistant:pageAssistant, schedule:pageSchedule, types:pageTypes, staff:pageStaff, messages:pageMessages, appointments:renderAppts, settings:pageSettings, notifications:pageNotifications, calls:pageCalls, knowledge:pageKnowledge, contacts:pageContacts, clients:pageClients, gaps:pageGaps, conversations:pageConversations, waitlist:pageWaitlist, promotions:pagePromotions};
   const LOADERS={appointments:loadAppointments, messages:loadMessages, calls:loadCalls, contacts:loadContacts, clients:loadContacts, gaps:loadGaps, conversations:loadConversations, staff:loadStaff, waitlist:loadWaitlist};
   const v=state.view;
   (PAGES[v]||(()=>{}))();
@@ -2189,6 +2190,68 @@ async function waitlistAction(act,id){
   if(act==='book'){ await db.from('waitlist').update({status:'booked',updated_at:new Date().toISOString()}).eq('id',id); }
   else if(act==='remove'){ await db.from('waitlist').delete().eq('id',id); }
   await loadWaitlist(); pageWaitlist();
+}
+
+/* ===================== PROMOTIONS PAGE ===================== */
+function pagePromotions(){
+  const smsOn=!!(state.account.settings&&state.account.settings.sms&&state.account.settings.sms.enabled);
+  $("#page").innerHTML=`
+  <div class="page">
+    <div class="page-head"><h1>Promotions</h1><p>Send a one-time offer or announcement to your clients by email${smsOn?' or text':''}. Pick who it goes to, see how many that reaches, then send. ${esc(aName())} greets each client by name and skips anyone who has opted out.</p></div>
+    <div class="card">
+      <div class="card-h"><h2>New promotion</h2></div>
+      <div class="grid-2">
+        <div class="field" style="margin:0"><label class="lab">Who gets this</label><select class="inp" id="pr-seg"><option value="all">All clients</option><option value="lapsed">Lapsed — no visit in 60+ days</option><option value="recent">Recent — visited in the last 30 days</option></select></div>
+        <div class="field" style="margin:0"><label class="lab">Send by</label><select class="inp" id="pr-ch"><option value="email">Email only</option>${smsOn?'<option value="both">Email + text</option>':''}</select></div>
+      </div>
+      <div class="field"><label class="lab">Subject <span class="sub">email only</span></label><input class="inp" id="pr-subj" placeholder="e.g. 20% off color this week"></div>
+      <div class="field"><label class="lab">Message</label><textarea class="inp" id="pr-body" rows="4" placeholder="e.g. Treat yourself this week — 20% off any color service through Sunday. Reply to book!"></textarea></div>
+      <div id="pr-count" style="font-size:12.5px;color:var(--muted);margin:2px 0 10px"></div>
+      <div style="display:flex;gap:10px;align-items:center"><button class="btn primary" id="pr-send">Review &amp; send</button><span id="pr-msg" style="font-size:12.5px;color:var(--muted)"></span></div>
+    </div>
+    <div class="card"><div class="card-h"><h2>Recent promotions</h2></div><div id="pr-history"><div style="color:var(--muted);font-size:12.5px">Loading…</div></div></div>
+  </div>`;
+  const refreshCount=async()=>{
+    const el=$("#pr-count"); if(el) el.textContent='Checking who this reaches…';
+    try{
+      const r=await db.functions.invoke('donna-broadcast',{body:{action:'count',segment:$("#pr-seg").value,channel:$("#pr-ch").value}});
+      const d=r.data;
+      if(d&&d.ok){ if(el) el.textContent=`This will reach about ${d.count} client${d.count===1?'':'s'}${d.textable?` (${d.emailable} by email, ${d.textable} by text)`:''}.`; }
+      else if(el) el.textContent='';
+    }catch(_e){ if(el) el.textContent=''; }
+  };
+  { const sg=$("#pr-seg"); if(sg) sg.onchange=refreshCount; } { const ch=$("#pr-ch"); if(ch) ch.onchange=refreshCount; }
+  refreshCount();
+  { const sb=$("#pr-send"); if(sb) sb.onclick=sendPromotion; }
+  loadPromoHistory();
+}
+async function loadPromoHistory(){
+  const el=$("#pr-history"); if(!el) return;
+  try{
+    const { data }=await db.from('broadcasts').select('subject,segment,channel,recipient_count,created_at').eq('account_id',state.account.id).order('created_at',{ascending:false}).limit(20);
+    const rows=data||[];
+    if(!rows.length){ el.innerHTML='<div style="color:var(--muted);font-size:12.5px">No promotions sent yet.</div>'; return; }
+    const segLabel={all:'All clients',lapsed:'Lapsed clients',recent:'Recent clients'};
+    el.innerHTML=rows.map(b=>`<div style="padding:8px 0;border-bottom:1px solid var(--line-2)"><div style="font-weight:600;font-size:13px">${esc(b.subject||'(no subject)')}</div><div style="font-size:12px;color:var(--muted);margin-top:2px">${esc(fmtAppt(b.created_at))} · ${esc(segLabel[b.segment]||b.segment)} · ${b.channel==='both'?'email + text':'email'} · sent to ${b.recipient_count}</div></div>`).join('');
+  }catch(_e){ el.innerHTML='<div style="color:var(--danger);font-size:12.5px">Could not load history.</div>'; }
+}
+async function sendPromotion(){
+  const btn=$("#pr-send"), msg=$("#pr-msg");
+  const segment=$("#pr-seg").value, channel=$("#pr-ch").value;
+  const subject=($("#pr-subj")&&$("#pr-subj").value.trim())||'';
+  const bodyText=($("#pr-body")&&$("#pr-body").value.trim())||'';
+  if(!bodyText){ if(msg){ msg.style.color='var(--danger)'; msg.textContent='Write a message first.'; } return; }
+  let count=0;
+  try{ const r=await db.functions.invoke('donna-broadcast',{body:{action:'count',segment,channel}}); if(r.data&&r.data.ok) count=r.data.count; }catch(_e){}
+  const ok=await uiConfirm(`Send this promotion to about ${count} client${count===1?'':'s'}${channel==='both'?' by email and text':' by email'}? It sends right away.`,{okText:'Send it',cancelText:'Not yet'});
+  if(!ok) return;
+  const o=btn?btn.textContent:''; if(btn){ btn.disabled=true; btn.textContent='Sending…'; }
+  let r=null; try{ r=await db.functions.invoke('donna-broadcast',{body:{action:'send',segment,channel,subject,body:bodyText}}); }catch(e){ r={error:e}; }
+  if(btn){ btn.disabled=false; btn.textContent=o; }
+  const d=r&&r.data;
+  if(d&&d.ok){ if(msg){ msg.style.color='var(--ok)'; msg.textContent=`Sent to ${d.sent} client${d.sent===1?'':'s'}.`; } if($("#pr-body")) $("#pr-body").value=''; if($("#pr-subj")) $("#pr-subj").value=''; loadPromoHistory(); }
+  else if(d&&d.reason==='too_many'){ if(msg){ msg.style.color='var(--danger)'; msg.textContent=`That reaches ${d.count}, over the ${d.max} limit for one send.`; } }
+  else { if(msg){ msg.style.color='var(--danger)'; msg.textContent='Could not send. Try again.'; } }
 }
 async function saveSms(){
   const btn=$("#sms-save"), msg=$("#sms-msg");
