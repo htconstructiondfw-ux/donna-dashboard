@@ -1851,6 +1851,7 @@ async function saveDirectory(){
 function pageNotifications(){
   const ac=state.account;
   const notify=(ac.settings&&ac.settings.notify)||{};
+  const sms=(ac.settings&&ac.settings.sms)||{};
   const msgOn=!!(ac.settings&&ac.settings.messaging_enabled);
   const schedOn=!(ac.settings&&ac.settings.scheduling_enabled===false);
   const team=salonOn()&&teamAllowed();
@@ -1885,6 +1886,23 @@ function pageNotifications(){
       <div id="rem-msg" style="font-size:12.5px;color:var(--muted);margin-top:8px"></div>
     </div>
 
+    <div class="card"><div class="card-h"><h2>Text message notifications</h2><button class="btn sm" id="sms-save">Save</button></div>
+      <p style="font-size:13px;color:var(--muted);margin-bottom:12px">Have ${esc(aName())} text clients their reminders and confirmations, not just email. Texts send from the shared Sidekick Logistics number, and a reply like "C to confirm" comes back to ${esc(aName())}. Your calls and your local number are not affected.</p>
+      <label style="display:flex;align-items:flex-start;gap:10px;margin:0 0 12px;cursor:pointer;font-size:13.5px;color:var(--ink)"><input type="checkbox" id="sms-enabled" style="margin-top:3px" ${sms.enabled?'checked':''}><span>Send reminders and confirmations by text<span style="display:block;font-weight:400;color:var(--muted);font-size:11.5px;margin-top:2px">Clients still get email too. Texting activates once your account's text number is verified.</span></span></label>
+      <div id="sms-sub" style="padding-left:28px${sms.enabled?'':';opacity:.45'}">
+        <label style="display:flex;align-items:flex-start;gap:10px;margin:0 0 10px;cursor:pointer;font-size:13.5px;color:var(--ink)"><input type="checkbox" id="sms-reminders" style="margin-top:3px" ${sms.reminders!==false?'checked':''} ${sms.enabled?'':'disabled'}><span>Appointment reminders by text</span></label>
+        <label style="display:flex;align-items:flex-start;gap:10px;margin:0;cursor:pointer;font-size:13.5px;color:var(--ink)"><input type="checkbox" id="sms-confirmations" style="margin-top:3px" ${sms.confirmations!==false?'checked':''} ${sms.enabled?'':'disabled'}><span>Booking confirmations by text</span></label>
+      </div>
+      <div id="sms-msg" style="font-size:12.5px;color:var(--muted);margin-top:10px"></div>
+    </div>
+
+    <div class="card"><div class="card-h"><h2>Two-way texting on your own number</h2><button class="btn sm" id="sms2-save">Save</button></div>
+      <p style="font-size:13px;color:var(--muted);margin-bottom:12px">Upgrade to a dedicated text number so clients can start a text conversation with your business and ${esc(aName())} texts back, the same way she handles calls and email. On the shared number she can send reminders and read replies to them, but she cannot pick up a brand-new text a client starts.</p>
+      <label style="display:flex;align-items:flex-start;gap:10px;margin:0;cursor:pointer;font-size:13.5px;color:var(--ink)"><input type="checkbox" id="sms-twoway" style="margin-top:3px" ${sms.two_way?'checked':''}><span>Turn on two-way texting with my own number<span style="display:block;font-weight:400;color:var(--muted);font-size:11.5px;margin-top:2px">We set up a dedicated number for your account. ${esc(aName())} answers inbound texts and can book, reschedule, or take a message, just like on the phone. Pairs best with your local number once texting is enabled on it.</span></span></label>
+      <div id="sms2-status" style="font-size:12px;color:var(--muted-2);margin-top:10px">Your text number: <b>${esc(sms.number||'not set up yet')}</b></div>
+      <div id="sms2-msg" style="font-size:12.5px;color:var(--muted);margin-top:6px"></div>
+    </div>
+
     <div class="card"><div class="card-h"><h2>What ${esc(aName())} copies you on</h2><button class="btn sm" id="ncopy-save">Save</button></div>
       <p style="font-size:13px;color:var(--muted);margin-bottom:12px">Turn off anything you do not want landing in your inbox. Everything stays in your dashboard either way.</p>
       <label style="display:flex;align-items:flex-start;gap:10px;margin:0 0 14px;cursor:pointer;font-size:13.5px;color:var(--ink)"><input type="checkbox" id="ncopy-appt" style="margin-top:3px" ${notify.copy_appt_changes!==false?'checked':''}><span>Bookings, cancellations, and reschedules<span style="display:block;font-weight:400;color:var(--muted);font-size:11.5px;margin-top:2px">A heads up whenever ${esc(aName())} books, cancels, or moves an appointment over email.</span></span></label>
@@ -1898,6 +1916,34 @@ function pageNotifications(){
   { const ss=$("#sched-save"); if(ss) ss.onclick=saveScheduling; }
   { const rs=$("#rem-save"); if(rs) rs.onclick=saveReminders; const rm=$("#rem-mode"); if(rm){ const upd=()=>{ const f=$("#rem-time-field"); if(f) f.style.opacity=rm.value==="off"?".45":"1"; const ri=$("#rem-time"); if(ri) ri.disabled=rm.value==="off"; }; rm.addEventListener("change",upd); upd(); } }
   { const ns=$("#ncopy-save"); if(ns) ns.onclick=saveNotifyCopies; }
+  { const sv=$("#sms-save"); if(sv) sv.onclick=saveSms; const se=$("#sms-enabled"); if(se){ const upd=()=>{ const sub=$("#sms-sub"); if(sub) sub.style.opacity=se.checked?'1':'.45'; ['sms-reminders','sms-confirmations'].forEach(id=>{ const el=$("#"+id); if(el) el.disabled=!se.checked; }); }; se.addEventListener('change',upd); upd(); } }
+  { const s2=$("#sms2-save"); if(s2) s2.onclick=saveSmsTwoWay; }
+}
+async function saveSms(){
+  const btn=$("#sms-save"), msg=$("#sms-msg");
+  const cur=(state.account.settings&&state.account.settings.sms)||{};
+  const patch=Object.assign({}, cur);
+  const en=$("#sms-enabled"); if(en) patch.enabled=!!en.checked;
+  const rm=$("#sms-reminders"); if(rm) patch.reminders=!!rm.checked;
+  const cf=$("#sms-confirmations"); if(cf) patch.confirmations=!!cf.checked;
+  const o=btn?btn.textContent:''; if(btn){ btn.disabled=true; btn.textContent="Saving…"; }
+  const settings=Object.assign({}, state.account.settings||{}, { sms:patch });
+  const { error }=await db.from('accounts').update({settings}).eq('id',state.account.id);
+  if(!error){ state.account.settings=settings; if(msg){ msg.style.color='var(--muted)'; msg.textContent = patch.enabled ? aName()+' will text reminders and confirmations once your text number is active.' : 'Text notifications are off.'; } }
+  else if(msg){ msg.style.color='var(--danger)'; msg.textContent='Could not save. Try again.'; }
+  if(btn){ btn.disabled=false; btn.textContent=error?"Try again":"Saved ✓"; setTimeout(()=>{ if(btn) btn.textContent=o; },1300); }
+}
+async function saveSmsTwoWay(){
+  const btn=$("#sms2-save"), msg=$("#sms2-msg");
+  const cur=(state.account.settings&&state.account.settings.sms)||{};
+  const patch=Object.assign({}, cur);
+  const tw=$("#sms-twoway"); if(tw) patch.two_way=!!tw.checked;
+  const o=btn?btn.textContent:''; if(btn){ btn.disabled=true; btn.textContent="Saving…"; }
+  const settings=Object.assign({}, state.account.settings||{}, { sms:patch });
+  const { error }=await db.from('accounts').update({settings}).eq('id',state.account.id);
+  if(!error){ state.account.settings=settings; if(msg){ msg.style.color='var(--muted)'; msg.textContent = patch.two_way ? 'Noted. We will set up your dedicated text number.' : 'Two-way texting is off.'; } }
+  else if(msg){ msg.style.color='var(--danger)'; msg.textContent='Could not save. Try again.'; }
+  if(btn){ btn.disabled=false; btn.textContent=error?"Try again":"Saved ✓"; setTimeout(()=>{ if(btn) btn.textContent=o; },1300); }
 }
 async function saveNotifyCopies(){
   const btn=$("#ncopy-save"), msg=$("#ncopy-msg");
