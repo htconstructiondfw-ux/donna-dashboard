@@ -2053,7 +2053,7 @@ function pageWaitlist(){
     </div>
 
     <div class="card"><div class="card-h"><h2>Waiting now</h2><span style="font-size:12px;color:var(--muted)">${active.length} waiting${notified.length?` · ${notified.length} notified`:''}</span></div>
-      ${(active.length||notified.length)? active.concat(notified).map(rowCard).join('') : `<p style="font-size:13px;color:var(--muted);margin:0">No one on the waitlist yet. Add someone above, or ${esc(aName())} will add callers who ask for a time that is already taken.</p>`}
+      ${(active.length||notified.length)? active.concat(notified).map(rowCard).join('') : `<p style="font-size:13px;color:var(--muted);margin:0">No one on the waitlist yet. Add anyone who wants to be told as soon as an earlier or specific time opens up.</p>`}
     </div>
   </div>`;
   { const b=$("#wl-add"); if(b) b.onclick=addToWaitlist; }
