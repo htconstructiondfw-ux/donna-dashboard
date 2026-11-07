@@ -407,7 +407,7 @@ async function loadData(){
   } else {
     await loadMessages(); // RLS scopes a stylist to messages addressed to them
     state.calls=[]; state.contacts=[]; state.gaps=[]; state.conversations=[];
-    if(!['schedule','appointments','clients','messages'].includes(state.view)) state.view='appointments';
+    if(!['schedule','appointments','clients','messages','mylink'].includes(state.view)) state.view='appointments';
   }
   return true;
 }
@@ -427,7 +427,7 @@ function providerLabelPlural(){ return providerLabel()+'s'; }
 function teamAllowed(){ const p=String((state.account&&state.account.plan)||'').toLowerCase(); return p==='pro'||p==='enterprise'; }
 function renderApp(){
   const mgr=isManager();
-  if(!mgr && !['schedule','appointments','clients','messages','waitlist'].includes(state.view)) state.view='appointments';
+  if(!mgr && !['schedule','appointments','clients','messages','waitlist','mylink'].includes(state.view)) state.view='appointments';
   // A solo owner lives in their appointments; land there on first load, then leave navigation free.
   if(mgr && isSolo() && !state._homed){ state._homed=true; if(state.view==='assistant') state.view='appointments'; }
   if(mgr && new URLSearchParams(location.search).get('calendar')) state.view='settings';
@@ -443,6 +443,7 @@ function renderApp(){
     // Stylist: focused view — their own bookings, messages, clients, and their own availability.
     navConfig=[["appointments","My appointments",I.appt],["messages","Phone messages",I.msg],["clients","Clients",I.users],["schedule","My availability",I.cal]];
     if(salonOn()) navConfig.splice(3,0,["waitlist","Waitlist",I.clock]);
+    if(salonOn()) navConfig.push(["mylink","My booking link",I.link]);
     navActivity=[];
   }
   const navCount=v=>{ if(v==='messages') return unreadCount(); if(v==='conversations') return (state.conversations||[]).filter(c=>c.status==='awaiting_staff').length; if(v==='gaps') return (state.gaps||[]).length; return 0; };
@@ -463,7 +464,7 @@ function renderApp(){
     </aside>
     <main class="main">
       <div class="topbar">
-        <div class="crumbs">${['settings','notifications'].includes(state.view)?'Account':(['messages','appointments','waitlist','calls','contacts','clients','gaps','conversations'].includes(state.view)?'Activity':'Configure')} · <b>${esc(({assistant:"Assistant",schedule:"Schedule",types:"Appointment types",staff:"Staff",messages:"Phone messages",appointments:"Appointments",settings:"Settings",notifications:"Notifications",calls:"Calls",knowledge:"Knowledge",contacts:(salonOn()?"Clients":"Contacts"),clients:"Clients",gaps:"Open questions",conversations:"Email inbox",waitlist:"Waitlist",promotions:"Promotions",booking:"Booking page"})[state.view])}</b></div>
+        <div class="crumbs">${['settings','notifications'].includes(state.view)?'Account':(['messages','appointments','waitlist','calls','contacts','clients','gaps','conversations'].includes(state.view)?'Activity':'Configure')} · <b>${esc(({assistant:"Assistant",schedule:"Schedule",types:"Appointment types",staff:"Staff",messages:"Phone messages",appointments:"Appointments",settings:"Settings",notifications:"Notifications",calls:"Calls",knowledge:"Knowledge",contacts:(salonOn()?"Clients":"Contacts"),clients:"Clients",gaps:"Open questions",conversations:"Email inbox",waitlist:"Waitlist",promotions:"Promotions",booking:"Booking page",mylink:"My booking link"})[state.view])}</b></div>
         <div class="acct-chip"><span class="av">${initials}</span><div class="who"><b>${esc(state.account.company)}</b><span>${esc((state.account.status||'trial'))} · ${esc(state.account.plan||'starter')}</span></div></div>
       </div>
       <div id="approve-banner"></div>
@@ -476,12 +477,12 @@ function renderApp(){
   paintApproveBanner();
 }
 function renderPage(){
-  if(!isManager() && !['schedule','appointments','clients','messages','waitlist'].includes(state.view)) state.view='appointments';
+  if(!isManager() && !['schedule','appointments','clients','messages','waitlist','mylink'].includes(state.view)) state.view='appointments';
   if('speechSynthesis' in window) window.speechSynthesis.cancel();
   teardownRealtime();
   document.querySelectorAll(".nav-item[data-v]").forEach(b=>b.classList.toggle("active",b.dataset.v===state.view));
-  $(".crumbs").innerHTML=`${['settings','notifications'].includes(state.view)?'Account':(['messages','appointments','waitlist','calls','contacts','clients','gaps','conversations'].includes(state.view)?'Activity':'Configure')} · <b>${esc(({assistant:"Assistant",schedule:"Schedule",types:"Appointment types",staff:"Staff",messages:"Phone messages",appointments:"Appointments",settings:"Settings",notifications:"Notifications",calls:"Calls",knowledge:"Knowledge",contacts:(salonOn()?"Clients":"Contacts"),clients:"Clients",gaps:"Open questions",conversations:"Email inbox",waitlist:"Waitlist",promotions:"Promotions",booking:"Booking page"})[state.view])}</b>`;
-  const PAGES={assistant:pageAssistant, schedule:pageSchedule, types:pageTypes, staff:pageStaff, messages:pageMessages, appointments:renderAppts, settings:pageSettings, notifications:pageNotifications, calls:pageCalls, knowledge:pageKnowledge, contacts:pageContacts, clients:pageClients, gaps:pageGaps, conversations:pageConversations, waitlist:pageWaitlist, promotions:pagePromotions, booking:pageBookingPage};
+  $(".crumbs").innerHTML=`${['settings','notifications'].includes(state.view)?'Account':(['messages','appointments','waitlist','calls','contacts','clients','gaps','conversations'].includes(state.view)?'Activity':'Configure')} · <b>${esc(({assistant:"Assistant",schedule:"Schedule",types:"Appointment types",staff:"Staff",messages:"Phone messages",appointments:"Appointments",settings:"Settings",notifications:"Notifications",calls:"Calls",knowledge:"Knowledge",contacts:(salonOn()?"Clients":"Contacts"),clients:"Clients",gaps:"Open questions",conversations:"Email inbox",waitlist:"Waitlist",promotions:"Promotions",booking:"Booking page",mylink:"My booking link"})[state.view])}</b>`;
+  const PAGES={assistant:pageAssistant, schedule:pageSchedule, types:pageTypes, staff:pageStaff, messages:pageMessages, appointments:renderAppts, settings:pageSettings, notifications:pageNotifications, calls:pageCalls, knowledge:pageKnowledge, contacts:pageContacts, clients:pageClients, gaps:pageGaps, conversations:pageConversations, waitlist:pageWaitlist, promotions:pagePromotions, booking:pageBookingPage, mylink:pageMyLink};
   const LOADERS={appointments:loadAppointments, messages:loadMessages, calls:loadCalls, contacts:loadContacts, clients:loadContacts, gaps:loadGaps, conversations:loadConversations, staff:loadStaff, waitlist:loadWaitlist};
   const v=state.view;
   (PAGES[v]||(()=>{}))();
@@ -2299,6 +2300,33 @@ async function renderBookingLinks(team){
     </div>
     ${staffLinks}`;
   document.querySelectorAll('#bp-links [data-copy]').forEach(b=>b.onclick=()=>copyText(b.dataset.copy,b));
+}
+function pageMyLink(){
+  $("#page").innerHTML=`
+  <div class="page">
+    <div class="page-head"><h1>My booking link</h1><p>Your own link to share. When someone books through it, the appointment starts with you already picked and lands on your calendar. Put it in your Instagram or TikTok bio, your Facebook "Book" button, or a story.</p></div>
+    <div id="ml-body"><div class="card"><div style="color:var(--muted);font-size:12.5px">Loading your link…</div></div></div>
+  </div>`;
+  renderMyLink();
+}
+async function renderMyLink(){
+  const el=$("#ml-body"); if(!el) return;
+  let slug=state._bookingSlug;
+  if(slug===undefined){ try{ const { data }=await db.from('accounts').select('booking_slug').eq('id',state.account.id).maybeSingle(); slug=(data&&data.booking_slug)||null; }catch(_e){ slug=null; } state._bookingSlug=slug; }
+  const base = slug ? `${BOOK_BASE}/book/${slug}` : `${BOOK_BASE}/book.html?a=${state.account.id}`;
+  const url = `${base}${base.includes('?')?'&':'?'}stylist=${state.owner.id}`;
+  const bookingOn=!!(state.account.settings&&state.account.settings.booking&&state.account.settings.booking.enabled===true);
+  const bookable=!!state.owner.bookable;
+  let note='';
+  if(!bookingOn) note=`<div class="card"><div style="font-size:12.5px;color:var(--ink)"><b>Online booking is off right now.</b><br><span style="color:var(--muted)">Your link works, but clients see a "booking isn't available yet" message until ${esc(aName())} is switched on. Ask whoever manages the account to turn on online booking.</span></div></div>`;
+  else if(!bookable) note=`<div class="card"><div style="font-size:12.5px;color:var(--muted)">Heads up — your profile is set to "not bookable," so this link opens the regular booking page without you pre-selected. Ask whoever manages the account to mark you bookable so clients land straight on your calendar.</div></div>`;
+  el.innerHTML=`
+    <div class="card"><div class="card-h"><h2>Your link</h2></div>
+      <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap"><input class="inp" readonly value="${esc(url)}" style="flex:1;min-width:240px"><button class="btn sm primary" data-copy="${esc(url)}">Copy link</button><a class="btn sm" href="${esc(url)}" target="_blank" rel="noopener">Preview</a></div>
+      <div style="font-size:11.5px;color:var(--muted);margin-top:8px">Tip: on Instagram, add it under "link in bio." On Facebook, set it as your page's Book button.</div>
+    </div>
+    ${note}`;
+  el.querySelectorAll('[data-copy]').forEach(b=>b.onclick=()=>copyText(b.dataset.copy,b));
 }
 async function saveBookingEnabled(){
   const btn=$("#bp-save"), msg=$("#bp-msg");
