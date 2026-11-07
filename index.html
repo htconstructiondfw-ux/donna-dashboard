@@ -1462,6 +1462,7 @@ function bookingCardHTML(){
         <div class="field"><label class="lab">Notes <span class="sub">optional</span></label><input class="inp" id="bk-notes" placeholder="optional"></div>
       </div>
       <div id="bk-msg" style="font-size:12.5px;color:var(--muted);min-height:16px;margin:4px 0"></div>
+      <div id="bk-wl" style="margin:0 0 6px"></div>
       <div><button class="btn primary" id="bk-save">Book it</button></div>
     </div>
   </div>`;
@@ -1544,6 +1545,7 @@ async function confirmIfOutsideHours(uid, dateStr, timeStr, durMin, isSelf){
 }
 async function submitBooking(){
   const msg=$("#bk-msg"); const set=(t,c)=>{ if(msg){msg.style.color=c||'var(--muted)';msg.textContent=t;} };
+  { const w=$("#bk-wl"); if(w) w.innerHTML=''; }
   const mgr=isManager();
   const uid = ($("#bk-user")&&$("#bk-user").value) || state.owner.id;
   if(!uid){ set("Pick a staff member.","var(--danger)"); return; }
@@ -1561,7 +1563,44 @@ async function submitBooking(){
   btn.disabled=false; btn.textContent=ob;
   if(err){ set("Could not book. Try again.","var(--danger)"); return; }
   if(r&&r.ok){ set(`Booked for ${r.when_label||'the selected time'}.`,"var(--ok)"); await loadAppointments(); renderAppts(); return; }
-  set(BOOK_ERR[r&&r.error]||"Could not book. Try again.","var(--danger)");
+  const errCode=r&&r.error;
+  set(BOOK_ERR[errCode]||"Could not book. Try again.","var(--danger)");
+  if(salonOn() && (errCode==='conflict' || errCode==='blocked')) showWaitlistOffer();
+}
+// When a time is already taken, offer to add this client to the waitlist instead.
+function showWaitlistOffer(){
+  const w=$("#bk-wl"); if(!w) return;
+  const name=($("#bk-client")&&$("#bk-client").value.trim())||'';
+  const who = name?esc(name):'this client';
+  w.innerHTML=`<div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;padding:10px 12px;border:1px solid var(--line);border-radius:8px;background:#f8fafc">
+    <span style="font-size:12.5px;color:var(--muted)">Want to add ${who} to the waitlist for this time? ${esc(aName())} will reach out if it opens up.</span>
+    <button type="button" class="btn sm primary" id="bk-wl-add">Add to waitlist</button>
+    <span id="bk-wl-msg" style="font-size:12px;color:var(--muted)"></span>
+  </div>`;
+  const b=$("#bk-wl-add"); if(b) b.onclick=addWaitlistFromBooking;
+}
+async function addWaitlistFromBooking(){
+  const btn=$("#bk-wl-add"), msg=$("#bk-wl-msg");
+  const uid=($("#bk-user")&&$("#bk-user").value)||state.owner.id||null;
+  const date=($("#bk-date")&&$("#bk-date").value)||null;
+  const time=($("#bk-time")&&$("#bk-time").value)||'';
+  const name=($("#bk-client")&&$("#bk-client").value.trim())||'';
+  const phRaw=($("#bk-phone")&&$("#bk-phone").value.trim())||'';
+  const phone=phRaw?((typeof normPhone==='function'&&normPhone(phRaw))||phRaw):null;
+  const email=($("#bk-email")&&$("#bk-email").value.trim())||'';
+  const typeSel=$("#bk-type"); const svc=(typeSel&&typeSel.selectedOptions[0]&&typeSel.selectedOptions[0].dataset.name)||null;
+  if(!name && !phone && !email){ if(msg){ msg.style.color='var(--danger)'; msg.textContent='Add a client name or contact first.'; } return; }
+  // Friendly time label from the 24h input.
+  let timePref=null; if(time){ const [h,mi]=time.split(':').map(Number); const ap=h>=12?'PM':'AM'; const h12=((h+11)%12)+1; timePref='around '+h12+':'+String(mi||0).padStart(2,'0')+' '+ap; }
+  const row={ account_id:state.account.id, customer_name:name||null, customer_phone:phone, customer_email:email||null,
+    provider_user_id:(isManager()&&!isSolo())?uid:null,
+    service_label:svc, time_pref:timePref, earliest_date:date, latest_date:date,
+    note:null, source:'dashboard', status:'active' };
+  const o=btn?btn.textContent:''; if(btn){ btn.disabled=true; btn.textContent='Adding…'; }
+  const { error }=await db.from('waitlist').insert(row);
+  if(btn){ btn.disabled=false; btn.textContent=o; }
+  if(error){ if(msg){ msg.style.color='var(--danger)'; msg.textContent='Could not add. Try again.'; } return; }
+  const w=$("#bk-wl"); if(w) w.innerHTML=`<div style="padding:10px 12px;border:1px solid #bfe3d0;background:#f1faf5;border-radius:8px;font-size:12.5px;color:#166534">Added to the waitlist. ${esc(aName())} will reach out if that time frees up. See it under <b>Waitlist</b>.</div>`;
 }
 const STYLIST_PALETTE=['#2563eb','#d946a6','#0d9488','#d97706','#7c3aed','#dc2626','#0891b2','#65a30d'];
 function stylistColor(uid){ const i=(state.staff||[]).findIndex(s=>s.id===uid); return STYLIST_PALETTE[(i<0?0:i)%STYLIST_PALETTE.length]; }
