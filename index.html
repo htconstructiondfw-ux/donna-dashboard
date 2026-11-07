@@ -425,7 +425,7 @@ function providerLabelPlural(){ return providerLabel()+'s'; }
 function teamAllowed(){ const p=String((state.account&&state.account.plan)||'').toLowerCase(); return p==='pro'||p==='enterprise'; }
 function renderApp(){
   const mgr=isManager();
-  if(!mgr && !['schedule','appointments','clients','messages'].includes(state.view)) state.view='appointments';
+  if(!mgr && !['schedule','appointments','clients','messages','waitlist'].includes(state.view)) state.view='appointments';
   // A solo owner lives in their appointments; land there on first load, then leave navigation free.
   if(mgr && isSolo() && !state._homed){ state._homed=true; if(state.view==='assistant') state.view='appointments'; }
   if(mgr && new URLSearchParams(location.search).get('calendar')) state.view='settings';
@@ -440,6 +440,7 @@ function renderApp(){
   } else {
     // Stylist: focused view — their own bookings, messages, clients, and their own availability.
     navConfig=[["appointments","My appointments",I.appt],["messages","Phone messages",I.msg],["clients","Clients",I.users],["schedule","My availability",I.cal]];
+    if(salonOn()) navConfig.splice(3,0,["waitlist","Waitlist",I.clock]);
     navActivity=[];
   }
   const navCount=v=>{ if(v==='messages') return unreadCount(); if(v==='conversations') return (state.conversations||[]).filter(c=>c.status==='awaiting_staff').length; if(v==='gaps') return (state.gaps||[]).length; return 0; };
@@ -473,7 +474,7 @@ function renderApp(){
   paintApproveBanner();
 }
 function renderPage(){
-  if(!isManager() && !['schedule','appointments','clients','messages'].includes(state.view)) state.view='appointments';
+  if(!isManager() && !['schedule','appointments','clients','messages','waitlist'].includes(state.view)) state.view='appointments';
   if('speechSynthesis' in window) window.speechSynthesis.cancel();
   teardownRealtime();
   document.querySelectorAll(".nav-item[data-v]").forEach(b=>b.classList.toggle("active",b.dataset.v===state.view));
