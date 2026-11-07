@@ -1852,6 +1852,9 @@ function pageNotifications(){
   const ac=state.account;
   const notify=(ac.settings&&ac.settings.notify)||{};
   const sms=(ac.settings&&ac.settings.sms)||{};
+  const wb=(ac.settings&&ac.settings.winback)||{};
+  const rv=(ac.settings&&ac.settings.reviews)||{};
+  const rc=(ac.settings&&ac.settings.recap)||{};
   const msgOn=!!(ac.settings&&ac.settings.messaging_enabled);
   const schedOn=!(ac.settings&&ac.settings.scheduling_enabled===false);
   const team=salonOn()&&teamAllowed();
@@ -1911,6 +1914,30 @@ function pageNotifications(){
       ${team?`<label style="display:flex;align-items:flex-start;gap:10px;margin:0;cursor:pointer;font-size:13.5px;color:var(--ink)"><input type="checkbox" id="ncopy-stylconv" style="margin-top:3px" ${notify.copy_stylist_conversations!==false?'checked':''}><span>A ${esc(providerLabel())}'s own bookings<span style="display:block;font-weight:400;color:var(--muted);font-size:11.5px;margin-top:2px">When ${esc(aName())} books with a specific ${esc(providerLabel())} over email, copy you too. The ${esc(providerLabel())} always sees it on their dashboard.</span></span></label>`:''}
       <div id="ncopy-msg" style="font-size:12.5px;color:var(--muted);margin-top:8px"></div>
     </div>
+
+    <div class="card"><div class="card-h"><h2>Bring clients back</h2><button class="btn sm" id="wb-save">Save</button></div>
+      <p style="font-size:13px;color:var(--muted);margin-bottom:12px">When a client has not booked in a while, ${esc(aName())} sends a friendly note inviting them back. She reaches out to each person at most once every 90 days, and never to anyone who already has an upcoming appointment.</p>
+      <label style="display:flex;align-items:flex-start;gap:10px;margin:0 0 12px;cursor:pointer;font-size:13.5px;color:var(--ink)"><input type="checkbox" id="wb-enabled" style="margin-top:3px" ${wb.enabled===true?'checked':''}><span>Reach out to clients who have not been back<span style="display:block;font-weight:400;color:var(--muted);font-size:11.5px;margin-top:2px">Off by default. If text notifications are on, clients with a phone number also get a text; everyone else gets an email.</span></span></label>
+      <div id="wb-sub" style="padding-left:28px${wb.enabled===true?'':';opacity:.45'}">
+        <div class="field" style="max-width:300px;margin:0"><label class="lab">Reach out after this many days without a visit</label><input class="inp" id="wb-days" type="number" min="7" step="1" value="${esc(String(wb.after_days||45))}" ${wb.enabled===true?'':'disabled'}></div>
+      </div>
+      <div id="wb-msg" style="font-size:12.5px;color:var(--muted);margin-top:8px"></div>
+    </div>
+
+    <div class="card"><div class="card-h"><h2>Ask for reviews</h2><button class="btn sm" id="rv-save">Save</button></div>
+      <p style="font-size:13px;color:var(--muted);margin-bottom:12px">A few hours after a visit, ${esc(aName())} sends a short thank-you asking the client to leave a review, with your review link. Each client is asked once per visit.</p>
+      <label style="display:flex;align-items:flex-start;gap:10px;margin:0 0 12px;cursor:pointer;font-size:13.5px;color:var(--ink)"><input type="checkbox" id="rv-enabled" style="margin-top:3px" ${rv.enabled===true?'checked':''}><span>Ask clients for a review after their visit<span style="display:block;font-weight:400;color:var(--muted);font-size:11.5px;margin-top:2px">Off by default. If text notifications are on, clients with a phone number also get a text; everyone else gets an email.</span></span></label>
+      <div id="rv-sub" style="padding-left:28px${rv.enabled===true?'':';opacity:.45'}">
+        <div class="field" style="max-width:420px;margin:0"><label class="lab">Your review link</label><input class="inp" id="rv-url" type="url" placeholder="https://g.page/r/your-business/review" value="${esc(rv.url||rv.google_url||'')}" ${rv.enabled===true?'':'disabled'}><span style="display:block;color:var(--muted);font-size:11.5px;margin-top:4px">Paste your Google review link, or any page where clients can leave a review. Nothing sends until this is filled in.</span></div>
+      </div>
+      <div id="rv-msg" style="font-size:12.5px;color:var(--muted);margin-top:8px"></div>
+    </div>
+
+    <div class="card"><div class="card-h"><h2>Your weekly recap</h2><button class="btn sm" id="rc-save">Save</button></div>
+      <p style="font-size:13px;color:var(--muted);margin-bottom:12px">A short Monday email summing up everything ${esc(aName())} handled for you the week before: calls answered, appointments booked, emails and messages taken. A quick look at the work you did not have to stop and do yourself.</p>
+      <label style="display:flex;align-items:flex-start;gap:10px;margin:0;cursor:pointer;font-size:13.5px;color:var(--ink)"><input type="checkbox" id="rc-enabled" style="margin-top:3px" ${rc.enabled===true?'checked':''}><span>Email me a weekly recap<span style="display:block;font-weight:400;color:var(--muted);font-size:11.5px;margin-top:2px">Sent Monday mornings to your general inbox email above, only in weeks when there was activity.</span></span></label>
+      <div id="rc-msg" style="font-size:12.5px;color:var(--muted);margin-top:8px"></div>
+    </div>
   </div>`;
   { const ae=$("#alert-save"); if(ae) ae.onclick=saveAlertEmail; }
   { const ss=$("#sched-save"); if(ss) ss.onclick=saveScheduling; }
@@ -1918,6 +1945,52 @@ function pageNotifications(){
   { const ns=$("#ncopy-save"); if(ns) ns.onclick=saveNotifyCopies; }
   { const sv=$("#sms-save"); if(sv) sv.onclick=saveSms; const se=$("#sms-enabled"); if(se){ const upd=()=>{ const sub=$("#sms-sub"); if(sub) sub.style.opacity=se.checked?'1':'.45'; ['sms-reminders','sms-confirmations'].forEach(id=>{ const el=$("#"+id); if(el) el.disabled=!se.checked; }); }; se.addEventListener('change',upd); upd(); } }
   { const s2=$("#sms2-save"); if(s2) s2.onclick=saveSmsTwoWay; }
+  { const w=$("#wb-save"); if(w) w.onclick=saveWinback; const we=$("#wb-enabled"); if(we){ const upd=()=>{ const sub=$("#wb-sub"); if(sub) sub.style.opacity=we.checked?'1':'.45'; const d=$("#wb-days"); if(d) d.disabled=!we.checked; }; we.addEventListener('change',upd); upd(); } }
+  { const r=$("#rv-save"); if(r) r.onclick=saveReviews; const re=$("#rv-enabled"); if(re){ const upd=()=>{ const sub=$("#rv-sub"); if(sub) sub.style.opacity=re.checked?'1':'.45'; const u=$("#rv-url"); if(u) u.disabled=!re.checked; }; re.addEventListener('change',upd); upd(); } }
+  { const rc=$("#rc-save"); if(rc) rc.onclick=saveRecap; }
+}
+async function saveWinback(){
+  const btn=$("#wb-save"), msg=$("#wb-msg");
+  const cur=(state.account.settings&&state.account.settings.winback)||{};
+  const patch=Object.assign({}, cur);
+  const en=$("#wb-enabled"); if(en) patch.enabled=!!en.checked;
+  const dd=$("#wb-days"); if(dd){ const n=parseInt(dd.value,10); patch.after_days=(n>=7?n:45); }
+  const smsOn=!!(state.account.settings&&state.account.settings.sms&&state.account.settings.sms.enabled);
+  patch.channel=smsOn?'both':'email';
+  const o=btn?btn.textContent:''; if(btn){ btn.disabled=true; btn.textContent="Saving…"; }
+  const settings=Object.assign({}, state.account.settings||{}, { winback:patch });
+  const { error }=await db.from('accounts').update({settings}).eq('id',state.account.id);
+  if(!error){ state.account.settings=settings; if(msg){ msg.style.color='var(--muted)'; msg.textContent = patch.enabled ? aName()+' will invite back clients who have not visited in '+patch.after_days+' days.' : 'Win-back is off.'; } }
+  else if(msg){ msg.style.color='var(--danger)'; msg.textContent='Could not save. Try again.'; }
+  if(btn){ btn.disabled=false; btn.textContent=error?"Try again":"Saved ✓"; setTimeout(()=>{ if(btn) btn.textContent=o; },1300); }
+}
+async function saveReviews(){
+  const btn=$("#rv-save"), msg=$("#rv-msg");
+  const cur=(state.account.settings&&state.account.settings.reviews)||{};
+  const patch=Object.assign({}, cur);
+  const en=$("#rv-enabled"); if(en) patch.enabled=!!en.checked;
+  const u=$("#rv-url"); if(u) patch.url=(u.value||'').trim();
+  const smsOn=!!(state.account.settings&&state.account.settings.sms&&state.account.settings.sms.enabled);
+  patch.channel=smsOn?'both':'email';
+  if(patch.enabled && !patch.url){ if(msg){ msg.style.color='var(--danger)'; msg.textContent='Add your review link first, otherwise there is nothing to send.'; } return; }
+  const o=btn?btn.textContent:''; if(btn){ btn.disabled=true; btn.textContent="Saving…"; }
+  const settings=Object.assign({}, state.account.settings||{}, { reviews:patch });
+  const { error }=await db.from('accounts').update({settings}).eq('id',state.account.id);
+  if(!error){ state.account.settings=settings; if(msg){ msg.style.color='var(--muted)'; msg.textContent = patch.enabled ? aName()+' will ask for a review a few hours after each visit.' : 'Review requests are off.'; } }
+  else if(msg){ msg.style.color='var(--danger)'; msg.textContent='Could not save. Try again.'; }
+  if(btn){ btn.disabled=false; btn.textContent=error?"Try again":"Saved ✓"; setTimeout(()=>{ if(btn) btn.textContent=o; },1300); }
+}
+async function saveRecap(){
+  const btn=$("#rc-save"), msg=$("#rc-msg");
+  const cur=(state.account.settings&&state.account.settings.recap)||{};
+  const patch=Object.assign({}, cur);
+  const en=$("#rc-enabled"); if(en) patch.enabled=!!en.checked;
+  const o=btn?btn.textContent:''; if(btn){ btn.disabled=true; btn.textContent="Saving…"; }
+  const settings=Object.assign({}, state.account.settings||{}, { recap:patch });
+  const { error }=await db.from('accounts').update({settings}).eq('id',state.account.id);
+  if(!error){ state.account.settings=settings; if(msg){ msg.style.color='var(--muted)'; msg.textContent = patch.enabled ? 'You will get a recap on Monday mornings.' : 'Weekly recap is off.'; } }
+  else if(msg){ msg.style.color='var(--danger)'; msg.textContent='Could not save. Try again.'; }
+  if(btn){ btn.disabled=false; btn.textContent=error?"Try again":"Saved ✓"; setTimeout(()=>{ if(btn) btn.textContent=o; },1300); }
 }
 async function saveSms(){
   const btn=$("#sms-save"), msg=$("#sms-msg");
