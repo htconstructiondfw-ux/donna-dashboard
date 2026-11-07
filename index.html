@@ -388,7 +388,7 @@ async function loadData(){
     };
   }
   const { data: types } = await db.from('appointment_types').select('*').eq('account_id', acct.id).order('created_at');
-  state.types = (types||[]).map(t=>({ id:t.id, name:t.name, mode:t.mode, dur:t.default_duration_min, before:t.buffer_before_min, after:t.buffer_after_min, travel:t.requires_travel, overlap:t.overlap_minutes||0 }));
+  state.types = (types||[]).map(t=>({ id:t.id, name:t.name, mode:t.mode, dur:t.default_duration_min, before:t.buffer_before_min, after:t.buffer_after_min, travel:t.requires_travel, overlap:t.overlap_minutes||0, recall:t.rebook_after_days||0 }));
   const { data: rules } = await db.from('availability_rules').select('*').eq('user_id', me.id);
   state.schedule = DAYS.map(()=>({ working:{on:false,start:"08:00",end:"18:00"}, bookable:{on:false,start:"09:00",end:"15:00"} }));
   (rules||[]).forEach(r=>{ const w = r.rule_type==='working'?state.schedule[r.day_of_week].working:state.schedule[r.day_of_week].bookable; w.on=true; w.start=(r.start_time||"08:00").slice(0,5); w.end=(r.end_time||"18:00").slice(0,5); });
@@ -692,6 +692,7 @@ function pageTypes(){
       <div class="field"><label class="switch"><input type="checkbox" id="t-travel"><span class="track"></span><span class="txt">Reserve travel time<small>Auto-on for in-person — drive time is checked before booking.</small></span></label></div>
       <div class="field"><label class="switch"><input type="checkbox" id="t-overlap-on"><span class="track"></span><span class="txt">Allow overlap during processing<small>For services with wait time, like color developing. Only the hands-on part blocks the ${providerLabel()}; they can start another client during the overlap.</small></span></label></div>
       <div class="field" id="t-overlap-row" style="display:none"><label class="lab">Overlap minutes <span class="sub">the processing tail that can overlap another booking</span></label><input class="inp" type="number" id="t-overlap" value="60" min="0" step="5"></div>
+      <div class="field"><label class="lab">Remind to rebook after <span class="sub">days — ${esc(aName())} nudges a client to come back for this service that many days after their last one, if they have nothing booked. Leave blank for off.</span></label><input class="inp" type="number" id="t-recall" placeholder="e.g. 14" min="0" step="1" style="max-width:200px"></div>
       <div style="margin-top:8px"><button class="btn primary" id="t-add">+ Add type</button></div>
     </div>
     <div class="card">
@@ -749,7 +750,7 @@ async function verifyVideo(provider){
 function typeHTML(t){
   const lbl={phone:"Phone",virtual:"Virtual",in_person:"In person"}[t.mode]; const icon={phone:I.phone,virtual:I.vid,in_person:I.pin}[t.mode]; const id=t.id||'';
   return `<div class="type-wrap">
-    <div class="type-item"><span class="ic ${t.mode}">${icon}</span><span class="nm">${esc(t.name)}<small>${t.dur} min${t.after?` · ${t.after} min buffer`:""}${t.travel?" · travel reserved":""}${t.overlap?` · ${t.overlap} min can overlap`:""}</small></span><span class="mode">${lbl}</span>
+    <div class="type-item"><span class="ic ${t.mode}">${icon}</span><span class="nm">${esc(t.name)}<small>${t.dur} min${t.after?` · ${t.after} min buffer`:""}${t.travel?" · travel reserved":""}${t.overlap?` · ${t.overlap} min can overlap`:""}${t.recall?` · rebook reminder ${t.recall}d`:""}</small></span><span class="mode">${lbl}</span>
       <button class="btn sm" data-edit="${id}" style="margin-left:12px">Edit</button>
       <button class="rm" data-id="${id}" title="Remove" style="margin-left:8px;background:none;border:none;color:var(--muted-2);font-size:13px">✕</button></div>
     <div class="type-edit" id="te-${id}" style="display:none;border:1px solid var(--line);border-top:none;border-radius:0 0 var(--r-sm) var(--r-sm);padding:12px 14px;margin:-7px 0 9px;background:#fbfcfe">
@@ -764,6 +765,7 @@ function typeHTML(t){
       <div class="field"><label class="switch"><input type="checkbox" id="te-travel-${id}"${t.travel?' checked':''}><span class="track"></span><span class="txt">Reserve travel time</span></label></div>
       <div class="field"><label class="switch"><input type="checkbox" id="te-ov-${id}"${t.overlap?' checked':''}><span class="track"></span><span class="txt">Allow overlap during processing</span></label></div>
       <div class="field" id="te-ovrow-${id}" style="display:${t.overlap?'block':'none'}"><label class="lab">Overlap minutes <span class="sub">processing tail that can overlap another booking</span></label><input class="inp" type="number" id="te-ovmin-${id}" value="${t.overlap||60}" min="0" step="5"></div>
+      <div class="field"><label class="lab">Remind to rebook after <span class="sub">days — nudge past clients back for this service; blank for off</span></label><input class="inp" type="number" id="te-recall-${id}" value="${t.recall||''}" placeholder="off" min="0" step="1" style="max-width:180px"></div>
       <div id="te-msg-${id}" style="font-size:12px;color:var(--muted);min-height:14px"></div>
       <div style="display:flex;gap:8px"><button class="btn sm primary" data-save-type="${id}">Save changes</button><button class="btn sm" data-cancel-type="${id}">Cancel</button></div>
     </div>
@@ -784,12 +786,13 @@ async function saveTypeEdit(id){
   if(mode==='virtual'){ let vp=state.videoProvider; if(!vp){ try{ const r=await db.functions.invoke('donna-video',{body:{action:'status'}}); if(r.data&&r.data.ok) vp=r.data.video_provider; }catch(_e){} state.videoProvider=vp; } if(!vp){ set('Verify a video provider before using Virtual.','var(--danger)'); return; } }
   const dur=+g('dur').value||30;
   const ovOn=g('ov').checked; let overlap=ovOn?(+g('ovmin').value||0):0; if(overlap>dur) overlap=dur; if(overlap<0) overlap=0;
-  const patch={ name, mode, default_duration_min:dur, buffer_after_min:+g('after').value||0, requires_travel:g('travel').checked, overlap_minutes:overlap };
+  const recall=(+g('recall').value||0);
+  const patch={ name, mode, default_duration_min:dur, buffer_after_min:+g('after').value||0, requires_travel:g('travel').checked, overlap_minutes:overlap, rebook_after_days: recall>0?recall:null };
   const btn=document.querySelector('#types [data-save-type="'+id+'"]'); if(btn){ btn.disabled=true; btn.textContent='Saving…'; } set('Saving…');
   const { data, error } = await db.from('appointment_types').update(patch).eq('id',id).select().single();
   if(error||!data){ set('Could not save. Try again.','var(--danger)'); if(btn){ btn.disabled=false; btn.textContent='Save changes'; } return; }
   const i=state.types.findIndex(x=>x.id===id);
-  if(i>=0) state.types[i]={id:data.id,name:data.name,mode:data.mode,dur:data.default_duration_min,before:data.buffer_before_min,after:data.buffer_after_min,travel:data.requires_travel,overlap:data.overlap_minutes||0};
+  if(i>=0) state.types[i]={id:data.id,name:data.name,mode:data.mode,dur:data.default_duration_min,before:data.buffer_before_min,after:data.buffer_after_min,travel:data.requires_travel,overlap:data.overlap_minutes||0,recall:data.rebook_after_days||0};
   pageTypes();
 }
 async function addType(){
@@ -803,9 +806,10 @@ async function addType(){
   const dur=+$("#t-dur").value||30;
   const ovOn=$("#t-overlap-on")&&$("#t-overlap-on").checked;
   let overlap=ovOn?(+$("#t-overlap").value||0):0; if(overlap>dur) overlap=dur; if(overlap<0) overlap=0;
-  const row={ account_id:state.account.id, name, mode, default_duration_min:dur, buffer_before_min:0, buffer_after_min:+$("#t-after").value||0, requires_travel:$("#t-travel").checked, overlap_minutes:overlap };
+  const recall=(+$("#t-recall").value||0);
+  const row={ account_id:state.account.id, name, mode, default_duration_min:dur, buffer_before_min:0, buffer_after_min:+$("#t-after").value||0, requires_travel:$("#t-travel").checked, overlap_minutes:overlap, rebook_after_days: recall>0?recall:null };
   const { data, error } = await db.from('appointment_types').insert(row).select().single();
-  if(!error && data){ state.types.push({id:data.id,name:data.name,mode:data.mode,dur:data.default_duration_min,before:data.buffer_before_min,after:data.buffer_after_min,travel:data.requires_travel,overlap:data.overlap_minutes||0}); pageTypes(); }
+  if(!error && data){ state.types.push({id:data.id,name:data.name,mode:data.mode,dur:data.default_duration_min,before:data.buffer_before_min,after:data.buffer_after_min,travel:data.requires_travel,overlap:data.overlap_minutes||0,recall:data.rebook_after_days||0}); pageTypes(); }
 }
 async function removeType(id){ if(id){ await db.from('appointment_types').delete().eq('id',id); } state.types=state.types.filter(t=>t.id!==id); pageTypes(); }
 
