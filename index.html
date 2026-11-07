@@ -249,6 +249,7 @@ const I = {
   bell:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 8a6 6 0 0 0-12 0c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/></svg>',
   clock:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg>',
   promo:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 11v2a1 1 0 0 0 1 1h3l4 4V6L7 10H4a1 1 0 0 0-1 1z"/><path d="M15 8a5 5 0 0 1 0 8"/></svg>',
+  clip:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="5" y="4" width="14" height="17" rx="2"/><path d="M9 4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v1a1 1 0 0 1-1 1h-4a1 1 0 0 1-1-1zM9 11h6M9 15h4"/></svg>',
   link:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10 13a5 5 0 0 0 7 0l2-2a5 5 0 0 0-7-7l-1 1"/><path d="M14 11a5 5 0 0 0-7 0l-2 2a5 5 0 0 0 7 7l1-1"/></svg>'
 };
 
@@ -435,7 +436,7 @@ function renderApp(){
   if(mgr){
     navConfig=[["assistant","Assistant",I.bot],["schedule","Schedule",I.cal],["types","Appointment types",I.tag]];
     if(showStaff()) navConfig.push(["staff","Staff",I.users]);
-    navConfig.push(["knowledge","Knowledge",I.book],["booking","Booking page",I.link],["promotions","Promotions",I.promo],["notifications","Notifications",I.bell],["settings","Settings",I.gear]);
+    navConfig.push(["knowledge","Knowledge",I.book],["booking","Booking page",I.link],["intake","Intake forms",I.clip],["promotions","Promotions",I.promo],["notifications","Notifications",I.bell],["settings","Settings",I.gear]);
     navActivity=[["calls","Calls",I.phone],["appointments","Appointments",I.appt],["messages","Phone messages",I.msg],["contacts",salonOn()?"Clients":"Contacts",I.users],["gaps","Questions",I.book],["conversations","Email inbox",I.mail]];
     if(salonOn()) navActivity.splice(2,0,["waitlist","Waitlist",I.clock]);
     soon=[["billing","Billing",I.card]];
@@ -464,7 +465,7 @@ function renderApp(){
     </aside>
     <main class="main">
       <div class="topbar">
-        <div class="crumbs">${['settings','notifications'].includes(state.view)?'Account':(['messages','appointments','waitlist','calls','contacts','clients','gaps','conversations'].includes(state.view)?'Activity':'Configure')} · <b>${esc(({assistant:"Assistant",schedule:"Schedule",types:"Appointment types",staff:"Staff",messages:"Phone messages",appointments:"Appointments",settings:"Settings",notifications:"Notifications",calls:"Calls",knowledge:"Knowledge",contacts:(salonOn()?"Clients":"Contacts"),clients:"Clients",gaps:"Open questions",conversations:"Email inbox",waitlist:"Waitlist",promotions:"Promotions",booking:"Booking page",mylink:"My booking link"})[state.view])}</b></div>
+        <div class="crumbs">${['settings','notifications'].includes(state.view)?'Account':(['messages','appointments','waitlist','calls','contacts','clients','gaps','conversations'].includes(state.view)?'Activity':'Configure')} · <b>${esc(({assistant:"Assistant",schedule:"Schedule",types:"Appointment types",staff:"Staff",messages:"Phone messages",appointments:"Appointments",settings:"Settings",notifications:"Notifications",calls:"Calls",knowledge:"Knowledge",contacts:(salonOn()?"Clients":"Contacts"),clients:"Clients",gaps:"Open questions",conversations:"Email inbox",waitlist:"Waitlist",promotions:"Promotions",booking:"Booking page",mylink:"My booking link",intake:"Intake forms"})[state.view])}</b></div>
         <div class="acct-chip"><span class="av">${initials}</span><div class="who"><b>${esc(state.account.company)}</b><span>${esc((state.account.status||'trial'))} · ${esc(state.account.plan||'starter')}</span></div></div>
       </div>
       <div id="approve-banner"></div>
@@ -481,8 +482,8 @@ function renderPage(){
   if('speechSynthesis' in window) window.speechSynthesis.cancel();
   teardownRealtime();
   document.querySelectorAll(".nav-item[data-v]").forEach(b=>b.classList.toggle("active",b.dataset.v===state.view));
-  $(".crumbs").innerHTML=`${['settings','notifications'].includes(state.view)?'Account':(['messages','appointments','waitlist','calls','contacts','clients','gaps','conversations'].includes(state.view)?'Activity':'Configure')} · <b>${esc(({assistant:"Assistant",schedule:"Schedule",types:"Appointment types",staff:"Staff",messages:"Phone messages",appointments:"Appointments",settings:"Settings",notifications:"Notifications",calls:"Calls",knowledge:"Knowledge",contacts:(salonOn()?"Clients":"Contacts"),clients:"Clients",gaps:"Open questions",conversations:"Email inbox",waitlist:"Waitlist",promotions:"Promotions",booking:"Booking page",mylink:"My booking link"})[state.view])}</b>`;
-  const PAGES={assistant:pageAssistant, schedule:pageSchedule, types:pageTypes, staff:pageStaff, messages:pageMessages, appointments:renderAppts, settings:pageSettings, notifications:pageNotifications, calls:pageCalls, knowledge:pageKnowledge, contacts:pageContacts, clients:pageClients, gaps:pageGaps, conversations:pageConversations, waitlist:pageWaitlist, promotions:pagePromotions, booking:pageBookingPage, mylink:pageMyLink};
+  $(".crumbs").innerHTML=`${['settings','notifications'].includes(state.view)?'Account':(['messages','appointments','waitlist','calls','contacts','clients','gaps','conversations'].includes(state.view)?'Activity':'Configure')} · <b>${esc(({assistant:"Assistant",schedule:"Schedule",types:"Appointment types",staff:"Staff",messages:"Phone messages",appointments:"Appointments",settings:"Settings",notifications:"Notifications",calls:"Calls",knowledge:"Knowledge",contacts:(salonOn()?"Clients":"Contacts"),clients:"Clients",gaps:"Open questions",conversations:"Email inbox",waitlist:"Waitlist",promotions:"Promotions",booking:"Booking page",mylink:"My booking link",intake:"Intake forms"})[state.view])}</b>`;
+  const PAGES={assistant:pageAssistant, schedule:pageSchedule, types:pageTypes, staff:pageStaff, messages:pageMessages, appointments:renderAppts, settings:pageSettings, notifications:pageNotifications, calls:pageCalls, knowledge:pageKnowledge, contacts:pageContacts, clients:pageClients, gaps:pageGaps, conversations:pageConversations, waitlist:pageWaitlist, promotions:pagePromotions, booking:pageBookingPage, mylink:pageMyLink, intake:pageIntakeForms};
   const LOADERS={appointments:loadAppointments, messages:loadMessages, calls:loadCalls, contacts:loadContacts, clients:loadContacts, gaps:loadGaps, conversations:loadConversations, staff:loadStaff, waitlist:loadWaitlist};
   const v=state.view;
   (PAGES[v]||(()=>{}))();
@@ -1407,7 +1408,14 @@ async function loadVisits(id){
         return `<div style="padding:6px 0;border-bottom:1px solid var(--line-2)"><div style="display:flex;justify-content:space-between;gap:10px;font-size:12.5px"><span>${esc(fmtAppt(a.starts_at))} · ${esc(svc)}${who?` · <b>${esc(who)}</b>`:''}</span><span class="appt-status s-${a.status}" style="flex:none">${esc(a.status)}</span></div>${note}</div>`;
       }).join('')
     : '<div style="color:var(--muted);font-size:12.5px">No appointments on record for this client yet.</div>';
-  el.innerHTML=formulaBox+history;
+  let intakeRows=[], intakeForms={};
+  try{
+    const iRes=await db.from('intake_responses').select('id, form_id, answers, submitted_at').eq('contact_id',id).not('submitted_at','is',null).order('submitted_at',{ascending:false}).limit(5);
+    intakeRows=iRes.data||[];
+    if(intakeRows.length){ const fids=[...new Set(intakeRows.map(r=>r.form_id).filter(Boolean))]; const fRes=await db.from('intake_forms').select('id,title,questions').in('id',fids); (fRes.data||[]).forEach(f=>intakeForms[f.id]=f); }
+  }catch(_e){}
+  const intakeBox = intakeRows.length ? ('<div style="font-size:11px;text-transform:uppercase;letter-spacing:.05em;color:var(--muted);font-weight:600;margin:4px 0 6px">Intake answers</div>'+intakeRows.map(r=>{ const f=intakeForms[r.form_id]; const ans=r.answers||{}; const qs=(f&&Array.isArray(f.questions))?f.questions:[]; const lines=qs.map(q=>{ let v=ans[q.id]; if(Array.isArray(v)) v=v.join(', '); if(v===undefined||v===null||v==='') return ''; return `<div style="margin-bottom:5px"><div style="font-size:11.5px;color:var(--muted)">${esc(q.label||'')}</div><div style="font-size:12.5px">${esc(String(v))}</div></div>`; }).filter(Boolean).join(''); return `<div style="padding:8px 0;border-bottom:1px solid var(--line-2)"><div style="font-size:12px;font-weight:600;margin-bottom:5px">${esc((f&&f.title)||'Intake')} · <span style="color:var(--muted);font-weight:400">${esc(fmtAppt(r.submitted_at))}</span></div>${lines||'<div style="font-size:12px;color:var(--muted)">No answers recorded.</div>'}</div>`; }).join('')) : '';
+  el.innerHTML=formulaBox+intakeBox+history;
   const sb=document.getElementById('sn-save-'+id);
   if(sb) sb.onclick=async()=>{
     const ta=document.getElementById('sn-'+id), msg=document.getElementById('sn-msg-'+id);
@@ -2254,6 +2262,170 @@ async function sendPromotion(){
   if(d&&d.ok){ if(msg){ msg.style.color='var(--ok)'; msg.textContent=`Sent to ${d.sent} client${d.sent===1?'':'s'}.`; } if($("#pr-body")) $("#pr-body").value=''; if($("#pr-subj")) $("#pr-subj").value=''; loadPromoHistory(); }
   else if(d&&d.reason==='too_many'){ if(msg){ msg.style.color='var(--danger)'; msg.textContent=`That reaches ${d.count}, over the ${d.max} limit for one send.`; } }
   else { if(msg){ msg.style.color='var(--danger)'; msg.textContent='Could not send. Try again.'; } }
+}
+
+/* ===================== INTAKE FORMS ===================== */
+var intakeEdit=null;
+const IF_TYPES=[["short","Short text"],["long","Long answer"],["yesno","Yes / No"],["choice","Multiple choice"]];
+const IF_TEMPLATES={
+  new_client:{title:'New client intake',qs:[
+    {label:"Any allergies or sensitivities we should know about?",type:"long",required:true},
+    {label:"How did you hear about us?",type:"short",required:false},
+    {label:"What are you hoping to get out of today's visit?",type:"long",required:false}
+  ]},
+  color:{title:'Hair color consultation',qs:[
+    {label:"Have you colored your hair before?",type:"yesno",required:false},
+    {label:"Any previous chemical treatments (bleach, keratin, perm)?",type:"long",required:false},
+    {label:"What look are you going for?",type:"long",required:true},
+    {label:"Any known allergies to hair products?",type:"short",required:false}
+  ]},
+  spa:{title:'Spa health intake',qs:[
+    {label:"Any medical conditions, injuries, or areas to avoid?",type:"long",required:true},
+    {label:"Preferred pressure?",type:"choice",required:false,options:["Light","Medium","Firm"]},
+    {label:"Anything else your therapist should know?",type:"long",required:false}
+  ]}
+};
+function ifQid(existing){ let n=1; const used=new Set((existing||[]).map(q=>q.id)); while(used.has('q'+n)) n++; return 'q'+n; }
+
+function pageIntakeForms(){
+  $("#page").innerHTML=`
+  <div class="page">
+    <div class="page-head"><h1>Intake forms</h1><p>Create short forms your clients fill out before their visit — allergies, what they want, color formulas, health notes. ${esc(aName())} sends the link automatically after someone books, and the answers land on the client's profile for you and your team.</p></div>
+    <div class="card"><div class="card-h"><h2>Your forms</h2><button class="btn sm primary" id="if-new">New form</button></div>
+      <div id="if-list"><div style="color:var(--muted);font-size:12.5px">Loading…</div></div>
+    </div>
+    <div id="if-editor"></div>
+  </div>`;
+  { const b=$("#if-new"); if(b) b.onclick=()=>startIntakeEdit(null); }
+  loadIntakeForms();
+}
+
+async function loadIntakeForms(){
+  const el=$("#if-list"); if(!el) return;
+  if(!state._apptTypes){ try{ const { data }=await db.from('appointment_types').select('id,name,is_active').eq('account_id',state.account.id).order('created_at'); state._apptTypes=data||[]; }catch(_e){ state._apptTypes=[]; } }
+  let rows=[];
+  try{ const { data }=await db.from('intake_forms').select('*').eq('account_id',state.account.id).order('created_at',{ascending:false}); rows=data||[]; }catch(_e){ el.innerHTML='<div style="color:var(--danger);font-size:12.5px">Could not load forms.</div>'; return; }
+  state._intakeForms=rows;
+  const tName=id=>{ const t=(state._apptTypes||[]).find(x=>x.id===id); return t?t.name:'All bookings'; };
+  if(!rows.length){ el.innerHTML='<div style="color:var(--muted);font-size:12.5px">No forms yet. Create one and '+esc(aName())+' will send it to clients after they book.</div>'; return; }
+  el.innerHTML=rows.map(f=>{
+    const scope=f.appointment_type_id?('For '+esc(tName(f.appointment_type_id))):'All bookings';
+    const qn=(Array.isArray(f.questions)?f.questions.length:0);
+    const badges=[f.is_active?'<span style="color:var(--ok)">Active</span>':'<span style="color:var(--muted)">Off</span>', f.new_clients_only?'New clients only':''].filter(Boolean).join(' · ');
+    return `<div style="display:flex;justify-content:space-between;align-items:center;gap:12px;padding:11px 0;border-bottom:1px solid var(--line-2)">
+      <div style="min-width:0"><div style="font-weight:600;font-size:13.5px">${esc(f.title||'Untitled form')}</div>
+      <div style="font-size:12px;color:var(--muted);margin-top:2px">${scope} · ${qn} question${qn===1?'':'s'} · ${badges}</div></div>
+      <div style="display:flex;gap:6px;flex:none"><button class="btn sm" data-edit="${f.id}">Edit</button><button class="btn sm" data-del="${f.id}">Delete</button></div>
+    </div>`;
+  }).join('');
+  el.querySelectorAll('[data-edit]').forEach(b=>b.onclick=()=>{ const f=rows.find(x=>x.id===b.dataset.edit); startIntakeEdit(f); });
+  el.querySelectorAll('[data-del]').forEach(b=>b.onclick=()=>deleteIntakeForm(b.dataset.del));
+}
+
+function startIntakeEdit(f){
+  if(f){ intakeEdit={ id:f.id, title:f.title||'', appointment_type_id:f.appointment_type_id||'', new_clients_only:!!f.new_clients_only, is_active:f.is_active!==false, questions:(Array.isArray(f.questions)?JSON.parse(JSON.stringify(f.questions)):[]) }; }
+  else { intakeEdit={ id:null, title:'', appointment_type_id:'', new_clients_only:false, is_active:true, questions:[{id:'q1',label:'',type:'short',required:false}] }; }
+  renderIntakeEditor();
+  const ed=$("#if-editor"); if(ed) ed.scrollIntoView({behavior:'smooth',block:'start'});
+}
+
+function renderIntakeEditor(){
+  const ed=$("#if-editor"); if(!ed||!intakeEdit) return;
+  const types=(state._apptTypes||[]).filter(t=>t.is_active!==false);
+  const scopeOpts=`<option value="">All bookings (any service)</option>`+types.map(t=>`<option value="${t.id}" ${intakeEdit.appointment_type_id===t.id?'selected':''}>${esc(t.name)}</option>`).join('');
+  ed.innerHTML=`<div class="card"><div class="card-h"><h2>${intakeEdit.id?'Edit form':'New form'}</h2></div>
+    <div class="grid-2">
+      <div class="field" style="margin:0"><label class="lab">Form title</label><input class="inp" id="if-title" value="${esc(intakeEdit.title)}" placeholder="e.g. New client intake"></div>
+      <div class="field" style="margin:0"><label class="lab">When to send</label><select class="inp" id="if-scope">${scopeOpts}</select></div>
+    </div>
+    <label style="display:flex;align-items:center;gap:9px;font-size:13px;margin:12px 0 4px;cursor:pointer"><input type="checkbox" id="if-new-only" ${intakeEdit.new_clients_only?'checked':''}> Only send to first-time clients</label>
+    <label style="display:flex;align-items:center;gap:9px;font-size:13px;margin:0 0 6px;cursor:pointer"><input type="checkbox" id="if-active" ${intakeEdit.is_active?'checked':''}> Active (send this form)</label>
+    <div style="margin:14px 0 6px;font-size:12px;color:var(--muted)">Start from a template:
+      <button class="btn sm" data-tpl="new_client" style="margin-left:4px">New client</button>
+      <button class="btn sm" data-tpl="color">Hair color</button>
+      <button class="btn sm" data-tpl="spa">Spa health</button></div>
+    <div class="card-h" style="margin-top:12px"><h2 style="font-size:13.5px">Questions</h2><button class="btn sm" id="if-addq">Add question</button></div>
+    <div id="if-questions"></div>
+    <div style="display:flex;gap:10px;margin-top:14px"><button class="btn primary" id="if-save">Save form</button><button class="btn" id="if-cancel">Cancel</button><span id="if-msg" style="font-size:12.5px;color:var(--muted);align-self:center"></span></div>
+  </div>`;
+  renderIntakeQuestions();
+  { const t=$("#if-title"); if(t) t.oninput=()=>{ intakeEdit.title=t.value; }; }
+  { const s=$("#if-scope"); if(s) s.onchange=()=>{ intakeEdit.appointment_type_id=s.value; }; }
+  { const n=$("#if-new-only"); if(n) n.onchange=()=>{ intakeEdit.new_clients_only=n.checked; }; }
+  { const a=$("#if-active"); if(a) a.onchange=()=>{ intakeEdit.is_active=a.checked; }; }
+  ed.querySelectorAll('[data-tpl]').forEach(b=>b.onclick=()=>applyIntakeTemplate(b.dataset.tpl));
+  { const aq=$("#if-addq"); if(aq) aq.onclick=()=>{ syncIntakeQuestions(); intakeEdit.questions.push({id:ifQid(intakeEdit.questions),label:'',type:'short',required:false}); renderIntakeQuestions(); }; }
+  { const sv=$("#if-save"); if(sv) sv.onclick=saveIntakeForm; }
+  { const cx=$("#if-cancel"); if(cx) cx.onclick=()=>{ intakeEdit=null; const e=$("#if-editor"); if(e) e.innerHTML=''; }; }
+}
+
+function renderIntakeQuestions(){
+  const c=$("#if-questions"); if(!c||!intakeEdit) return;
+  if(!intakeEdit.questions.length){ c.innerHTML='<div style="color:var(--muted);font-size:12px;padding:8px 0">No questions yet — add one above.</div>'; return; }
+  c.innerHTML=intakeEdit.questions.map((q,i)=>{
+    const tsel=IF_TYPES.map(([v,l])=>`<option value="${v}" ${q.type===v?'selected':''}>${l}</option>`).join('');
+    const opts=(q.type==='choice')?`<div class="field" style="margin:8px 0 0"><label class="lab">Choices (one per line)</label><textarea class="inp" data-qopts="${i}" rows="3" placeholder="Light&#10;Medium&#10;Firm">${esc((q.options||[]).join('\n'))}</textarea></div>`:'';
+    return `<div style="border:1px solid var(--line-2);border-radius:10px;padding:12px;margin-bottom:9px">
+      <div style="display:flex;gap:8px;align-items:flex-start">
+        <div style="flex:1"><input class="inp" data-qlabel="${i}" value="${esc(q.label||'')}" placeholder="Question ${i+1}"></div>
+        <div style="flex:none;display:flex;gap:4px">
+          <button class="btn sm" data-qup="${i}" ${i===0?'disabled':''}>&uarr;</button>
+          <button class="btn sm" data-qdn="${i}" ${i===intakeEdit.questions.length-1?'disabled':''}>&darr;</button>
+          <button class="btn sm" data-qrm="${i}">&times;</button>
+        </div>
+      </div>
+      <div style="display:flex;gap:14px;align-items:center;margin-top:8px">
+        <select class="inp" data-qtype="${i}" style="width:auto;flex:none">${tsel}</select>
+        <label style="display:flex;align-items:center;gap:7px;font-size:12.5px;cursor:pointer"><input type="checkbox" data-qreq="${i}" ${q.required?'checked':''}> Required</label>
+      </div>${opts}</div>`;
+  }).join('');
+  c.querySelectorAll('[data-qlabel]').forEach(el=>el.oninput=()=>{ intakeEdit.questions[+el.dataset.qlabel].label=el.value; });
+  c.querySelectorAll('[data-qopts]').forEach(el=>el.oninput=()=>{ intakeEdit.questions[+el.dataset.qopts].options=el.value.split('\n').map(x=>x.trim()).filter(Boolean); });
+  c.querySelectorAll('[data-qreq]').forEach(el=>el.onchange=()=>{ intakeEdit.questions[+el.dataset.qreq].required=el.checked; });
+  c.querySelectorAll('[data-qtype]').forEach(el=>el.onchange=()=>{ syncIntakeQuestions(); const q=intakeEdit.questions[+el.dataset.qtype]; q.type=el.value; if(q.type==='choice'&&!q.options) q.options=[]; renderIntakeQuestions(); });
+  c.querySelectorAll('[data-qup]').forEach(el=>el.onclick=()=>{ syncIntakeQuestions(); const i=+el.dataset.qup; if(i>0){ const a=intakeEdit.questions; const tmp=a[i-1]; a[i-1]=a[i]; a[i]=tmp; renderIntakeQuestions(); } });
+  c.querySelectorAll('[data-qdn]').forEach(el=>el.onclick=()=>{ syncIntakeQuestions(); const i=+el.dataset.qdn; const a=intakeEdit.questions; if(i<a.length-1){ const tmp=a[i+1]; a[i+1]=a[i]; a[i]=tmp; renderIntakeQuestions(); } });
+  c.querySelectorAll('[data-qrm]').forEach(el=>el.onclick=()=>{ syncIntakeQuestions(); intakeEdit.questions.splice(+el.dataset.qrm,1); renderIntakeQuestions(); });
+}
+
+function syncIntakeQuestions(){
+  const c=$("#if-questions"); if(!c||!intakeEdit) return;
+  c.querySelectorAll('[data-qlabel]').forEach(el=>{ intakeEdit.questions[+el.dataset.qlabel].label=el.value; });
+  c.querySelectorAll('[data-qopts]').forEach(el=>{ intakeEdit.questions[+el.dataset.qopts].options=el.value.split('\n').map(x=>x.trim()).filter(Boolean); });
+}
+
+function applyIntakeTemplate(key){
+  const t=IF_TEMPLATES[key]; if(!t) return;
+  syncIntakeQuestions();
+  if(!intakeEdit.title) intakeEdit.title=t.title;
+  intakeEdit.questions=JSON.parse(JSON.stringify(t.qs)).map((q,i)=>Object.assign({id:'q'+(i+1)},q));
+  renderIntakeEditor();
+}
+
+async function saveIntakeForm(){
+  syncIntakeQuestions();
+  const msg=$("#if-msg");
+  const title=(intakeEdit.title||'').trim();
+  if(!title){ if(msg){ msg.style.color='var(--danger)'; msg.textContent='Give the form a title.'; } return; }
+  const qs=(intakeEdit.questions||[]).filter(q=>(q.label||'').trim());
+  if(!qs.length){ if(msg){ msg.style.color='var(--danger)'; msg.textContent='Add at least one question with a label.'; } return; }
+  const clean=qs.map((q,i)=>{ const o={id:q.id||('q'+(i+1)),label:q.label.trim(),type:q.type||'short',required:!!q.required}; if(o.type==='choice'){ o.options=(q.options||[]).map(x=>String(x).trim()).filter(Boolean); } return o; });
+  const row={ account_id:state.account.id, title, appointment_type_id:intakeEdit.appointment_type_id||null, new_clients_only:!!intakeEdit.new_clients_only, is_active:!!intakeEdit.is_active, questions:clean, updated_at:new Date().toISOString() };
+  const btn=$("#if-save"); const o=btn?btn.textContent:''; if(btn){ btn.disabled=true; btn.textContent='Saving…'; }
+  let r;
+  if(intakeEdit.id) r=await db.from('intake_forms').update(row).eq('id',intakeEdit.id);
+  else r=await db.from('intake_forms').insert(row);
+  if(btn){ btn.disabled=false; btn.textContent=o; }
+  if(r.error){ if(msg){ msg.style.color='var(--danger)'; msg.textContent='Could not save: '+r.error.message; } return; }
+  intakeEdit=null; const ed=$("#if-editor"); if(ed) ed.innerHTML='';
+  loadIntakeForms();
+}
+
+async function deleteIntakeForm(id){
+  if(!(await uiConfirm('Delete this form? Clients who already got the link can still fill it, but it won’t be sent for new bookings.',{okText:'Delete',cancelText:'Keep'}))) return;
+  const r=await db.from('intake_forms').delete().eq('id',id);
+  if(r.error){ uiAlert('Could not delete: '+r.error.message); return; }
+  loadIntakeForms();
 }
 
 /* ===================== BOOKING PAGE ===================== */
