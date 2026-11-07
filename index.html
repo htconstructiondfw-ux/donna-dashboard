@@ -248,7 +248,8 @@ const I = {
   mail:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="5" width="18" height="14" rx="2"/><path d="m3 7 9 6 9-6"/></svg>',
   bell:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 8a6 6 0 0 0-12 0c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/></svg>',
   clock:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg>',
-  promo:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 11v2a1 1 0 0 0 1 1h3l4 4V6L7 10H4a1 1 0 0 0-1 1z"/><path d="M15 8a5 5 0 0 1 0 8"/></svg>'
+  promo:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 11v2a1 1 0 0 0 1 1h3l4 4V6L7 10H4a1 1 0 0 0-1 1z"/><path d="M15 8a5 5 0 0 1 0 8"/></svg>',
+  link:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10 13a5 5 0 0 0 7 0l2-2a5 5 0 0 0-7-7l-1 1"/><path d="M14 11a5 5 0 0 0-7 0l-2 2a5 5 0 0 0 7 7l1-1"/></svg>'
 };
 
 /* ===================== AUTH ===================== */
@@ -434,7 +435,7 @@ function renderApp(){
   if(mgr){
     navConfig=[["assistant","Assistant",I.bot],["schedule","Schedule",I.cal],["types","Appointment types",I.tag]];
     if(showStaff()) navConfig.push(["staff","Staff",I.users]);
-    navConfig.push(["knowledge","Knowledge",I.book],["promotions","Promotions",I.promo],["notifications","Notifications",I.bell],["settings","Settings",I.gear]);
+    navConfig.push(["knowledge","Knowledge",I.book],["booking","Booking page",I.link],["promotions","Promotions",I.promo],["notifications","Notifications",I.bell],["settings","Settings",I.gear]);
     navActivity=[["calls","Calls",I.phone],["appointments","Appointments",I.appt],["messages","Phone messages",I.msg],["contacts",salonOn()?"Clients":"Contacts",I.users],["gaps","Questions",I.book],["conversations","Email inbox",I.mail]];
     if(salonOn()) navActivity.splice(2,0,["waitlist","Waitlist",I.clock]);
     soon=[["billing","Billing",I.card]];
@@ -462,7 +463,7 @@ function renderApp(){
     </aside>
     <main class="main">
       <div class="topbar">
-        <div class="crumbs">${['settings','notifications'].includes(state.view)?'Account':(['messages','appointments','waitlist','calls','contacts','clients','gaps','conversations'].includes(state.view)?'Activity':'Configure')} · <b>${esc(({assistant:"Assistant",schedule:"Schedule",types:"Appointment types",staff:"Staff",messages:"Phone messages",appointments:"Appointments",settings:"Settings",notifications:"Notifications",calls:"Calls",knowledge:"Knowledge",contacts:(salonOn()?"Clients":"Contacts"),clients:"Clients",gaps:"Open questions",conversations:"Email inbox",waitlist:"Waitlist",promotions:"Promotions"})[state.view])}</b></div>
+        <div class="crumbs">${['settings','notifications'].includes(state.view)?'Account':(['messages','appointments','waitlist','calls','contacts','clients','gaps','conversations'].includes(state.view)?'Activity':'Configure')} · <b>${esc(({assistant:"Assistant",schedule:"Schedule",types:"Appointment types",staff:"Staff",messages:"Phone messages",appointments:"Appointments",settings:"Settings",notifications:"Notifications",calls:"Calls",knowledge:"Knowledge",contacts:(salonOn()?"Clients":"Contacts"),clients:"Clients",gaps:"Open questions",conversations:"Email inbox",waitlist:"Waitlist",promotions:"Promotions",booking:"Booking page"})[state.view])}</b></div>
         <div class="acct-chip"><span class="av">${initials}</span><div class="who"><b>${esc(state.account.company)}</b><span>${esc((state.account.status||'trial'))} · ${esc(state.account.plan||'starter')}</span></div></div>
       </div>
       <div id="approve-banner"></div>
@@ -479,8 +480,8 @@ function renderPage(){
   if('speechSynthesis' in window) window.speechSynthesis.cancel();
   teardownRealtime();
   document.querySelectorAll(".nav-item[data-v]").forEach(b=>b.classList.toggle("active",b.dataset.v===state.view));
-  $(".crumbs").innerHTML=`${['settings','notifications'].includes(state.view)?'Account':(['messages','appointments','waitlist','calls','contacts','clients','gaps','conversations'].includes(state.view)?'Activity':'Configure')} · <b>${esc(({assistant:"Assistant",schedule:"Schedule",types:"Appointment types",staff:"Staff",messages:"Phone messages",appointments:"Appointments",settings:"Settings",notifications:"Notifications",calls:"Calls",knowledge:"Knowledge",contacts:(salonOn()?"Clients":"Contacts"),clients:"Clients",gaps:"Open questions",conversations:"Email inbox",waitlist:"Waitlist",promotions:"Promotions"})[state.view])}</b>`;
-  const PAGES={assistant:pageAssistant, schedule:pageSchedule, types:pageTypes, staff:pageStaff, messages:pageMessages, appointments:renderAppts, settings:pageSettings, notifications:pageNotifications, calls:pageCalls, knowledge:pageKnowledge, contacts:pageContacts, clients:pageClients, gaps:pageGaps, conversations:pageConversations, waitlist:pageWaitlist, promotions:pagePromotions};
+  $(".crumbs").innerHTML=`${['settings','notifications'].includes(state.view)?'Account':(['messages','appointments','waitlist','calls','contacts','clients','gaps','conversations'].includes(state.view)?'Activity':'Configure')} · <b>${esc(({assistant:"Assistant",schedule:"Schedule",types:"Appointment types",staff:"Staff",messages:"Phone messages",appointments:"Appointments",settings:"Settings",notifications:"Notifications",calls:"Calls",knowledge:"Knowledge",contacts:(salonOn()?"Clients":"Contacts"),clients:"Clients",gaps:"Open questions",conversations:"Email inbox",waitlist:"Waitlist",promotions:"Promotions",booking:"Booking page"})[state.view])}</b>`;
+  const PAGES={assistant:pageAssistant, schedule:pageSchedule, types:pageTypes, staff:pageStaff, messages:pageMessages, appointments:renderAppts, settings:pageSettings, notifications:pageNotifications, calls:pageCalls, knowledge:pageKnowledge, contacts:pageContacts, clients:pageClients, gaps:pageGaps, conversations:pageConversations, waitlist:pageWaitlist, promotions:pagePromotions, booking:pageBookingPage};
   const LOADERS={appointments:loadAppointments, messages:loadMessages, calls:loadCalls, contacts:loadContacts, clients:loadContacts, gaps:loadGaps, conversations:loadConversations, staff:loadStaff, waitlist:loadWaitlist};
   const v=state.view;
   (PAGES[v]||(()=>{}))();
@@ -2252,6 +2253,64 @@ async function sendPromotion(){
   if(d&&d.ok){ if(msg){ msg.style.color='var(--ok)'; msg.textContent=`Sent to ${d.sent} client${d.sent===1?'':'s'}.`; } if($("#pr-body")) $("#pr-body").value=''; if($("#pr-subj")) $("#pr-subj").value=''; loadPromoHistory(); }
   else if(d&&d.reason==='too_many'){ if(msg){ msg.style.color='var(--danger)'; msg.textContent=`That reaches ${d.count}, over the ${d.max} limit for one send.`; } }
   else { if(msg){ msg.style.color='var(--danger)'; msg.textContent='Could not send. Try again.'; } }
+}
+
+/* ===================== BOOKING PAGE ===================== */
+const BOOK_BASE='https://donna-dashboard-three.vercel.app';
+function copyText(t,btn){ try{ navigator.clipboard.writeText(t); const o=btn.textContent; btn.textContent='Copied ✓'; setTimeout(()=>{ btn.textContent=o; },1200); }catch(_e){ /* */ } }
+function pageBookingPage(){
+  const team = salonOn() && isManager() && !isSolo();
+  const bEnabled=!!(state.account.settings&&state.account.settings.booking&&state.account.settings.booking.enabled===true);
+  $("#page").innerHTML=`
+  <div class="page">
+    <div class="page-head"><h1>Booking page</h1><p>A page your clients use to book themselves, any time. Share the link on Instagram, Facebook, your Google listing, or in a text, or embed it on your website. Every booking runs through ${esc(aName())} just like a call, with a quick code to confirm the person is real.</p></div>
+    <div class="card"><div class="card-h"><h2>Online booking</h2><button class="btn sm" id="bp-save">Save</button></div>
+      <label style="display:flex;align-items:flex-start;gap:10px;margin:0;cursor:pointer;font-size:13.5px;color:var(--ink)"><input type="checkbox" id="bp-enabled" style="margin-top:3px" ${bEnabled?'checked':''}><span>Let clients book online<span style="display:block;font-weight:400;color:var(--muted);font-size:11.5px;margin-top:2px">When off, the link shows a friendly "booking is not available yet" message.</span></span></label>
+      <div id="bp-msg" style="font-size:12.5px;color:var(--muted);margin-top:8px"></div>
+    </div>
+    <div id="bp-links"><div class="card"><div style="color:var(--muted);font-size:12.5px">Loading your link…</div></div></div>
+  </div>`;
+  { const s=$("#bp-save"); if(s) s.onclick=saveBookingEnabled; }
+  renderBookingLinks(team);
+}
+async function renderBookingLinks(team){
+  const el=$("#bp-links"); if(!el) return;
+  let slug=state._bookingSlug;
+  if(slug===undefined){ try{ const { data }=await db.from('accounts').select('booking_slug').eq('id',state.account.id).maybeSingle(); slug=(data&&data.booking_slug)||null; }catch(_e){ slug=null; } state._bookingSlug=slug; }
+  const url = slug ? `${BOOK_BASE}/book/${slug}` : `${BOOK_BASE}/book.html?a=${state.account.id}`;
+  const embed = `<iframe src="${url}" style="width:100%;max-width:560px;height:760px;border:0" title="Book an appointment"></iframe>`;
+  let staffLinks='';
+  if(team){
+    if(!(state.staff&&state.staff.length)){ try{ await loadStaff(); }catch(_e){} }
+    const bk=(state.staff||[]).filter(s=>s.is_bookable);
+    if(bk.length){
+      staffLinks=`<div class="card"><div class="card-h"><h2>Per-${esc(providerLabel())} links</h2></div><p style="font-size:12.5px;color:var(--muted);margin-bottom:6px">Each ${esc(providerLabel())} can share their own link that starts booking with them.</p>`+
+        bk.map(s=>{ const su=`${url}${url.includes('?')?'&':'?'}stylist=${s.id}`; return `<div style="display:flex;justify-content:space-between;align-items:center;gap:10px;padding:9px 0;border-top:1px solid var(--line-2)"><div style="min-width:0"><div style="font-weight:600;font-size:13px">${esc(s.full_name||s.email)}</div><div style="font-size:11.5px;color:var(--muted);word-break:break-all">${esc(su)}</div></div><button class="btn sm" data-copy="${esc(su)}" style="flex:none">Copy</button></div>`; }).join('')+`</div>`;
+    }
+  }
+  el.innerHTML=`
+    <div class="card"><div class="card-h"><h2>Your booking link</h2></div>
+      <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap"><input class="inp" readonly value="${esc(url)}" style="flex:1;min-width:240px" id="bp-url"><button class="btn sm primary" data-copy="${esc(url)}">Copy link</button><a class="btn sm" href="${esc(url)}" target="_blank" rel="noopener">Preview</a></div>
+    </div>
+    <div class="card"><div class="card-h"><h2>Embed on your website</h2></div>
+      <p style="font-size:12.5px;color:var(--muted);margin-bottom:8px">Paste this where you want the booking form to appear on your site.</p>
+      <textarea class="inp" readonly rows="3" style="font-family:ui-monospace,monospace;font-size:12px">${esc(embed)}</textarea>
+      <div style="margin-top:8px"><button class="btn sm" data-copy="${esc(embed)}">Copy embed code</button></div>
+    </div>
+    ${staffLinks}`;
+  document.querySelectorAll('#bp-links [data-copy]').forEach(b=>b.onclick=()=>copyText(b.dataset.copy,b));
+}
+async function saveBookingEnabled(){
+  const btn=$("#bp-save"), msg=$("#bp-msg");
+  const en=!!($("#bp-enabled")&&$("#bp-enabled").checked);
+  const cur=(state.account.settings&&state.account.settings.booking)||{};
+  const patch=Object.assign({},cur,{enabled:en});
+  const settings=Object.assign({},state.account.settings||{},{booking:patch});
+  const o=btn?btn.textContent:''; if(btn){ btn.disabled=true; btn.textContent='Saving…'; }
+  const { error }=await db.from('accounts').update({settings}).eq('id',state.account.id);
+  if(!error){ state.account.settings=settings; if(msg){ msg.style.color='var(--muted)'; msg.textContent=en?'Online booking is on.':'Online booking is off.'; } }
+  else if(msg){ msg.style.color='var(--danger)'; msg.textContent='Could not save. Try again.'; }
+  if(btn){ btn.disabled=false; btn.textContent=error?'Try again':'Saved ✓'; setTimeout(()=>{ if(btn) btn.textContent=o; },1300); }
 }
 async function saveSms(){
   const btn=$("#sms-save"), msg=$("#sms-msg");
