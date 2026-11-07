@@ -261,6 +261,9 @@ function renderDash(){
         <tbody>${rows}</tbody>
       </table>`:`<div class="empty">No tenants yet.</div>`}
     </div>
+    <h1 class="page" style="margin-top:30px">Text messaging</h1>
+    <div class="lede">The shared toll-free number Donna uses to text reminders and confirmations across all tenants.</div>
+    <div id="sms-section" class="tbl"><div class="empty">Loading…</div></div>
     <h1 class="page" style="margin-top:30px">Needs review</h1>
     <div class="lede">Interactions worth a look across all tenants, last 30 days. Click a tenant to open it.</div>
     <div id="review-section" class="tbl"><div class="empty">Loading…</div></div>
@@ -285,6 +288,7 @@ function renderDash(){
     </div>
   </div>`;
   document.querySelectorAll("tbody tr[data-id]").forEach(tr=>tr.onclick=()=>openTenant(tr.dataset.id));
+  loadSmsPlatform();
   loadReviewQueue();
   const ivc=document.getElementById("iv-create"); if(ivc) ivc.onclick=createInvite;
   loadInvites();
@@ -329,6 +333,33 @@ function paintInvites(list){
   }</tbody></table>`;
   host.querySelectorAll("[data-copy]").forEach(b=>b.onclick=()=>{ try{ navigator.clipboard.writeText(b.dataset.copy); b.textContent="Copied"; setTimeout(()=>b.textContent="Copy",1200); }catch(e){} });
   host.querySelectorAll("[data-revoke]").forEach(b=>b.onclick=async()=>{ b.disabled=true; try{ await api("revoke_invite",{code:b.dataset.revoke}); }catch(e){} loadInvites(); });
+}
+function smsVerPill(v){
+  if(!v||!v.status) return '<span class="pill paused">Not submitted</span>';
+  const s=String(v.status).toUpperCase();
+  if(s.indexOf("APPROVED")>=0) return '<span class="pill active">Verified</span>';
+  if(s.indexOf("REJECTED")>=0) return '<span class="pill cancelled">Rejected</span>';
+  return '<span class="pill trial">Pending review</span>';
+}
+async function loadSmsPlatform(){
+  const host=document.getElementById("sms-section"); if(!host) return;
+  let r; try{ r=await db.functions.invoke("admin-sms",{body:{}}); }catch(e){ host.innerHTML=`<div class="empty">Could not load the SMS status.</div>`; return; }
+  if(!r||r.error||!r.data||!r.data.ok){ host.innerHTML=`<div class="empty">${esc((r&&r.data&&r.data.error)||"Could not load the SMS status.")}</div>`; return; }
+  paintSmsPlatform(r.data.sms||{});
+}
+function paintSmsPlatform(s){
+  const host=document.getElementById("sms-section"); if(!host) return;
+  const num=s.number?prettyPhone(s.number):null;
+  const ver=s.verification;
+  const copyBtn=(val)=>`<button class="iv-copy" data-copy="${esc(val)}">Copy</button>`;
+  const rows=[
+    ["Shared sending number", num?`<span class="mono">${esc(num)}</span> ${copyBtn(s.number)}`:'<span class="sub">not purchased yet</span>'],
+    ["Messaging Service", s.messaging_service_sid?`<span class="mono">${esc(s.messaging_service_sid)}</span> ${copyBtn(s.messaging_service_sid)}`:'<span class="sub">none</span>'],
+    ["Verification", smsVerPill(ver)+(ver&&ver.rejection_reason?` <span class="sub">${esc(ver.rejection_reason)}</span>`:"")],
+    ["Tenant numbers SMS-enabled", `<span class="mono">${s.tenant_sms_numbers||0}</span>`]
+  ];
+  host.innerHTML=`<table><tbody>${rows.map(kv=>`<tr><td style="width:240px;color:var(--muted)">${kv[0]}</td><td>${kv[1]}</td></tr>`).join("")}</tbody></table>`;
+  host.querySelectorAll("[data-copy]").forEach(b=>b.onclick=()=>{ try{ navigator.clipboard.writeText(b.dataset.copy); b.textContent="Copied"; setTimeout(()=>b.textContent="Copy",1200); }catch(e){} });
 }
 const RQ_LABEL={knowledge_gap:["Knowledge gap","warn"],failed_call:["Failed call","cancelled"],abrupt_call:["Abrupt call","starter"],no_action_call:["No action","starter"],emergency_msg:["Emergency","cancelled"],repeat_caller:["Repeat caller","pro"]};
 async function loadReviewQueue(){
