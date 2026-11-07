@@ -250,7 +250,10 @@ const I = {
   clock:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg>',
   promo:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 11v2a1 1 0 0 0 1 1h3l4 4V6L7 10H4a1 1 0 0 0-1 1z"/><path d="M15 8a5 5 0 0 1 0 8"/></svg>',
   clip:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="5" y="4" width="14" height="17" rx="2"/><path d="M9 4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v1a1 1 0 0 1-1 1h-4a1 1 0 0 1-1-1zM9 11h6M9 15h4"/></svg>',
-  link:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10 13a5 5 0 0 0 7 0l2-2a5 5 0 0 0-7-7l-1 1"/><path d="M14 11a5 5 0 0 0-7 0l-2 2a5 5 0 0 0 7 7l1-1"/></svg>'
+  link:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10 13a5 5 0 0 0 7 0l2-2a5 5 0 0 0-7-7l-1 1"/><path d="M14 11a5 5 0 0 0-7 0l-2 2a5 5 0 0 0 7 7l1-1"/></svg>',
+  building:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 21h18M5 21V5a2 2 0 0 1 2-2h7a2 2 0 0 1 2 2v16M19 21V11a1 1 0 0 0-1-1h-2M9 7h2M9 11h2M9 15h2"/></svg>',
+  wrench:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14.7 6.3a4 4 0 0 0-5.4 5.4L3 18l3 3 6.3-6.3a4 4 0 0 0 5.4-5.4l-2.5 2.5-2.8-.4-.4-2.8z"/></svg>',
+  shield:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3 5 6v5c0 4 3 7 7 9 4-2 7-5 7-9V6z"/><path d="m9 12 2 2 4-4"/></svg>'
 };
 
 /* ===================== AUTH ===================== */
@@ -416,6 +419,7 @@ async function loadData(){
 /* ===================== APP SHELL ===================== */
 function isManager(){ return ['owner','admin'].includes((state.owner&&state.owner.role)||'owner'); }
 function salonOn(){ const f=(state.account&&state.account.settings&&state.account.settings.features)||{}; return !!f.salon; }
+function propertyOn(){ const f=(state.account&&state.account.settings&&state.account.settings.features)||{}; return !!f.property_management; }
 // Solo vs team is driven by the plan: starter is solo, Pro/Enterprise is a team.
 function salonMode(){ return teamAllowed() ? 'team' : 'solo'; }
 function isSolo(){ return salonOn() && salonMode()==='solo'; }
@@ -439,6 +443,7 @@ function renderApp(){
     navConfig.push(["knowledge","Knowledge",I.book],["booking","Booking page",I.link],["intake","Intake forms",I.clip],["promotions","Promotions",I.promo],["notifications","Notifications",I.bell],["settings","Settings",I.gear]);
     navActivity=[["calls","Calls",I.phone],["appointments","Appointments",I.appt],["messages","Phone messages",I.msg],["contacts",salonOn()?"Clients":"Contacts",I.users],["gaps","Questions",I.book],["conversations","Email inbox",I.mail]];
     if(salonOn()) navActivity.splice(2,0,["waitlist","Waitlist",I.clock]);
+    if(propertyOn()){ navConfig.splice(1,0,["properties","Properties",I.building]); navActivity.splice(0,0,["requests","Service requests",I.wrench]); }
     soon=[["billing","Billing",I.card]];
   } else {
     // Stylist: focused view — their own bookings, messages, clients, and their own availability.
@@ -465,7 +470,7 @@ function renderApp(){
     </aside>
     <main class="main">
       <div class="topbar">
-        <div class="crumbs">${['settings','notifications'].includes(state.view)?'Account':(['messages','appointments','waitlist','calls','contacts','clients','gaps','conversations'].includes(state.view)?'Activity':'Configure')} · <b>${esc(({assistant:"Assistant",schedule:"Schedule",types:"Appointment types",staff:"Staff",messages:"Phone messages",appointments:"Appointments",settings:"Settings",notifications:"Notifications",calls:"Calls",knowledge:"Knowledge",contacts:(salonOn()?"Clients":"Contacts"),clients:"Clients",gaps:"Open questions",conversations:"Email inbox",waitlist:"Waitlist",promotions:"Promotions",booking:"Booking page",mylink:"My booking link",intake:"Intake forms"})[state.view])}</b></div>
+        <div class="crumbs">${['settings','notifications'].includes(state.view)?'Account':(['messages','appointments','waitlist','calls','contacts','clients','gaps','conversations','requests'].includes(state.view)?'Activity':'Configure')} · <b>${esc(({assistant:"Assistant",schedule:"Schedule",types:"Appointment types",staff:"Staff",messages:"Phone messages",appointments:"Appointments",settings:"Settings",notifications:"Notifications",calls:"Calls",knowledge:"Knowledge",contacts:(salonOn()?"Clients":"Contacts"),clients:"Clients",gaps:"Open questions",conversations:"Email inbox",waitlist:"Waitlist",promotions:"Promotions",booking:"Booking page",mylink:"My booking link",intake:"Intake forms",properties:"Properties",requests:"Service requests"})[state.view])}</b></div>
         <div class="acct-chip"><span class="av">${initials}</span><div class="who"><b>${esc(state.account.company)}</b><span>${esc((state.account.status||'trial'))} · ${esc(state.account.plan||'starter')}</span></div></div>
       </div>
       <div id="approve-banner"></div>
@@ -482,8 +487,8 @@ function renderPage(){
   if('speechSynthesis' in window) window.speechSynthesis.cancel();
   teardownRealtime();
   document.querySelectorAll(".nav-item[data-v]").forEach(b=>b.classList.toggle("active",b.dataset.v===state.view));
-  $(".crumbs").innerHTML=`${['settings','notifications'].includes(state.view)?'Account':(['messages','appointments','waitlist','calls','contacts','clients','gaps','conversations'].includes(state.view)?'Activity':'Configure')} · <b>${esc(({assistant:"Assistant",schedule:"Schedule",types:"Appointment types",staff:"Staff",messages:"Phone messages",appointments:"Appointments",settings:"Settings",notifications:"Notifications",calls:"Calls",knowledge:"Knowledge",contacts:(salonOn()?"Clients":"Contacts"),clients:"Clients",gaps:"Open questions",conversations:"Email inbox",waitlist:"Waitlist",promotions:"Promotions",booking:"Booking page",mylink:"My booking link",intake:"Intake forms"})[state.view])}</b>`;
-  const PAGES={assistant:pageAssistant, schedule:pageSchedule, types:pageTypes, staff:pageStaff, messages:pageMessages, appointments:renderAppts, settings:pageSettings, notifications:pageNotifications, calls:pageCalls, knowledge:pageKnowledge, contacts:pageContacts, clients:pageClients, gaps:pageGaps, conversations:pageConversations, waitlist:pageWaitlist, promotions:pagePromotions, booking:pageBookingPage, mylink:pageMyLink, intake:pageIntakeForms};
+  $(".crumbs").innerHTML=`${['settings','notifications'].includes(state.view)?'Account':(['messages','appointments','waitlist','calls','contacts','clients','gaps','conversations','requests'].includes(state.view)?'Activity':'Configure')} · <b>${esc(({assistant:"Assistant",schedule:"Schedule",types:"Appointment types",staff:"Staff",messages:"Phone messages",appointments:"Appointments",settings:"Settings",notifications:"Notifications",calls:"Calls",knowledge:"Knowledge",contacts:(salonOn()?"Clients":"Contacts"),clients:"Clients",gaps:"Open questions",conversations:"Email inbox",waitlist:"Waitlist",promotions:"Promotions",booking:"Booking page",mylink:"My booking link",intake:"Intake forms",properties:"Properties",requests:"Service requests"})[state.view])}</b>`;
+  const PAGES={assistant:pageAssistant, schedule:pageSchedule, types:pageTypes, staff:pageStaff, messages:pageMessages, appointments:renderAppts, settings:pageSettings, notifications:pageNotifications, calls:pageCalls, knowledge:pageKnowledge, contacts:pageContacts, clients:pageClients, gaps:pageGaps, conversations:pageConversations, waitlist:pageWaitlist, promotions:pagePromotions, booking:pageBookingPage, mylink:pageMyLink, intake:pageIntakeForms, properties:pageProperties, requests:pageServiceRequests};
   const LOADERS={appointments:loadAppointments, messages:loadMessages, calls:loadCalls, contacts:loadContacts, clients:loadContacts, gaps:loadGaps, conversations:loadConversations, staff:loadStaff, waitlist:loadWaitlist};
   const v=state.view;
   (PAGES[v]||(()=>{}))();
@@ -2725,6 +2730,317 @@ async function loadDocuments(){
   state.docStats=stats; state.docPassages=pass;
   if(!state.docOpen) state.docOpen=new Set();
 }
+/* ===================== PROPERTY MANAGEMENT ===================== */
+const PM_TYPES=[["residential","Residential"],["commercial","Commercial / flex"],["hoa","HOA / community"]];
+const PM_ROLES=[["tenant","Tenant"],["owner","Owner"],["board","Board member"],["manager","Manager"],["vendor","Vendor"],["prospect","Prospect"],["other","Other"]];
+const PM_EMTYPES=[["default","Any emergency (default)"],["flood","Flood / water leak"],["gas","Gas smell"],["no_heat","No heat"],["no_ac","No A/C"],["fire","Fire / smoke"],["elevator","Elevator"],["hvac","HVAC / chiller"],["security","Security / break-in"],["power","Power / electrical"],["other","Other"]];
+const COI_STATUS={none:["Not on file","#8a8f98","#eef0f2"],submitted:["Under review","#8a6d00","#fdf3d6"],verified:["Verified","#1f7a4d","#e7f5ee"],expired:["Expired","#b4443a","#fbe6e4"],waived:["Waived","#8a8f98","#eef0f2"]};
+const SR_STATUS={new:["New","#1f5fa8","#e8f0fa"],acknowledged:["Acknowledged","#8a6d00","#fdf3d6"],in_progress:["In progress","#8a6d00","#fdf3d6"],escalated:["Escalated","#b4443a","#fbe6e4"],resolved:["Resolved","#1f7a4d","#e7f5ee"],closed:["Closed","#8a8f98","#eef0f2"],cancelled:["Cancelled","#8a8f98","#eef0f2"]};
+const pmTypeLabel=t=>(PM_TYPES.find(x=>x[0]===t)||[t,t])[1];
+const pmRoleLabel=r=>(PM_ROLES.find(x=>x[0]===r)||[r,r])[1];
+const pmEmLabel=e=>(PM_EMTYPES.find(x=>x[0]===e)||[e,e])[1];
+const pmNum=v=>{ const n=Number(String(v==null?'':v).replace(/[^0-9.]/g,'')); return isFinite(n)&&n>0?n:null; };
+function pmPill(map,k){ const m=map[k]||[k,"#8a8f98","#eef0f2"]; return `<span style="display:inline-block;font-size:11px;font-weight:600;padding:2px 9px;border-radius:999px;background:${m[2]};color:${m[1]}">${m[0]}</span>`; }
+function pmOpts(list,sel){ return list.map(o=>`<option value="${o[0]}" ${o[0]===sel?'selected':''}>${esc(o[1])}</option>`).join(''); }
+function pmShortRef(){ return 'SR-'+Array.from({length:3},()=>Math.floor(Math.random()*256).toString(16).padStart(2,'0')).join('').toUpperCase(); }
+function pmFmtDate(d){ if(!d) return ''; try{ return new Date(d+(d.length<=10?'T00:00:00':'')).toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'}); }catch(_e){ return d; } }
+async function pmCall(action,payload){ try{ const { data, error }=await db.functions.invoke('pm-request',{ body:Object.assign({action},payload||{}) }); if(error) return { ok:false, error:error.message }; return data||{ok:false}; }catch(e){ return { ok:false, error:String(e) }; } }
+
+async function loadProperties(){ const { data }=await db.from('properties').select('*').eq('account_id',state.account.id).order('name'); state.pm=state.pm||{}; state.pm.props=data||[]; }
+
+function pageProperties(){
+  state.pm=state.pm||{sel:null};
+  const hoaHint = `Each property is its own world — people, on-call contacts, governing documents, and insurance stay separated, so ${esc(aName())} never mixes one community up with another.`;
+  $("#page").innerHTML=`
+  <div class="page">
+    <div class="page-head"><h1>Properties</h1><p>Add every property, building, or community you manage. ${hoaHint}</p></div>
+    <div class="card">
+      <div class="card-h"><h2>Add a property</h2></div>
+      <div class="grid-2">
+        <div class="field"><label class="lab">Name</label><input class="inp" id="np-name" placeholder="e.g. Oakwood Apartments / 1200 Main St / Sunset HOA"></div>
+        <div class="field"><label class="lab">Type</label><select class="inp" id="np-type">${pmOpts(PM_TYPES,'residential')}</select></div>
+      </div>
+      <div class="grid-2">
+        <div class="field"><label class="lab">Address <span class="sub">optional</span></label><input class="inp" id="np-addr"></div>
+        <div class="field"><label class="lab">Units / doors <span class="sub">optional</span></label><input class="inp" id="np-units" inputmode="numeric"></div>
+      </div>
+      <div class="field" style="display:flex;align-items:center;gap:10px"><input type="checkbox" id="np-ins" style="width:auto"><label class="lab" for="np-ins" style="margin:0">Require tenants to keep insurance on file (certificate of insurance)</label></div>
+      <div style="display:flex;align-items:center;gap:12px"><button class="btn primary" id="np-save">Add property</button><span id="np-msg" style="font-size:12.5px;color:var(--muted)"></span></div>
+    </div>
+    <div class="card">
+      <div class="card-h"><h2>Your properties</h2><button class="btn sm" id="pm-refresh">Refresh</button></div>
+      <div id="pm-list"><div class="empty">Loading…</div></div>
+    </div>
+    <div id="pm-detail"></div>
+  </div>`;
+  $("#np-save").onclick=addProperty;
+  $("#pm-refresh").onclick=()=>pageProperties();
+  loadProperties().then(()=>{ paintPropList(); if(state.pm.sel) openProperty(state.pm.sel); });
+}
+function paintPropList(){
+  const el=$("#pm-list"); if(!el) return;
+  const rows=(state.pm&&state.pm.props)||[];
+  if(!rows.length){ el.innerHTML=`<div class="empty">${I.building}<div>No properties yet. Add your first one above.</div></div>`; return; }
+  el.innerHTML=rows.map(p=>`<div class="block-item" style="align-items:center;gap:10px;cursor:pointer;${state.pm.sel===p.id?'border-color:var(--site);background:var(--signal-soft)':''}" data-prop="${p.id}">
+    <div style="flex:1;min-width:0">
+      <div style="font-weight:600;font-size:13.5px">${esc(p.name)} <span class="lang-badge">${esc(pmTypeLabel(p.property_type))}</span>${p.require_tenant_insurance?` <span class="lang-badge">insurance required</span>`:''}</div>
+      <div style="font-size:12px;color:var(--muted)">${esc(p.address||'')}${p.units_count?` · ${p.units_count} units`:''}</div>
+    </div>
+    <button class="btn sm" data-prop="${p.id}">${state.pm.sel===p.id?'Hide':'Manage'}</button>
+  </div>`).join('');
+  el.querySelectorAll('[data-prop]').forEach(b=>b.onclick=()=>{ const id=b.dataset.prop; if(state.pm.sel===id){ state.pm.sel=null; $("#pm-detail").innerHTML=''; paintPropList(); } else { openProperty(id); } });
+}
+async function addProperty(){
+  const name=$("#np-name").value.trim(), msg=$("#np-msg");
+  if(!name){ msg.style.color='var(--danger)'; msg.textContent='Give it a name.'; return; }
+  const row={ account_id:state.account.id, name, property_type:$("#np-type").value, address:$("#np-addr").value.trim()||null, units_count:pmNum($("#np-units").value), require_tenant_insurance:$("#np-ins").checked, timezone:state.account.timezone };
+  const btn=$("#np-save"); btn.disabled=true; const o=btn.textContent; btn.textContent='Adding…';
+  const { data, error }=await db.from('properties').insert(row).select().maybeSingle();
+  btn.disabled=false; btn.textContent=o;
+  if(error){ msg.style.color='var(--danger)'; msg.textContent=error.message; return; }
+  $("#np-name").value='';$("#np-addr").value='';$("#np-units").value='';$("#np-ins").checked=false;
+  msg.style.color='var(--ok)'; msg.textContent='Added.'; setTimeout(()=>{if($("#np-msg"))$("#np-msg").textContent='';},1500);
+  await loadProperties(); paintPropList(); if(data) openProperty(data.id);
+}
+async function openProperty(id){
+  state.pm.sel=id; paintPropList();
+  const box=$("#pm-detail"); if(box) box.innerHTML=`<div class="card"><div class="empty">Loading…</div></div>`;
+  const [pr,pe,ec,ci,kn]=await Promise.all([
+    db.from('properties').select('*').eq('id',id).maybeSingle(),
+    db.from('property_contacts').select('*').eq('property_id',id).order('created_at'),
+    db.from('property_escalation_contacts').select('*').eq('property_id',id).order('priority'),
+    db.from('tenant_insurance').select('*').eq('property_id',id).order('created_at',{ascending:false}),
+    db.from('knowledge_entries').select('id,title,category,content,created_at').eq('property_id',id).order('created_at',{ascending:false})
+  ]);
+  const p=pr.data; if(!p){ if(box) box.innerHTML=''; return; }
+  const people=pe.data||[], escal=ec.data||[], coi=ci.data||[], kn2=kn.data||[];
+  const isHoa=p.property_type==='hoa';
+  box.innerHTML=`
+  <div class="card">
+    <div class="card-h"><h2>${esc(p.name)} — details</h2><button class="btn sm" data-pdel="${p.id}">Delete</button></div>
+    <div class="grid-2">
+      <div class="field"><label class="lab">Name</label><input class="inp" id="pd-name" value="${esc(p.name)}"></div>
+      <div class="field"><label class="lab">Type</label><select class="inp" id="pd-type">${pmOpts(PM_TYPES,p.property_type)}</select></div>
+    </div>
+    <div class="grid-2">
+      <div class="field"><label class="lab">Address</label><input class="inp" id="pd-addr" value="${esc(p.address||'')}"></div>
+      <div class="field"><label class="lab">Units / doors</label><input class="inp" id="pd-units" inputmode="numeric" value="${p.units_count||''}"></div>
+    </div>
+    <div class="field"><label class="lab">Emergency instructions <span class="sub">what ${esc(aName())} should do / say for emergencies here</span></label><textarea class="inp" id="pd-eins" rows="2">${esc(p.emergency_instructions||'')}</textarea></div>
+    <div class="field" style="display:flex;align-items:center;gap:10px"><input type="checkbox" id="pd-ins" ${p.require_tenant_insurance?'checked':''} style="width:auto"><label class="lab" for="pd-ins" style="margin:0">Require tenant insurance on file</label></div>
+    <div class="grid-2" id="pd-insbox" style="${p.require_tenant_insurance?'':'display:none'}">
+      <div class="field"><label class="lab">Minimum coverage <span class="sub">optional</span></label><input class="inp" id="pd-mincov" inputmode="numeric" value="${p.insurance_min_coverage||''}"></div>
+      <div class="field" style="display:flex;align-items:flex-end;gap:10px;padding-bottom:10px"><input type="checkbox" id="pd-ai" ${p.insurance_requires_additional_insured!==false?'checked':''} style="width:auto"><label class="lab" for="pd-ai" style="margin:0">Must list us as additional insured</label></div>
+    </div>
+    <div style="display:flex;align-items:center;gap:12px"><button class="btn primary" id="pd-save">Save details</button><span id="pd-msg" style="font-size:12.5px;color:var(--muted)"></span></div>
+  </div>
+
+  <div class="card">
+    <div class="card-h"><h2>People</h2><span class="hint">${isHoa?'owners, board, vendors':'tenants, owners, vendors'}</span></div>
+    <div class="grid-2">
+      <div class="field"><label class="lab">Role</label><select class="inp" id="pc-role">${pmOpts(PM_ROLES, isHoa?'owner':'tenant')}</select></div>
+      <div class="field"><label class="lab">Unit / address <span class="sub">optional</span></label><input class="inp" id="pc-unit"></div>
+    </div>
+    <div class="grid-2">
+      <div class="field"><label class="lab">Name</label><input class="inp" id="pc-name"></div>
+      <div class="field"><label class="lab">Phone</label><input class="inp" id="pc-phone"></div>
+    </div>
+    <div class="field"><label class="lab">Email <span class="sub">optional</span></label><input class="inp" id="pc-email"></div>
+    <div style="display:flex;align-items:center;gap:12px"><button class="btn primary" id="pc-add">Add person</button><span id="pc-msg" style="font-size:12.5px;color:var(--muted)"></span></div>
+    <div id="pc-list" style="margin-top:14px">${people.length?people.map(c=>`<div class="block-item"><div style="flex:1;min-width:0"><div style="font-weight:600;font-size:13px">${esc(c.name||'(no name)')} <span class="lang-badge">${esc(pmRoleLabel(c.role))}</span>${c.unit?` <span style="color:var(--muted);font-size:12px">${esc(c.unit)}</span>`:''}</div><div style="font-size:12px;color:var(--muted)">${esc([c.phone,c.email].filter(Boolean).join(' · '))}</div></div><button class="btn sm" data-pcdel="${c.id}">Remove</button></div>`).join(''):`<div class="empty" style="padding:14px">No people added yet.</div>`}</div>
+  </div>
+
+  <div class="card">
+    <div class="card-h"><h2>On-call &amp; emergencies</h2><span class="hint">who ${esc(aName())} alerts</span></div>
+    <p style="font-size:12.5px;color:var(--muted);margin:-4px 0 12px">Add the people ${esc(aName())} should reach for emergencies at this property. Set a <b>default</b> for anything, and optionally a specific contact for a given type (e.g. a plumber for floods). Lower priority number is tried first; if no one confirms, ${esc(aName())} escalates to the next.</p>
+    <div class="grid-2">
+      <div class="field"><label class="lab">Emergency type</label><select class="inp" id="ec-type">${pmOpts(PM_EMTYPES,'default')}</select></div>
+      <div class="field"><label class="lab">Priority <span class="sub">1 = first</span></label><input class="inp" id="ec-prio" inputmode="numeric" value="1"></div>
+    </div>
+    <div class="grid-2">
+      <div class="field"><label class="lab">Name</label><input class="inp" id="ec-name" placeholder="e.g. Mike (on-call tech)"></div>
+      <div class="field"><label class="lab">Role <span class="sub">optional</span></label><input class="inp" id="ec-role" placeholder="On-call tech / Building engineer"></div>
+    </div>
+    <div class="grid-2">
+      <div class="field"><label class="lab">Phone</label><input class="inp" id="ec-phone"></div>
+      <div class="field"><label class="lab">Email</label><input class="inp" id="ec-email"></div>
+    </div>
+    <div style="display:flex;align-items:center;gap:12px"><button class="btn primary" id="ec-add">Add on-call contact</button><span id="ec-msg" style="font-size:12.5px;color:var(--muted)"></span></div>
+    <div id="ec-list" style="margin-top:14px">${escal.length?escal.map(c=>`<div class="block-item"><div style="flex:1;min-width:0"><div style="font-weight:600;font-size:13px">${esc(c.name)} <span class="lang-badge">${esc(pmEmLabel(c.emergency_type))}</span> <span style="color:var(--muted);font-size:12px">#${c.priority}</span></div><div style="font-size:12px;color:var(--muted)">${esc([c.role,c.phone,c.email].filter(Boolean).join(' · '))}</div></div><button class="btn sm" data-ecdel="${c.id}">Remove</button></div>`).join(''):`<div class="empty" style="padding:14px">No on-call contacts yet. Emergencies will go to your general alert inbox until you add one.</div>`}</div>
+  </div>
+
+  <div class="card">
+    <div class="card-h"><h2>Governing documents &amp; knowledge</h2><span class="hint">${isHoa?'bylaws, CC&amp;Rs, rules':'rules &amp; policies'}</span></div>
+    <p style="font-size:12.5px;color:var(--muted);margin:-4px 0 12px">Teach ${esc(aName())} this property's rules${isHoa?' — bylaws, CC&amp;Rs, architectural guidelines, pet and parking rules':''}. Anything here is used <b>only</b> for ${esc(p.name)}, so communities never get mixed up. Upload a document or paste text.</p>
+    <div class="grid-2">
+      <div class="field"><label class="lab">Title</label><input class="inp" id="kp-title" placeholder="e.g. Parking rules / Architectural guidelines"></div>
+      <div class="field" style="display:flex;align-items:flex-end"><label class="btn primary" style="position:relative;overflow:hidden;width:100%;text-align:center">Upload document<input type="file" id="kp-file" accept=".pdf,.doc,.docx,.xls,.xlsx,.csv,.txt" style="position:absolute;inset:0;opacity:0;cursor:pointer"></label></div>
+    </div>
+    <div class="field"><label class="lab">Or paste text</label><textarea class="inp" id="kp-content" rows="3" placeholder="Paste a section of the bylaws or a rule…"></textarea></div>
+    <div style="display:flex;align-items:center;gap:12px"><button class="btn primary" id="kp-add">Teach ${esc(aName())}</button><span id="kp-msg" style="font-size:12.5px;color:var(--muted)"></span></div>
+    <div id="kp-list" style="margin-top:14px">${kn2.length?kn2.map(k=>`<div class="block-item" style="align-items:flex-start"><div style="flex:1;min-width:0"><div style="font-weight:600;font-size:13px;margin-bottom:3px">${esc(k.title||'(untitled)')}${k.category?` <span class="lang-badge">${esc(k.category)}</span>`:''}</div><div style="font-size:12px;color:var(--muted)">${esc((k.content||'').slice(0,160))}${(k.content||'').length>160?'…':''}</div></div><button class="btn sm" data-kpdel="${k.id}">Delete</button></div>`).join(''):`<div class="empty" style="padding:14px">Nothing taught for this property yet.</div>`}</div>
+  </div>
+
+  ${p.require_tenant_insurance?`<div class="card">
+    <div class="card-h"><h2>Tenant insurance</h2><span class="hint">certificates on file</span></div>
+    <p style="font-size:12.5px;color:var(--muted);margin:-4px 0 12px">Send a tenant a secure link to upload their certificate. ${esc(aName())} reminds them before it expires and flags lapses to you.</p>
+    <div class="grid-2">
+      <div class="field"><label class="lab">Tenant name</label><input class="inp" id="ti-name"></div>
+      <div class="field"><label class="lab">Unit</label><input class="inp" id="ti-unit"></div>
+    </div>
+    <div class="grid-2">
+      <div class="field"><label class="lab">Phone <span class="sub">to text the link</span></label><input class="inp" id="ti-phone"></div>
+      <div class="field"><label class="lab">Email <span class="sub">to email the link</span></label><input class="inp" id="ti-email"></div>
+    </div>
+    <div style="display:flex;align-items:center;gap:12px"><button class="btn primary" id="ti-send">Request certificate</button><span id="ti-msg" style="font-size:12.5px;color:var(--muted)"></span></div>
+    <div id="ti-list" style="margin-top:14px">${coi.length?coi.map(c=>`<div class="block-item" style="align-items:flex-start"><div style="flex:1;min-width:0"><div style="font-weight:600;font-size:13px">${esc(c.tenant_name||'(tenant)')}${c.unit?` <span style="color:var(--muted);font-size:12px">${esc(c.unit)}</span>`:''} ${pmPill(COI_STATUS,c.status)}</div><div style="font-size:12px;color:var(--muted)">${esc([c.carrier,c.policy_number].filter(Boolean).join(' · '))}${c.expiration_date?` · expires ${pmFmtDate(c.expiration_date)}`:''}</div></div><div style="display:flex;gap:6px;flex-wrap:wrap">${c.document_url?`<button class="btn sm" data-tidoc="${c.document_url}">Document</button>`:''}${c.token?`<button class="btn sm" data-tilink="${c.token}">Copy link</button>`:''}${c.status!=='verified'?`<button class="btn sm primary" data-tiverify="${c.id}">Verify</button>`:''}</div></div>`).join(''):`<div class="empty" style="padding:14px">No certificates requested yet.</div>`}</div>
+  </div>`:''}`;
+
+  $("#pd-ins").onchange=()=>{ $("#pd-insbox").style.display=$("#pd-ins").checked?'':'none'; };
+  $("#pd-save").onclick=()=>savePropertyDetails(id);
+  box.querySelector('[data-pdel]').onclick=()=>deleteProperty(id);
+  $("#pc-add").onclick=()=>addPropContact(id);
+  box.querySelectorAll('[data-pcdel]').forEach(b=>b.onclick=async()=>{ await db.from('property_contacts').delete().eq('id',b.dataset.pcdel); openProperty(id); });
+  $("#ec-add").onclick=()=>addEscalContact(id);
+  box.querySelectorAll('[data-ecdel]').forEach(b=>b.onclick=async()=>{ await db.from('property_escalation_contacts').delete().eq('id',b.dataset.ecdel); openProperty(id); });
+  $("#kp-add").onclick=()=>addPropKnowledge(id);
+  $("#kp-file").onchange=(e)=>uploadPropDoc(id,e);
+  box.querySelectorAll('[data-kpdel]').forEach(b=>b.onclick=async()=>{ if(!(await uiConfirm('Delete this? '+aName()+' will no longer use it for this property.',{okText:'Delete',cancelText:'Keep'})))return; await db.from('knowledge_entries').delete().eq('id',b.dataset.kpdel); openProperty(id); });
+  const ti=$("#ti-send"); if(ti) ti.onclick=()=>requestCoi(id);
+  box.querySelectorAll('[data-tiverify]').forEach(b=>b.onclick=async()=>{ await db.from('tenant_insurance').update({status:'verified',verified_at:new Date().toISOString(),verified_by:state.owner.name||'manager'}).eq('id',b.dataset.tiverify); openProperty(id); });
+  box.querySelectorAll('[data-tidoc]').forEach(b=>b.onclick=async()=>{ const { data }=await db.storage.from('coi').createSignedUrl(b.dataset.tidoc,3600); if(data&&data.signedUrl) window.open(data.signedUrl,'_blank'); });
+  box.querySelectorAll('[data-tilink]').forEach(b=>b.onclick=()=>{ const link=location.origin.replace(/\/$/,'')+'/coi/'+b.dataset.tilink; navigator.clipboard&&navigator.clipboard.writeText(link); b.textContent='Copied'; setTimeout(()=>{b.textContent='Copy link';},1200); });
+}
+async function savePropertyDetails(id){
+  const patch={ name:$("#pd-name").value.trim(), property_type:$("#pd-type").value, address:$("#pd-addr").value.trim()||null, units_count:pmNum($("#pd-units").value), emergency_instructions:$("#pd-eins").value.trim()||null, require_tenant_insurance:$("#pd-ins").checked, insurance_min_coverage:pmNum($("#pd-mincov")&&$("#pd-mincov").value), insurance_requires_additional_insured:$("#pd-ai")?$("#pd-ai").checked:true };
+  const msg=$("#pd-msg"); msg.style.color='var(--muted)'; msg.textContent='Saving…';
+  const { error }=await db.from('properties').update(patch).eq('id',id);
+  if(error){ msg.style.color='var(--danger)'; msg.textContent=error.message; return; }
+  msg.style.color='var(--ok)'; msg.textContent='Saved.'; await loadProperties(); paintPropList();
+}
+async function deleteProperty(id){
+  if(!(await uiConfirm('Delete this property and everything under it (people, on-call, documents, insurance records)? This cannot be undone.',{okText:'Delete',cancelText:'Keep'}))) return;
+  await db.from('properties').delete().eq('id',id); state.pm.sel=null; $("#pm-detail").innerHTML=''; await loadProperties(); paintPropList();
+}
+async function addPropContact(id){
+  const name=$("#pc-name").value.trim(), phone=$("#pc-phone").value.trim(), email=$("#pc-email").value.trim();
+  const msg=$("#pc-msg"); if(!name&&!phone&&!email){ msg.style.color='var(--danger)'; msg.textContent='Add a name, phone, or email.'; return; }
+  const { error }=await db.from('property_contacts').insert({ account_id:state.account.id, property_id:id, role:$("#pc-role").value, unit:$("#pc-unit").value.trim()||null, name:name||null, phone:phone||null, email:email||null });
+  if(error){ msg.style.color='var(--danger)'; msg.textContent=error.message; return; }
+  openProperty(id);
+}
+async function addEscalContact(id){
+  const name=$("#ec-name").value.trim(), msg=$("#ec-msg");
+  if(!name){ msg.style.color='var(--danger)'; msg.textContent='Add a name.'; return; }
+  const { error }=await db.from('property_escalation_contacts').insert({ account_id:state.account.id, property_id:id, emergency_type:$("#ec-type").value, priority:pmNum($("#ec-prio").value)||1, name, role:$("#ec-role").value.trim()||null, phone:$("#ec-phone").value.trim()||null, email:$("#ec-email").value.trim()||null });
+  if(error){ msg.style.color='var(--danger)'; msg.textContent=error.message; return; }
+  openProperty(id);
+}
+function pmChunk(text,size){ const out=[]; let t=String(text||'').replace(/\r/g,''); const paras=t.split(/\n{2,}/); let cur=''; for(const p of paras){ if((cur+'\n\n'+p).length>size && cur){ out.push(cur); cur=p; } else { cur=cur?cur+'\n\n'+p:p; } if(cur.length>size){ for(let i=0;i<cur.length;i+=size) out.push(cur.slice(i,i+size)); cur=''; } } if(cur) out.push(cur); return out.filter(x=>x.trim().length>15); }
+async function teachProperty(id,title,content,category){
+  const chunks=pmChunk(content,1800); let ok=0;
+  for(let i=0;i<chunks.length;i++){ const t=chunks.length>1?`${title} (${i+1}/${chunks.length})`:title; const r=await pmUpsertKnowledge(t,category,chunks[i],id); if(r) ok++; }
+  return ok;
+}
+async function pmUpsertKnowledge(title,category,content,propertyId){ try{ const { data, error }=await db.functions.invoke('knowledge-upsert',{ body:{ title, category, content, property_id:propertyId } }); return !error && data && data.ok; }catch(_e){ return false; } }
+async function addPropKnowledge(id){
+  const title=$("#kp-title").value.trim()||'Property rules', content=$("#kp-content").value.trim(), msg=$("#kp-msg");
+  if(!content){ msg.style.color='var(--danger)'; msg.textContent='Paste some text or upload a document.'; return; }
+  const btn=$("#kp-add"); btn.disabled=true; const o=btn.textContent; btn.textContent='Teaching…'; msg.style.color='var(--muted)'; msg.textContent='';
+  const ok=await teachProperty(id,title,content,'Governing documents');
+  btn.disabled=false; btn.textContent=o;
+  if(!ok){ msg.style.color='var(--danger)'; msg.textContent='Could not save.'; return; }
+  openProperty(id);
+}
+async function uploadPropDoc(id,e){
+  const file=(e.target.files||[])[0]; e.target.value=''; const msg=$("#kp-msg"); if(!file) return;
+  const ext=(file.name.split('.').pop()||'').toLowerCase();
+  if(!['pdf','doc','docx','xls','xlsx','csv','txt'].includes(ext)){ msg.style.color='var(--danger)'; msg.textContent='Word, Excel, CSV, text, or text PDF. Scans need OCR (coming soon) — paste the text instead.'; return; }
+  msg.style.color='var(--muted)'; msg.textContent='Reading '+file.name+'…';
+  let text=''; try{ text=((await extractText(file))||'').trim(); }catch(err){ msg.style.color='var(--danger)'; msg.textContent=(err&&err.message)||'Could not read that file.'; return; }
+  if(text.length<20){ msg.style.color='var(--danger)'; msg.textContent='That file had no readable text.'; return; }
+  msg.textContent='Teaching '+aName()+' from '+file.name+'…';
+  const ok=await teachProperty(id, file.name.replace(/\.[^.]+$/,''), text, 'Governing documents');
+  if(!ok){ msg.style.color='var(--danger)'; msg.textContent='Could not save.'; return; }
+  openProperty(id);
+}
+async function requestCoi(id){
+  const msg=$("#ti-msg"); const phone=$("#ti-phone").value.trim(), email=$("#ti-email").value.trim();
+  if(!phone&&!email){ msg.style.color='var(--danger)'; msg.textContent='Add a phone or email to send the link to.'; return; }
+  const btn=$("#ti-send"); btn.disabled=true; const o=btn.textContent; btn.textContent='Sending…'; msg.style.color='var(--muted)'; msg.textContent='';
+  const r=await pmCall('coi_send',{ property_id:id, name:$("#ti-name").value.trim(), unit:$("#ti-unit").value.trim(), phone, email });
+  btn.disabled=false; btn.textContent=o;
+  if(!r||!r.ok){ msg.style.color='var(--danger)'; msg.textContent=(r&&r.error)||'Could not send.'; return; }
+  msg.style.color='var(--ok)'; msg.textContent=(r.sent&&r.sent.length)?('Link sent by '+r.sent.join(' and ')+'.'):'Link created — copy it from the list below.';
+  openProperty(id);
+}
+
+/* ---- Service requests / work orders ---- */
+async function loadServiceRequests(){
+  state.sr=state.sr||{filter:'open'};
+  let q=db.from('service_requests').select('*, properties(name,property_type)').eq('account_id',state.account.id).order('created_at',{ascending:false}).limit(300);
+  const { data }=await q; state.sr.list=data||[];
+}
+function pageServiceRequests(){
+  state.sr=state.sr||{filter:'open'};
+  $("#page").innerHTML=`
+  <div class="page">
+    <div class="page-head"><h1>Service requests</h1><p>Every request ${esc(aName())} logs — maintenance, emergencies, ARC and violations, leasing, and more — with who it's for and where it stands. Nothing falls through.</p></div>
+    <div class="card">
+      <div class="card-h">
+        <div style="display:flex;gap:6px;flex-wrap:wrap" id="sr-filters">
+          ${[['open','Open'],['emergency','Emergencies'],['all','All'],['resolved','Resolved']].map(f=>`<button class="btn sm ${state.sr.filter===f[0]?'primary':''}" data-srf="${f[0]}">${f[1]}</button>`).join('')}
+        </div>
+        <button class="btn sm" id="sr-refresh">Refresh</button>
+      </div>
+      <div id="sr-list"><div class="empty">Loading…</div></div>
+    </div>
+  </div>`;
+  $("#sr-refresh").onclick=()=>pageServiceRequests();
+  $("#sr-filters").querySelectorAll('[data-srf]').forEach(b=>b.onclick=()=>{ state.sr.filter=b.dataset.srf; paintSrList(); $("#sr-filters").querySelectorAll('[data-srf]').forEach(x=>x.classList.toggle('primary',x.dataset.srf===state.sr.filter)); });
+  loadServiceRequests().then(paintSrList);
+}
+function srMatch(r){ const f=state.sr.filter; if(f==='all')return true; if(f==='emergency')return r.priority==='emergency'||r.request_type==='emergency'; if(f==='resolved')return ['resolved','closed','cancelled'].includes(r.status); return !['resolved','closed','cancelled'].includes(r.status); }
+function paintSrList(){
+  const el=$("#sr-list"); if(!el) return;
+  const rows=(state.sr.list||[]).filter(srMatch);
+  if(!rows.length){ el.innerHTML=`<div class="empty">${I.wrench}<div>Nothing here.</div></div>`; return; }
+  el.innerHTML=rows.map(srRow).join('');
+  el.querySelectorAll('[data-sropen]').forEach(b=>b.onclick=()=>{ const id=b.dataset.sropen; state.sr.open=state.sr.open===id?null:id; paintSrList(); });
+  el.querySelectorAll('[data-srstatus]').forEach(sel=>sel.onchange=async()=>{ const patch={status:sel.value}; if(['resolved','closed'].includes(sel.value))patch.resolved_at=new Date().toISOString(); if(sel.value==='acknowledged'&&!rows.find(x=>x.id===sel.dataset.srstatus)?.acknowledged_at)patch.acknowledged_at=new Date().toISOString(); await db.from('service_requests').update(patch).eq('id',sel.dataset.srstatus); await loadServiceRequests(); paintSrList(); });
+  el.querySelectorAll('[data-srassign]').forEach(b=>b.onclick=async()=>{ const v=document.getElementById('sra-'+b.dataset.srassign).value.trim(); await db.from('service_requests').update({assigned_to:v||null}).eq('id',b.dataset.srassign); await loadServiceRequests(); paintSrList(); });
+  el.querySelectorAll('[data-srnote]').forEach(b=>b.onclick=async()=>{ const v=document.getElementById('srn-'+b.dataset.srnote).value.trim(); await db.from('service_requests').update({resolved_note:v||null}).eq('id',b.dataset.srnote); await loadServiceRequests(); paintSrList(); });
+}
+function srRow(r){
+  const open=state.sr.open===r.id;
+  const emg=r.priority==='emergency'||r.request_type==='emergency';
+  const when=new Date(r.created_at).toLocaleString('en-US',{month:'short',day:'numeric',hour:'numeric',minute:'2-digit'});
+  const prop=r.properties?r.properties.name:'(unassigned)';
+  const head=`<div class="block-item" style="align-items:flex-start;gap:10px;cursor:pointer;${emg?'border-left:3px solid var(--danger)':''}" data-sropen="${r.id}">
+    <div style="flex:1;min-width:0">
+      <div style="font-weight:600;font-size:13.5px">${esc(r.title||r.request_type)} ${pmPill(SR_STATUS,r.status)}${emg?` <span style="display:inline-block;font-size:11px;font-weight:700;padding:2px 9px;border-radius:999px;background:#fbe6e4;color:#b4443a">EMERGENCY</span>`:''}</div>
+      <div style="font-size:12px;color:var(--muted)">${esc(r.short_ref||'')} · ${esc(prop)}${r.unit?` · unit ${esc(r.unit)}`:''} · ${esc(r.request_type)} · ${when}</div>
+    </div>
+    <span style="font-size:11px;color:var(--muted)">${open?'▲':'▼'}</span>
+  </div>`;
+  if(!open) return head;
+  const esl=(r.escalation_state&&Array.isArray(r.escalation_state.notified))?r.escalation_state.notified:[];
+  const timeline=emg?`<div style="margin-top:8px;font-size:12px"><div style="font-weight:600;margin-bottom:4px">Escalation</div>${r.acknowledged_at?`<div style="color:var(--ok)">✓ Confirmed ${new Date(r.acknowledged_at).toLocaleString('en-US',{month:'short',day:'numeric',hour:'numeric',minute:'2-digit'})}${r.acknowledged_by?' by '+esc(r.acknowledged_by):''}</div>`:`<div style="color:var(--danger)">Awaiting confirmation</div>`}${esl.map(n=>`<div style="color:var(--muted)">→ ${esc(n.name||'contact')}${n.via&&n.via.length?' ('+esc(n.via.join(', '))+')':''} · ${n.at?new Date(n.at).toLocaleString('en-US',{hour:'numeric',minute:'2-digit',month:'short',day:'numeric'}):''}</div>`).join('')}${r.escalation_state&&r.escalation_state.exhausted?`<div style="color:var(--danger)">⚠ On-call ladder exhausted — sent to general inbox</div>`:''}</div>`:'';
+  const detail=`<div style="padding:4px 12px 14px;border:1px solid var(--line);border-top:none;border-radius:0 0 var(--r-sm) var(--r-sm);margin-top:-6px">
+    ${r.description?`<div style="font-size:13px;margin:10px 0;white-space:pre-wrap">${esc(r.description)}</div>`:''}
+    <div style="font-size:12px;color:var(--muted);margin-bottom:10px">${[r.category?('Category: '+r.category):'',r.reported_channel?('Via '+r.reported_channel):'',r.permission_to_enter!=null?('Permission to enter: '+(r.permission_to_enter?'yes':'no')):'',r.access_instructions?('Access: '+r.access_instructions):'',r.response_window?('Promised: '+r.response_window):''].filter(Boolean).map(esc).join(' · ')}</div>
+    ${timeline}
+    <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:center;margin-top:12px">
+      <select class="inp" style="max-width:170px" data-srstatus="${r.id}">${pmOpts(Object.keys(SR_STATUS).map(k=>[k,SR_STATUS[k][0]]),r.status)}</select>
+      <input class="inp" style="max-width:200px" id="sra-${r.id}" placeholder="Assign to…" value="${esc(r.assigned_to||'')}"><button class="btn sm" data-srassign="${r.id}">Assign</button>
+    </div>
+    <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:center;margin-top:10px">
+      <input class="inp" style="flex:1;min-width:200px" id="srn-${r.id}" placeholder="Resolution note…" value="${esc(r.resolved_note||'')}"><button class="btn sm" data-srnote="${r.id}">Save note</button>
+    </div>
+  </div>`;
+  return head+detail;
+}
+
 function pageKnowledge(){
   state.kbEdit=null;
   $("#page").innerHTML=`

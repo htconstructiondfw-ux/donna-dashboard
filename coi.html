@@ -1,0 +1,133 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1">
+<title>Upload your certificate of insurance</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,500;9..144,600&family=Figtree:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --ink:#182230; --ink2:#48566a; --muted:#8a97a8; --line:#e3e8ef; --line2:#eef2f6;
+    --bg:#eef2f6; --card:#ffffff; --accent:#1f5fa8; --accent-deep:#164a85; --accent-soft:#e8f0fa;
+    --ok:#1f7a4d; --danger:#c0392b; --shadow:0 12px 40px -16px rgba(20,45,80,.28);
+  }
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--ink);font:16px/1.55 'Figtree',-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;-webkit-font-smoothing:antialiased}
+  .wrap{max-width:560px;margin:0 auto;padding:30px 18px 48px}
+  .brand{display:flex;align-items:center;gap:13px;margin:6px 2px 20px}
+  .brand .dot{width:50px;height:50px;border-radius:13px;background:linear-gradient(140deg,var(--accent),var(--accent-deep));color:#fff;display:flex;align-items:center;justify-content:center;font-weight:600;font-size:22px;font-family:'Fraunces',Georgia,serif;box-shadow:0 7px 20px -8px rgba(22,74,133,.6)}
+  .brand b{font-family:'Fraunces',Georgia,serif;font-size:25px;font-weight:600;letter-spacing:-.01em;line-height:1.08;display:block}
+  .brand small{display:block;color:var(--muted);font-size:13px;font-weight:500;margin-top:3px}
+  .card{background:var(--card);border:1px solid var(--line);border-radius:16px;padding:22px;box-shadow:var(--shadow);margin-bottom:14px}
+  .intro{font-size:14px;color:var(--ink2);margin:0 0 4px;line-height:1.55}
+  h2.title{font-family:'Fraunces',Georgia,serif;font-weight:500;font-size:20px;margin:14px 0 6px}
+  .ctx{font-size:13px;color:var(--muted);margin:0 0 18px}
+  .q{margin-bottom:17px}
+  label.f{display:block;font-size:13.5px;font-weight:600;color:var(--ink);margin:0 0 7px}
+  label.f .req{color:var(--accent-deep);margin-left:3px}
+  .help{font-size:12px;color:var(--muted);margin:-3px 0 8px}
+  input.inp,select.inp{width:100%;border:1px solid var(--line);border-radius:11px;padding:12px 13px;font:inherit;background:#fff;transition:.14s}
+  input.inp:focus,select.inp:focus{outline:none;border-color:var(--accent);box-shadow:0 0 0 3px var(--accent-soft)}
+  .row{display:flex;gap:12px}
+  .row .q{flex:1}
+  .yn{display:flex;gap:10px}
+  .optbtn{flex:1;border:1px solid var(--line);border-radius:11px;padding:11px 14px;font:inherit;background:#fff;cursor:pointer;text-align:center;transition:.14s;color:var(--ink)}
+  .optbtn:hover{border-color:var(--accent)}
+  .optbtn.sel{border-color:var(--accent);background:var(--accent-soft);box-shadow:0 0 0 2px rgba(31,95,168,.12);font-weight:600;color:var(--accent-deep)}
+  .file{border:1.5px dashed var(--line);border-radius:12px;padding:16px;text-align:center;color:var(--muted);font-size:13.5px;cursor:pointer;transition:.14s;background:#fbfcfe}
+  .file:hover{border-color:var(--accent);color:var(--accent-deep)}
+  .file.has{border-style:solid;border-color:var(--ok);color:var(--ok);background:#f0f9f4;font-weight:600}
+  .btn{width:100%;border:none;border-radius:12px;padding:15px;font:inherit;font-weight:600;font-size:15.5px;background:var(--accent);color:#fff;cursor:pointer;transition:.14s;box-shadow:0 8px 20px -8px rgba(22,74,133,.55);margin-top:4px}
+  .btn:hover{background:var(--accent-deep)}
+  .btn:disabled{opacity:.5;cursor:default;box-shadow:none}
+  .msg{font-size:13.5px;margin-top:12px}
+  .msg.err{color:var(--danger)}
+  .center{text-align:center;padding:22px 8px}
+  .center .big{width:68px;height:68px;margin:0 auto 18px;border-radius:50%;background:linear-gradient(140deg,var(--accent),var(--accent-deep));color:#fff;display:flex;align-items:center;justify-content:center;font-size:32px}
+  .center h3{margin:0 0 8px;font-size:23px;font-family:'Fraunces',Georgia,serif;font-weight:500}
+  .center p{color:var(--muted);margin:0;line-height:1.6}
+  .foot{text-align:center;color:#9fb0c4;font-size:11.5px;margin-top:22px}
+  .foot a{color:#7e90a6}
+  .spin{color:var(--muted);font-size:13.5px;text-align:center;padding:20px}
+  @media (prefers-reduced-motion: reduce){ *{transition:none!important} }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div class="brand"><span class="dot" id="b-dot">·</span><div><b id="b-name">Insurance</b><small id="b-sub">Loading…</small></div></div>
+  <div id="app"><div class="card"><div class="spin">Loading…</div></div></div>
+  <div class="foot">Powered by <a href="https://sidekicklogistics.com" target="_blank" rel="noopener" style="color:inherit;text-decoration:none;font-weight:600">Sidekick Logistics</a></div>
+</div>
+<script>
+const API="https://hingbdtmxozbjetzwibj.supabase.co/functions/v1/coi-public";
+const qs=new URLSearchParams(location.search);
+const TOKEN=qs.get('t')||(location.pathname.split('/coi/')[1]||'').replace(/\/+$/,'');
+const S={data:null,file:null,ai:null};
+const $=s=>document.querySelector(s);
+const app=$("#app");
+const esc=s=>String(s==null?'':s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+async function api(action,extra){ const r=await fetch(API,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(Object.assign({action,token:TOKEN},extra||{}))}); return r.json().catch(()=>({error:'network'})); }
+function card(inner){ app.innerHTML=`<div class="card">${inner}</div>`; }
+
+async function boot(){
+  if(!TOKEN){ card('<div class="center"><h3>Link looks incomplete</h3><p>Please use the full link from your message.</p></div>'); return; }
+  const d=await api('load');
+  if(!d || d.error){ card('<div class="center"><h3>Not found</h3><p>This upload link is no longer valid. Please contact your property office.</p></div>'); return; }
+  S.data=d;
+  $("#b-name").textContent=d.business||'Insurance on file';
+  $("#b-dot").textContent=(d.business||'P').trim().charAt(0).toUpperCase();
+  $("#b-sub").textContent='Certificate of insurance';
+  document.title='Upload your certificate · '+(d.business||'');
+  if(d.submitted){ done(true); return; }
+  render();
+}
+
+function render(){
+  const d=S.data;
+  const who=d.tenant_name?`Hi ${esc(d.tenant_name)} — `:'';
+  const where=[d.property,d.unit?('unit '+d.unit):''].filter(Boolean).join(', ');
+  const cov=d.min_coverage?`<div class="help">Minimum coverage required: $${Number(d.min_coverage).toLocaleString()}.</div>`:'';
+  let html=`<p class="intro">${who}${esc(d.business||'Your property office')} keeps a current certificate of insurance on file${where?` for ${esc(where)}`:''}. Add your details below and attach the certificate if you have it — takes a minute.</p>`;
+  html+=`<h2 class="title">Your insurance</h2>`;
+  html+=`<div class="q"><label class="f">Insurance company<span class="req">*</span></label><input class="inp" id="carrier" autocomplete="off" placeholder="e.g. State Farm, Lemonade"></div>`;
+  html+=`<div class="q"><label class="f">Policy number<span class="req">*</span></label><input class="inp" id="policy" autocomplete="off"></div>`;
+  html+=`<div class="row"><div class="q"><label class="f">Coverage amount</label><input class="inp" id="coverage" inputmode="numeric" placeholder="$100,000"></div>`;
+  html+=`<div class="q"><label class="f">Expiration date</label><input class="inp" id="exp" type="date"></div></div>`;
+  html+=`<div class="q"><label class="f">Effective date</label><input class="inp" id="eff" type="date"></div>`;
+  if(d.needs_additional_insured){
+    html+=`<div class="q"><label class="f">Is ${esc(d.business||'the property')} listed as additional insured?</label>${cov}<div class="yn" id="ai"><button type="button" class="optbtn" data-ai="true">Yes</button><button type="button" class="optbtn" data-ai="false">No / not sure</button></div></div>`;
+  }
+  html+=`<div class="q"><label class="f">Attach your certificate (PDF or photo)</label><label class="file" id="filelabel" for="fileinput">Tap to choose a file</label><input id="fileinput" type="file" accept=".pdf,image/*" style="display:none"></div>`;
+  html+=`<button class="btn" id="go">Submit</button><div class="msg" id="msg"></div>`;
+  app.innerHTML=`<div class="card">${html}</div>`;
+  if(d.needs_additional_insured){ document.querySelectorAll('#ai .optbtn').forEach(b=>b.onclick=()=>{ document.querySelectorAll('#ai .optbtn').forEach(x=>x.classList.remove('sel')); b.classList.add('sel'); S.ai=b.dataset.ai==='true'; }); }
+  const fi=$("#fileinput"), fl=$("#filelabel");
+  fi.onchange=()=>{ const f=fi.files&&fi.files[0]; if(!f){S.file=null;fl.textContent='Tap to choose a file';fl.classList.remove('has');return;} if(f.size>12*1024*1024){ $("#msg").className='msg err'; $("#msg").textContent='That file is too large (max 12 MB).'; fi.value='';return; } S.file=f; fl.textContent='✓ '+f.name; fl.classList.add('has'); $("#msg").textContent=''; };
+  $("#go").onclick=submit;
+}
+
+function readFileB64(f){ return new Promise((res,rej)=>{ const r=new FileReader(); r.onerror=()=>rej(); r.onload=()=>{ const s=String(r.result||''); const i=s.indexOf(','); res(i>=0?s.slice(i+1):s); }; r.readAsDataURL(f); }); }
+
+async function submit(){
+  const btn=$("#go"), msg=$("#msg");
+  const carrier=$("#carrier").value.trim(), policy=$("#policy").value.trim();
+  if(!carrier && !policy && !S.file){ msg.className='msg err'; msg.textContent='Please add your insurer and policy number, or attach your certificate.'; return; }
+  btn.disabled=true; const o=btn.textContent; btn.textContent='Submitting…'; msg.textContent='';
+  const payload={ carrier, policy_number:policy, coverage_amount:$("#coverage").value, effective_date:$("#eff").value||null, expiration_date:$("#exp").value||null, additional_insured:S.ai };
+  try{ if(S.file){ payload.file_b64=await readFileB64(S.file); payload.file_name=S.file.name; payload.file_type=S.file.type; } }catch(_e){}
+  const r=await api('submit',payload);
+  btn.disabled=false; btn.textContent=o;
+  if(r&&r.ok){ done(false); return; }
+  msg.className='msg err'; msg.textContent=(r&&r.message)||(r&&r.error)||'Could not submit. Please try again.';
+}
+
+function done(already){
+  card(`<div class="center"><div class="big">&#10003;</div><h3>${already?'Already received':'Thank you'}</h3>
+    <p>${already?'We already have your certificate on file — nothing more to do.':'Your certificate details are saved. The property office will review and confirm.'}</p></div>`);
+}
+boot();
+</script>
+</body>
+</html>

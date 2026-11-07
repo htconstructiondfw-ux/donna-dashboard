@@ -3,6 +3,7 @@
   "cleanUrls": true,
   "rewrites": [
     { "source": "/book/:slug", "destination": "/book?s=:slug" },
-    { "source": "/intake/:token", "destination": "/intake?t=:token" }
+    { "source": "/intake/:token", "destination": "/intake?t=:token" },
+    { "source": "/coi/:token", "destination": "/coi?t=:token" }
   ]
 }
