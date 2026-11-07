@@ -1383,15 +1383,36 @@ function bindClientVisits(){ document.querySelectorAll('#cl-list [data-visits]')
 async function loadVisits(id){
   const el=document.getElementById('c-visits-'+id); if(!el) return;
   el.innerHTML='<div style="color:var(--muted);font-size:12.5px">Loading…</div>';
-  let rows=[];
-  try{ const { data }=await db.from('appointments').select('starts_at,title,status,user_id,appointment_type_id').eq('contact_id',id).order('starts_at',{ascending:false}).limit(50); rows=data||[]; }catch(_e){ rows=[]; }
-  if(!rows.length){ el.innerHTML='<div style="color:var(--muted);font-size:12.5px">No appointments on record for this client yet.</div>'; return; }
+  let rows=[], cnotes='';
+  try{
+    const [aRes,cRes]=await Promise.all([
+      db.from('appointments').select('starts_at,title,status,user_id,appointment_type_id,notes').eq('contact_id',id).order('starts_at',{ascending:false}).limit(50),
+      db.from('contacts').select('stylist_notes').eq('id',id).maybeSingle()
+    ]);
+    rows=aRes.data||[]; cnotes=(cRes.data&&cRes.data.stylist_notes)||'';
+  }catch(_e){ rows=[]; }
   const typeName=tid=>{ const t=(state.types||[]).find(x=>x.id===tid); return t?t.name:''; };
-  el.innerHTML='<div style="font-size:11px;text-transform:uppercase;letter-spacing:.05em;color:var(--muted);font-weight:600;margin-bottom:6px">Visit history</div>'+rows.map(a=>{
-    const svc=typeName(a.appointment_type_id)||a.title||'Appointment';
-    const who=staffName(a.user_id);
-    return `<div style="display:flex;justify-content:space-between;gap:10px;padding:6px 0;border-bottom:1px solid var(--line-2);font-size:12.5px"><span>${esc(fmtAppt(a.starts_at))} · ${esc(svc)}${who?` · <b>${esc(who)}</b>`:''}</span><span class="appt-status s-${a.status}" style="flex:none">${esc(a.status)}</span></div>`;
-  }).join('');
+  const formulaBox=`<div style="margin-bottom:12px">
+    <div style="font-size:11px;text-transform:uppercase;letter-spacing:.05em;color:var(--muted);font-weight:600;margin-bottom:6px">Stylist notes &amp; formula</div>
+    <textarea class="inp" id="sn-${id}" rows="3" placeholder="e.g. Color formula: 6N + 20 vol, 35 min. Prefers a side part. Note: sensitive scalp.">${esc(cnotes)}</textarea>
+    <div style="margin-top:6px;display:flex;align-items:center;gap:10px"><button class="btn sm primary" id="sn-save-${id}">Save notes</button><span id="sn-msg-${id}" style="font-size:12px;color:var(--muted)"></span></div>
+  </div>`;
+  const history = rows.length
+    ? '<div style="font-size:11px;text-transform:uppercase;letter-spacing:.05em;color:var(--muted);font-weight:600;margin-bottom:6px">Visit history</div>'+rows.map(a=>{
+        const svc=typeName(a.appointment_type_id)||a.title||'Appointment'; const who=staffName(a.user_id);
+        const note=a.notes?`<div style="font-size:12px;color:var(--muted);margin-top:2px">${esc(a.notes)}</div>`:'';
+        return `<div style="padding:6px 0;border-bottom:1px solid var(--line-2)"><div style="display:flex;justify-content:space-between;gap:10px;font-size:12.5px"><span>${esc(fmtAppt(a.starts_at))} · ${esc(svc)}${who?` · <b>${esc(who)}</b>`:''}</span><span class="appt-status s-${a.status}" style="flex:none">${esc(a.status)}</span></div>${note}</div>`;
+      }).join('')
+    : '<div style="color:var(--muted);font-size:12.5px">No appointments on record for this client yet.</div>';
+  el.innerHTML=formulaBox+history;
+  const sb=document.getElementById('sn-save-'+id);
+  if(sb) sb.onclick=async()=>{
+    const ta=document.getElementById('sn-'+id), msg=document.getElementById('sn-msg-'+id);
+    const val=ta?ta.value.trim():''; sb.disabled=true; const o=sb.textContent; sb.textContent='Saving…';
+    const { error }=await db.from('contacts').update({stylist_notes:val||null,updated_at:new Date().toISOString()}).eq('id',id);
+    sb.disabled=false; sb.textContent=o;
+    if(msg){ msg.style.color=error?'var(--danger)':'var(--ok)'; msg.textContent=error?'Could not save.':'Saved.'; setTimeout(()=>{ if(msg) msg.textContent=''; },1600); }
+  };
 }
 function bindContactActions(){
   document.querySelectorAll('#c-list [data-act]').forEach(b=>b.onclick=async()=>{
