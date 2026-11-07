@@ -883,9 +883,12 @@ async function loadMessages(){
 }
 function unreadCount(){ return state.messages.filter(m=>m.status==='new').length; }
 function parseMsg(body){
-  const m = /^Message from (.+?)(?: \(callback: (.+?)\))?: ([\s\S]*)$/.exec(body||"");
-  if(m) return { name:m[1], number:m[2]||"", text:m[3] };
-  return { name:"", number:"", text:body||"" };
+  let s=body||"", urgent=false, forName="";
+  const mu=/^\[URGENT\]\s*/.exec(s); if(mu){ urgent=true; s=s.slice(mu[0].length); }
+  const mf=/^\(For ([^)]+)\)\s*/.exec(s); if(mf){ forName=mf[1]; s=s.slice(mf[0].length); }
+  const m = /^Message from (.+?)(?: \(callback: (.+?)\))?: ([\s\S]*)$/.exec(s);
+  if(m) return { name:m[1], number:m[2]||"", text:m[3], urgent, forName };
+  return { name:"", number:"", text:s, urgent, forName };
 }
 function fmtWhen(iso){
   const d=new Date(iso), now=new Date();
@@ -913,7 +916,7 @@ function msgHTML(m){
   const p=parseMsg(m.body), isNew=m.status==='new', resolved=m.status==='resolved';
   const tel=p.number?p.number.replace(/[^\d+]/g,''):"";
   return `<div class="m-item ${isNew?'new':''} ${resolved?'done':''}">
-    <div class="m-top"><span class="m-who">${esc(p.name||"Caller")}${isNew?'<span class="m-new">New</span>':''}${langBadge(m.language)}</span><span class="m-when">${fmtWhen(m.at)}</span></div>
+    <div class="m-top"><span class="m-who">${esc(p.name||"Caller")}${p.forName?` <span class="pill" style="font-size:10.5px">For ${esc(p.forName)}</span>`:''}${isNew?'<span class="m-new">New</span>':''}${langBadge(m.language)}</span><span class="m-when">${fmtWhen(m.at)}</span></div>
     ${p.number?`<a class="m-num" href="tel:${esc(tel)}">${esc(p.number)}</a>`:''}
     <div class="m-text">${esc(p.text)}</div>
     <div class="m-actions">${resolved?`<button class="btn sm" data-act="reopen" data-id="${m.id}">Reopen</button>`:`<button class="btn sm primary" data-act="resolve" data-id="${m.id}">Mark resolved</button>`}</div>
