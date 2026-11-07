@@ -246,7 +246,8 @@ const I = {
   gear:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>',
   msg:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>',
   mail:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="5" width="18" height="14" rx="2"/><path d="m3 7 9 6 9-6"/></svg>',
-  bell:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 8a6 6 0 0 0-12 0c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/></svg>'
+  bell:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 8a6 6 0 0 0-12 0c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/></svg>',
+  clock:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg>'
 };
 
 /* ===================== AUTH ===================== */
@@ -434,6 +435,7 @@ function renderApp(){
     if(showStaff()) navConfig.push(["staff","Staff",I.users]);
     navConfig.push(["knowledge","Knowledge",I.book],["notifications","Notifications",I.bell],["settings","Settings",I.gear]);
     navActivity=[["calls","Calls",I.phone],["appointments","Appointments",I.appt],["messages","Phone messages",I.msg],["contacts",salonOn()?"Clients":"Contacts",I.users],["gaps","Questions",I.book],["conversations","Email inbox",I.mail]];
+    if(salonOn()) navActivity.splice(2,0,["waitlist","Waitlist",I.clock]);
     soon=[["billing","Billing",I.card]];
   } else {
     // Stylist: focused view — their own bookings, messages, clients, and their own availability.
@@ -458,7 +460,7 @@ function renderApp(){
     </aside>
     <main class="main">
       <div class="topbar">
-        <div class="crumbs">${['settings','notifications'].includes(state.view)?'Account':(['messages','appointments','calls','contacts','clients','gaps','conversations'].includes(state.view)?'Activity':'Configure')} · <b>${esc(({assistant:"Assistant",schedule:"Schedule",types:"Appointment types",staff:"Staff",messages:"Phone messages",appointments:"Appointments",settings:"Settings",notifications:"Notifications",calls:"Calls",knowledge:"Knowledge",contacts:(salonOn()?"Clients":"Contacts"),clients:"Clients",gaps:"Open questions",conversations:"Email inbox"})[state.view])}</b></div>
+        <div class="crumbs">${['settings','notifications'].includes(state.view)?'Account':(['messages','appointments','waitlist','calls','contacts','clients','gaps','conversations'].includes(state.view)?'Activity':'Configure')} · <b>${esc(({assistant:"Assistant",schedule:"Schedule",types:"Appointment types",staff:"Staff",messages:"Phone messages",appointments:"Appointments",settings:"Settings",notifications:"Notifications",calls:"Calls",knowledge:"Knowledge",contacts:(salonOn()?"Clients":"Contacts"),clients:"Clients",gaps:"Open questions",conversations:"Email inbox",waitlist:"Waitlist"})[state.view])}</b></div>
         <div class="acct-chip"><span class="av">${initials}</span><div class="who"><b>${esc(state.account.company)}</b><span>${esc((state.account.status||'trial'))} · ${esc(state.account.plan||'starter')}</span></div></div>
       </div>
       <div id="approve-banner"></div>
@@ -475,9 +477,9 @@ function renderPage(){
   if('speechSynthesis' in window) window.speechSynthesis.cancel();
   teardownRealtime();
   document.querySelectorAll(".nav-item[data-v]").forEach(b=>b.classList.toggle("active",b.dataset.v===state.view));
-  $(".crumbs").innerHTML=`${['settings','notifications'].includes(state.view)?'Account':(['messages','appointments','calls','contacts','clients','gaps','conversations'].includes(state.view)?'Activity':'Configure')} · <b>${esc(({assistant:"Assistant",schedule:"Schedule",types:"Appointment types",staff:"Staff",messages:"Phone messages",appointments:"Appointments",settings:"Settings",notifications:"Notifications",calls:"Calls",knowledge:"Knowledge",contacts:(salonOn()?"Clients":"Contacts"),clients:"Clients",gaps:"Open questions",conversations:"Email inbox"})[state.view])}</b>`;
-  const PAGES={assistant:pageAssistant, schedule:pageSchedule, types:pageTypes, staff:pageStaff, messages:pageMessages, appointments:renderAppts, settings:pageSettings, notifications:pageNotifications, calls:pageCalls, knowledge:pageKnowledge, contacts:pageContacts, clients:pageClients, gaps:pageGaps, conversations:pageConversations};
-  const LOADERS={appointments:loadAppointments, messages:loadMessages, calls:loadCalls, contacts:loadContacts, clients:loadContacts, gaps:loadGaps, conversations:loadConversations, staff:loadStaff};
+  $(".crumbs").innerHTML=`${['settings','notifications'].includes(state.view)?'Account':(['messages','appointments','waitlist','calls','contacts','clients','gaps','conversations'].includes(state.view)?'Activity':'Configure')} · <b>${esc(({assistant:"Assistant",schedule:"Schedule",types:"Appointment types",staff:"Staff",messages:"Phone messages",appointments:"Appointments",settings:"Settings",notifications:"Notifications",calls:"Calls",knowledge:"Knowledge",contacts:(salonOn()?"Clients":"Contacts"),clients:"Clients",gaps:"Open questions",conversations:"Email inbox",waitlist:"Waitlist"})[state.view])}</b>`;
+  const PAGES={assistant:pageAssistant, schedule:pageSchedule, types:pageTypes, staff:pageStaff, messages:pageMessages, appointments:renderAppts, settings:pageSettings, notifications:pageNotifications, calls:pageCalls, knowledge:pageKnowledge, contacts:pageContacts, clients:pageClients, gaps:pageGaps, conversations:pageConversations, waitlist:pageWaitlist};
+  const LOADERS={appointments:loadAppointments, messages:loadMessages, calls:loadCalls, contacts:loadContacts, clients:loadContacts, gaps:loadGaps, conversations:loadConversations, staff:loadStaff, waitlist:loadWaitlist};
   const v=state.view;
   (PAGES[v]||(()=>{}))();
   const ld=LOADERS[v];
@@ -1991,6 +1993,96 @@ async function saveRecap(){
   if(!error){ state.account.settings=settings; if(msg){ msg.style.color='var(--muted)'; msg.textContent = patch.enabled ? 'You will get a recap on Monday mornings.' : 'Weekly recap is off.'; } }
   else if(msg){ msg.style.color='var(--danger)'; msg.textContent='Could not save. Try again.'; }
   if(btn){ btn.disabled=false; btn.textContent=error?"Try again":"Saved ✓"; setTimeout(()=>{ if(btn) btn.textContent=o; },1300); }
+}
+
+/* ===================== WAITLIST PAGE ===================== */
+async function loadWaitlist(){
+  try{
+    if(salonOn() && isManager() && !isSolo() && !(state.staff&&state.staff.length)){ try{ await loadStaff(); }catch(_e){} }
+    const { data, error }=await db.from('waitlist').select('*').eq('account_id',state.account.id).in('status',['active','notified']).order('created_at',{ascending:true});
+    state.waitlist = error?[]:(data||[]);
+  }catch(_e){ state.waitlist=state.waitlist||[]; }
+}
+function wlStylistName(uid){ if(!uid) return 'Any '+providerLabel(); const u=(state.staff||[]).find(s=>s.id===uid); return u?(u.full_name||u.email||('This '+providerLabel())):'—'; }
+function pageWaitlist(){
+  const team = salonOn() && isManager() && !isSolo();
+  const rows = state.waitlist||[];
+  const active = rows.filter(r=>r.status==='active');
+  const notified = rows.filter(r=>r.status==='notified');
+  const staffOpts = team ? `<option value="">Any ${esc(providerLabel())}</option>`+(state.staff||[]).filter(s=>s.is_bookable).map(s=>`<option value="${s.id}">${esc(s.full_name||s.email||providerLabel())}</option>`).join('') : '';
+  const rowCard = r=>{
+    const name = esc(r.customer_name||'(no name)');
+    const contact = [r.customer_phone,r.customer_email].filter(Boolean).map(esc).join(' · ');
+    const svc = r.service_label?esc(r.service_label):'';
+    const who = team ? esc(wlStylistName(r.provider_user_id)) : '';
+    const win = (r.earliest_date||r.latest_date) ? `${r.earliest_date?esc(r.earliest_date):'any'} → ${r.latest_date?esc(r.latest_date):'any'}` : '';
+    const when = r.time_pref?esc(r.time_pref):'';
+    const note = r.note?esc(r.note):'';
+    const badge = r.status==='notified' ? `<span class="tag" style="background:#fde68a;color:#92400e">Notified</span>` : `<span class="tag">Waiting</span>`;
+    const meta=[svc,who,win,when].filter(Boolean).join(' · ');
+    return `<div data-id="${esc(r.id)}" style="display:flex;justify-content:space-between;gap:12px;padding:12px 0;border-top:1px solid var(--line)">
+      <div style="min-width:0">
+        <div style="font-weight:600;font-size:14px">${name} ${badge}</div>
+        ${contact?`<div style="font-size:12.5px;color:var(--muted)">${contact}</div>`:''}
+        ${meta?`<div style="font-size:12.5px;color:var(--muted);margin-top:2px">${meta}</div>`:''}
+        ${note?`<div style="font-size:12px;color:var(--muted-2);margin-top:2px">${note}</div>`:''}
+      </div>
+      <div style="display:flex;gap:6px;align-items:flex-start;flex-shrink:0">
+        <button class="btn sm primary" data-act="book" data-id="${esc(r.id)}">Booked</button>
+        <button class="btn sm ghost" data-act="remove" data-id="${esc(r.id)}">Remove</button>
+      </div>
+    </div>`;
+  };
+  $("#page").innerHTML=`
+  <div class="page">
+    <div class="page-head"><h1>Waitlist</h1><p>People waiting for an earlier time or a specific opening. When a matching slot frees up because someone cancels, ${esc(aName())} automatically texts or emails the longest-waiting few so they can grab it. First to respond gets it.</p></div>
+
+    <div class="card"><div class="card-h"><h2>Add someone to the waitlist</h2></div>
+      <div class="grid-2">
+        <div class="field" style="margin:0"><label class="lab">Name</label><input class="inp" id="wl-name" placeholder="Client name"></div>
+        <div class="field" style="margin:0"><label class="lab">Phone</label><input class="inp" id="wl-phone" placeholder="(optional)"></div>
+        <div class="field" style="margin:0"><label class="lab">Email</label><input class="inp" id="wl-email" type="email" placeholder="(optional)"></div>
+        <div class="field" style="margin:0"><label class="lab">Service</label><input class="inp" id="wl-service" placeholder="e.g. haircut, color"></div>
+        ${team?`<div class="field" style="margin:0"><label class="lab">${esc(providerLabelCap())}</label><select class="inp" id="wl-prov">${staffOpts}</select></div>`:''}
+        <div class="field" style="margin:0"><label class="lab">Time preference</label><input class="inp" id="wl-time" placeholder="e.g. mornings, after 5pm"></div>
+        <div class="field" style="margin:0"><label class="lab">Earliest date</label><input class="inp" id="wl-early" type="date"></div>
+        <div class="field" style="margin:0"><label class="lab">Latest date</label><input class="inp" id="wl-late" type="date"></div>
+      </div>
+      <div class="field" style="margin:12px 0 0"><label class="lab">Note</label><input class="inp" id="wl-note" placeholder="(optional)"></div>
+      <div style="margin-top:12px"><button class="btn primary" id="wl-add">+ Add to waitlist</button><span id="wl-add-msg" style="font-size:12.5px;color:var(--muted);margin-left:10px"></span></div>
+    </div>
+
+    <div class="card"><div class="card-h"><h2>Waiting now</h2><span style="font-size:12px;color:var(--muted)">${active.length} waiting${notified.length?` · ${notified.length} notified`:''}</span></div>
+      ${(active.length||notified.length)? active.concat(notified).map(rowCard).join('') : `<p style="font-size:13px;color:var(--muted);margin:0">No one on the waitlist yet. Add someone above, or ${esc(aName())} will add callers who ask for a time that is already taken.</p>`}
+    </div>
+  </div>`;
+  { const b=$("#wl-add"); if(b) b.onclick=addToWaitlist; }
+  document.querySelectorAll('#page [data-act]').forEach(btn=>{ btn.onclick=()=>waitlistAction(btn.dataset.act, btn.dataset.id); });
+}
+async function addToWaitlist(){
+  const btn=$("#wl-add"), msg=$("#wl-add-msg");
+  const name=(($("#wl-name")||{}).value||''), phone=(($("#wl-phone")||{}).value||''), email=(($("#wl-email")||{}).value||'');
+  if(!name.trim() && !phone.trim() && !email.trim()){ if(msg){ msg.style.color='var(--danger)'; msg.textContent='Add at least a name or a way to reach them.'; } return; }
+  const provEl=$("#wl-prov");
+  const row={ account_id:state.account.id, customer_name:name.trim()||null, customer_phone:phone.trim()||null, customer_email:email.trim()||null,
+    provider_user_id: (provEl&&provEl.value)?provEl.value:null,
+    service_label:(($("#wl-service")||{}).value||'').trim()||null,
+    time_pref:(($("#wl-time")||{}).value||'').trim()||null,
+    earliest_date:(($("#wl-early")||{}).value||'')||null,
+    latest_date:(($("#wl-late")||{}).value||'')||null,
+    note:(($("#wl-note")||{}).value||'').trim()||null,
+    source:'dashboard', status:'active' };
+  const o=btn?btn.textContent:''; if(btn){ btn.disabled=true; btn.textContent='Adding…'; }
+  const { error }=await db.from('waitlist').insert(row);
+  if(btn){ btn.disabled=false; btn.textContent=o; }
+  if(error){ if(msg){ msg.style.color='var(--danger)'; msg.textContent='Could not add. Try again.'; } return; }
+  await loadWaitlist(); pageWaitlist();
+}
+async function waitlistAction(act,id){
+  if(!id) return;
+  if(act==='book'){ await db.from('waitlist').update({status:'booked',updated_at:new Date().toISOString()}).eq('id',id); }
+  else if(act==='remove'){ await db.from('waitlist').delete().eq('id',id); }
+  await loadWaitlist(); pageWaitlist();
 }
 async function saveSms(){
   const btn=$("#sms-save"), msg=$("#sms-msg");
