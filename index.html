@@ -399,8 +399,9 @@ async function loadData(){
     await loadGaps();
     await loadConversations();
   } else {
-    state.messages=[]; state.calls=[]; state.contacts=[]; state.gaps=[]; state.conversations=[];
-    if(!['schedule','appointments','clients'].includes(state.view)) state.view='appointments';
+    await loadMessages(); // RLS scopes a stylist to messages addressed to them
+    state.calls=[]; state.contacts=[]; state.gaps=[]; state.conversations=[];
+    if(!['schedule','appointments','clients','messages'].includes(state.view)) state.view='appointments';
   }
   return true;
 }
@@ -419,7 +420,7 @@ function isSolo(){ return salonOn() && salonMode()==='solo'; }
 function showStaff(){ return salonOn() && isManager() && salonMode()==='team'; }
 function renderApp(){
   const mgr=isManager();
-  if(!mgr && !['schedule','appointments','clients'].includes(state.view)) state.view='appointments';
+  if(!mgr && !['schedule','appointments','clients','messages'].includes(state.view)) state.view='appointments';
   // A solo owner lives in their appointments; land there on first load, then leave navigation free.
   if(mgr && isSolo() && !state._homed){ state._homed=true; if(state.view==='assistant') state.view='appointments'; }
   if(mgr && new URLSearchParams(location.search).get('calendar')) state.view='settings';
@@ -431,8 +432,8 @@ function renderApp(){
     navActivity=[["calls","Calls",I.phone],["appointments","Appointments",I.appt],["messages","Messages",I.inbox],["contacts",salonOn()?"Clients":"Contacts",I.users],["gaps","Questions",I.book],["conversations","Inbox",I.inbox]];
     soon=[["billing","Billing",I.card]];
   } else {
-    // Stylist: focused view — their own bookings, clients, and their own availability.
-    navConfig=[["appointments","My appointments",I.appt],["clients","Clients",I.users],["schedule","My availability",I.cal]];
+    // Stylist: focused view — their own bookings, messages, clients, and their own availability.
+    navConfig=[["appointments","My appointments",I.appt],["messages","Messages",I.inbox],["clients","Clients",I.users],["schedule","My availability",I.cal]];
     navActivity=[];
   }
   const navCount=v=>{ if(v==='messages') return unreadCount(); if(v==='conversations') return (state.conversations||[]).filter(c=>c.status==='awaiting_staff').length; if(v==='gaps') return (state.gaps||[]).length; return 0; };
@@ -466,7 +467,7 @@ function renderApp(){
   paintApproveBanner();
 }
 function renderPage(){
-  if(!isManager() && !['schedule','appointments','clients'].includes(state.view)) state.view='appointments';
+  if(!isManager() && !['schedule','appointments','clients','messages'].includes(state.view)) state.view='appointments';
   if('speechSynthesis' in window) window.speechSynthesis.cancel();
   teardownRealtime();
   document.querySelectorAll(".nav-item[data-v]").forEach(b=>b.classList.toggle("active",b.dataset.v===state.view));
