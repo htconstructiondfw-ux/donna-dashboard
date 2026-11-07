@@ -1,0 +1,229 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1">
+<title>Book an appointment</title>
+<style>
+  :root{ --ink:#0e1b2e; --ink2:#47566b; --muted:#6b7a90; --line:#e6ebf2; --bg:#f3f5f9; --card:#fff; --accent:#0e1b2e; --accent-ink:#fff; --ok:#166534; --okbg:#ecfdf3; --danger:#b42318; }
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--ink);font:15px/1.5 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;-webkit-font-smoothing:antialiased}
+  .wrap{max-width:560px;margin:0 auto;padding:20px 16px 48px}
+  .brand{display:flex;align-items:center;gap:10px;margin:8px 2px 18px}
+  .brand .dot{width:34px;height:34px;border-radius:9px;background:var(--accent);color:var(--accent-ink);display:flex;align-items:center;justify-content:center;font-weight:800}
+  .brand b{font-size:19px}
+  .brand small{display:block;color:var(--muted);font-size:12px;font-weight:500}
+  .card{background:var(--card);border:1px solid var(--line);border-radius:16px;padding:18px;box-shadow:0 1px 2px rgba(16,24,40,.04);margin-bottom:14px}
+  h2{font-size:14px;margin:0 0 12px;letter-spacing:.01em}
+  .step-label{font-size:11px;text-transform:uppercase;letter-spacing:.06em;color:var(--muted);font-weight:700;margin:0 0 10px}
+  .opt{border:1px solid var(--line);border-radius:12px;padding:13px 14px;margin-bottom:9px;cursor:pointer;transition:.12s;display:flex;justify-content:space-between;align-items:flex-start;gap:12px;background:#fff}
+  .opt:hover{border-color:#cdd6e4}
+  .opt.sel{border-color:var(--accent);box-shadow:0 0 0 2px rgba(14,27,46,.08)}
+  .opt .nm{font-weight:600}
+  .opt .meta{color:var(--muted);font-size:12.5px;margin-top:2px}
+  .opt .desc{color:var(--ink2);font-size:12.5px;margin-top:5px}
+  .opt .price{font-weight:600;white-space:nowrap}
+  .pill{display:inline-block;font-size:9.5px;font-weight:800;letter-spacing:.04em;text-transform:uppercase;padding:2px 7px;border-radius:999px;background:#fef3c7;color:#92400e;margin-left:6px;vertical-align:middle}
+  .incl{list-style:none;margin:6px 0 0;padding:0}
+  .incl li{font-size:12px;color:var(--ink2);padding-left:16px;position:relative}
+  .incl li:before{content:"✓";position:absolute;left:0;color:#16a34a;font-weight:700}
+  .daygroup{margin-bottom:12px}
+  .dayh{font-size:12px;font-weight:700;color:var(--ink2);margin:0 0 7px}
+  .chips{display:flex;flex-wrap:wrap;gap:8px}
+  .chip{border:1px solid var(--line);border-radius:10px;padding:9px 12px;font-size:13.5px;cursor:pointer;background:#fff;transition:.12s}
+  .chip:hover{border-color:#cdd6e4}
+  .chip.sel{background:var(--accent);color:var(--accent-ink);border-color:var(--accent)}
+  label.f{display:block;font-size:12px;font-weight:600;color:var(--ink2);margin:0 0 5px}
+  input.inp{width:100%;border:1px solid var(--line);border-radius:10px;padding:11px 12px;font:inherit;background:#fcfdff;margin-bottom:12px}
+  input.inp:focus{outline:none;border-color:var(--accent);background:#fff}
+  .hp{position:absolute;left:-9999px;top:-9999px;height:0;width:0;opacity:0}
+  .btn{width:100%;border:none;border-radius:12px;padding:14px;font:inherit;font-weight:700;background:var(--accent);color:var(--accent-ink);cursor:pointer}
+  .btn:disabled{opacity:.55;cursor:default}
+  .btn.ghost{background:#fff;color:var(--ink);border:1px solid var(--line);font-weight:600}
+  .row{display:flex;gap:10px}
+  .back{background:none;border:none;color:var(--muted);font:inherit;font-size:13px;cursor:pointer;padding:4px 0;margin-bottom:6px}
+  .msg{font-size:13px;margin-top:10px}
+  .msg.err{color:var(--danger)}
+  .summary{font-size:12.5px;color:var(--muted);margin-bottom:12px}
+  .center{text-align:center;padding:14px 4px}
+  .center .big{font-size:40px;line-height:1;margin-bottom:10px}
+  .center h3{margin:0 0 6px;font-size:18px}
+  .center p{color:var(--muted);margin:0}
+  .foot{text-align:center;color:#9aa6b6;font-size:11px;margin-top:18px}
+  .spin{color:var(--muted);font-size:13px;text-align:center;padding:16px}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div class="brand"><span class="dot" id="b-dot">·</span><div><b id="b-name">Booking</b><small id="b-sub">Loading…</small></div></div>
+  <div id="app"><div class="card"><div class="spin">Loading…</div></div></div>
+  <div class="foot">Booking powered by Donna</div>
+</div>
+<script>
+const API="https://hingbdtmxozbjetzwibj.supabase.co/functions/v1/book-public";
+const qs=new URLSearchParams(location.search);
+const ACCOUNT=qs.get('s')||qs.get('a')||(location.pathname.split('/book/')[1]||'').replace(/\/+$/,'');
+const S={info:null,service:null,stylist:null,slot:null,otpId:null,channel:null};
+const $=s=>document.querySelector(s);
+const app=$("#app");
+const esc=s=>String(s==null?'':s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+async function api(action,extra){ const r=await fetch(API,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(Object.assign({action,account:ACCOUNT},extra||{}))}); return r.json().catch(()=>({ok:false})); }
+
+function card(inner){ app.innerHTML=`<div class="card">${inner}</div>`; }
+function prettyPhone(p){ return p?String(p).replace(/^\+1(\d{3})(\d{3})(\d{4})$/,'($1) $2-$3'):''; }
+function otherWays(){
+  const p=S.info&&S.info.phone, e=S.info&&S.info.email;
+  if(!p && !e) return '';
+  const parts=[];
+  if(p) parts.push(`Prefer to call? <a href="tel:${esc(String(p).replace(/[^0-9+]/g,''))}" style="color:var(--ink);font-weight:600;text-decoration:none">${esc(prettyPhone(p)||p)}</a>`);
+  if(e) parts.push(`Prefer email? <a href="mailto:${esc(e)}" style="color:var(--ink);font-weight:600;text-decoration:none">${esc(e)}</a>`);
+  return `<div class="card" style="text-align:center;font-size:12.5px;color:var(--muted);line-height:1.9">${parts.join('<br>')}</div>`;
+}
+
+async function boot(){
+  if(!ACCOUNT){ card('<div class="center"><h3>Page not found</h3><p>This booking link looks incomplete.</p></div>'); return; }
+  const info=await api('info');
+  if(!info||!info.ok){
+    const m = info&&info.reason==='not_enabled' ? 'Online booking is not turned on for this business yet.' : 'We could not load this booking page.';
+    card(`<div class="center"><h3>Unavailable</h3><p>${esc(m)}</p></div>`); return;
+  }
+  S.info=info;
+  const preId=qs.get('stylist');
+  if(preId && info.salon_team){ S.preStylist=(info.stylists||[]).find(s=>s.id===preId)||null; }
+  $("#b-name").textContent=info.business;
+  $("#b-dot").textContent=(info.business||'B').trim().charAt(0).toUpperCase();
+  $("#b-sub").textContent= S.preStylist ? ('Book with '+S.preStylist.name) : 'Book an appointment';
+  document.title='Book · '+info.business;
+  stepService();
+}
+
+function stepService(){
+  const svc=S.info.services||[];
+  if(!svc.length){ card('<div class="center"><h3>Nothing to book yet</h3><p>This business has not added any services.</p></div>'); return; }
+  const cats={};
+  svc.forEach(s=>{ const k=s.category||''; (cats[k]=cats[k]||[]).push(s); });
+  let html='<div class="step-label">Choose a service</div>';
+  Object.keys(cats).forEach(cat=>{
+    if(cat) html+=`<h2 style="margin-top:6px">${esc(cat)}</h2>`;
+    cats[cat].forEach(s=>{
+      const meta=[s.dur+' min', s.new_only?'New clients':''].filter(Boolean).join(' · ');
+      const incl=(s.includes&&s.includes.length)?`<ul class="incl">${s.includes.map(i=>`<li>${esc(i)}</li>`).join('')}</ul>`:'';
+      html+=`<div class="opt" data-svc="${s.id}">
+        <div><div class="nm">${esc(s.name)}${s.special?'<span class="pill">Special</span>':''}</div>
+        <div class="meta">${esc(meta)}</div>
+        ${s.description?`<div class="desc">${esc(s.description)}</div>`:''}${incl}</div>
+        ${s.price?`<div class="price">${esc(s.price)}</div>`:''}</div>`;
+    });
+  });
+  if(S.preStylist) html=`<div class="summary" style="margin-bottom:12px">Booking with <b style="color:var(--ink)">${esc(S.preStylist.name)}</b></div>`+html;
+  app.innerHTML=`<div class="card">${html}</div>`+otherWays();
+  document.querySelectorAll('[data-svc]').forEach(el=>el.onclick=()=>{ S.service=svc.find(x=>x.id===el.dataset.svc); S.slot=null; if(S.preStylist){ S.stylist=S.preStylist; stepTime(); } else { S.stylist=null; (S.info.salon_team?stepStylist():stepTime()); } });
+}
+
+function stepStylist(){
+  const pl=S.info.provider_label||'stylist';
+  const list=S.info.stylists||[];
+  let html=`<button class="back" id="bk">← Services</button><div class="step-label">Choose a ${esc(pl)}</div>`;
+  html+=`<div class="opt" data-sty="any"><div class="nm">Any ${esc(pl)}</div><div class="meta">First available</div></div>`;
+  list.forEach(s=>{ html+=`<div class="opt" data-sty="${s.id}"><div class="nm">${esc(s.name)}</div></div>`; });
+  card(html);
+  $("#bk").onclick=stepService;
+  document.querySelectorAll('[data-sty]').forEach(el=>el.onclick=()=>{ S.stylist = el.dataset.sty==='any'?null:list.find(x=>x.id===el.dataset.sty); stepTime(); });
+}
+
+async function stepTime(){
+  const pl=S.info.provider_label||'stylist';
+  const who = S.stylist? (' with '+S.stylist.name) : '';
+  const goBack=()=> (S.info.salon_team && !S.preStylist) ? stepStylist() : stepService();
+  card(`<button class="back" id="bk">← Back</button><div class="step-label">Pick a time</div><div class="summary">${esc(S.service.name)}${esc(who)}</div><div class="spin">Finding open times…</div>`);
+  $("#bk").onclick=goBack;
+  const r=await api('slots',{service_id:S.service.id, stylist_id:S.stylist?S.stylist.id:null});
+  const slots=(r&&r.ok&&r.slots)||[];
+  let html=`<button class="back" id="bk2">← Back</button><div class="step-label">Pick a time</div><div class="summary">${esc(S.service.name)}${esc(who)}</div>`;
+  if(!slots.length){ html+='<p style="color:var(--muted)">No open times in the next few weeks. Please check back or contact us.</p>'; }
+  else{
+    const days={}; slots.forEach(s=>{ (days[s.day]=days[s.day]||[]).push(s); });
+    Object.keys(days).forEach(day=>{
+      html+=`<div class="daygroup"><div class="dayh">${esc(day)}</div><div class="chips">`;
+      days[day].forEach(s=>{ html+=`<button class="chip" data-iso="${esc(s.iso)}">${esc(s.label)}</button>`; });
+      html+='</div></div>';
+    });
+  }
+  card(html);
+  $("#bk2").onclick=goBack;
+  document.querySelectorAll('[data-iso]').forEach(el=>el.onclick=()=>{ S.slot=el.dataset.iso; stepDetails(); });
+}
+
+function stepDetails(){
+  const gate=S.info.sms_gate;
+  const who = S.stylist? (' with '+S.stylist.name) : '';
+  const whenTxt=new Date(S.slot).toLocaleString([], {weekday:'long',month:'long',day:'numeric',hour:'numeric',minute:'2-digit'});
+  card(`<button class="back" id="bk">← Times</button><div class="step-label">Your details</div>
+    <div class="summary">${esc(S.service.name)}${esc(who)} · ${esc(whenTxt)}</div>
+    <label class="f">Your name</label><input class="inp" id="d-name" autocomplete="name" placeholder="First and last name">
+    <label class="f">Mobile number${gate?'':' <span style="color:var(--muted);font-weight:400">(optional)</span>'}</label><input class="inp" id="d-phone" inputmode="tel" autocomplete="tel" placeholder="(555) 123-4567">
+    <label class="f">Email${gate?' <span style="color:var(--muted);font-weight:400">(optional)</span>':''}</label><input class="inp" id="d-email" type="email" autocomplete="email" placeholder="you@email.com">
+    <input class="hp" id="d-hp" tabindex="-1" autocomplete="off" placeholder="Leave this blank">
+    <button class="btn" id="d-go">Send me a code</button>
+    <div class="msg" id="d-msg"></div>
+    <p style="font-size:11.5px;color:var(--muted);margin:12px 0 0">We'll ${gate?'text':'email'} you a quick code to confirm it's really you. No account needed.</p>`);
+  $("#bk").onclick=stepTime;
+  $("#d-go").onclick=sendCode;
+}
+
+async function sendCode(){
+  const btn=$("#d-go"), msg=$("#d-msg");
+  const name=$("#d-name").value.trim(), phone=$("#d-phone").value.trim(), email=$("#d-email").value.trim();
+  const hp=$("#d-hp").value;
+  const setErr=t=>{ msg.className='msg err'; msg.textContent=t; };
+  if(!name){ setErr('Please enter your name.'); return; }
+  const gate=S.info.sms_gate;
+  if(gate && !phone){ setErr('Please enter your mobile number.'); return; }
+  if(!gate && !email){ setErr('Please enter your email.'); return; }
+  if(!phone && !email){ setErr('Please add a phone or email.'); return; }
+  btn.disabled=true; const o=btn.textContent; btn.textContent='Sending…'; msg.textContent='';
+  const r=await api('start',{service_id:S.service.id, stylist_id:S.stylist?S.stylist.id:null, start_iso:S.slot, name, phone, email, hp});
+  btn.disabled=false; btn.textContent=o;
+  if(r&&r.ok){ S.otpId=r.otp_id; S.channel=r.channel; stepCode(r.hint); return; }
+  const reasons={slot_gone:'Sorry, that time was just taken. Please pick another.',too_many:'Too many attempts. Please try again later.',need_contact:'Please add a phone or email.',send_failed:'We could not send your code. Check your details and try again.',spam:'Something went wrong. Please try again.'};
+  setErr(reasons[r&&r.reason]||'Something went wrong. Please try again.');
+  if(r&&r.reason==='slot_gone'){ setTimeout(stepTime,1200); }
+}
+
+function stepCode(hint){
+  card(`<button class="back" id="bk">← Back</button><div class="step-label">Enter your code</div>
+    <p class="summary">We sent a 4-digit code to ${esc(hint||'you')}. Enter it to confirm your booking.</p>
+    <input class="inp" id="c-code" inputmode="numeric" maxlength="4" placeholder="1234" style="letter-spacing:6px;text-align:center;font-size:20px">
+    <button class="btn" id="c-go">Confirm booking</button>
+    <button class="btn ghost" id="c-resend" style="margin-top:9px">Resend code</button>
+    <div class="msg" id="c-msg"></div>`);
+  $("#bk").onclick=()=>stepDetails();
+  $("#c-go").onclick=confirmCode;
+  $("#c-resend").onclick=()=>stepDetails();
+  setTimeout(()=>$("#c-code").focus(),100);
+}
+
+async function confirmCode(){
+  const btn=$("#c-go"), msg=$("#c-msg");
+  const code=$("#c-code").value.trim();
+  if(code.length<4){ msg.className='msg err'; msg.textContent='Enter the 4-digit code.'; return; }
+  btn.disabled=true; const o=btn.textContent; btn.textContent='Confirming…'; msg.textContent='';
+  const r=await api('verify',{otp_id:S.otpId, code});
+  btn.disabled=false; btn.textContent=o;
+  if(r&&r.ok){ success(r.when_label); return; }
+  const reasons={wrong_code:'That code is not right. Try again.',expired:'That code expired. Please resend.',locked:'Too many tries. Please start over.',used:'That code was already used.',slot_gone:'Sorry, that time was just taken. Please pick another.'};
+  msg.className='msg err'; msg.textContent=reasons[r&&r.reason]||'Could not confirm. Try again.';
+  if(r&&(r.reason==='slot_gone')){ setTimeout(stepTime,1400); }
+}
+
+function success(whenLabel){
+  const who = S.stylist? (' with '+S.stylist.name) : '';
+  card(`<div class="center"><div class="big">✓</div><h3>You're booked!</h3>
+    <p>${esc(S.service.name)}${esc(who)}<br><b style="color:var(--ink)">${esc(whenLabel||'')}</b></p>
+    <p style="margin-top:12px">A confirmation is on its way. See you then!</p></div>`);
+}
+
+boot();
+</script>
+</body>
+</html>
