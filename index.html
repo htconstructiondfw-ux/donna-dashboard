@@ -1495,7 +1495,7 @@ function utcToZonedParts(iso,tz){
   const p=new Intl.DateTimeFormat('en-US',{timeZone:tz,hour12:false,year:'numeric',month:'2-digit',day:'2-digit',hour:'2-digit',minute:'2-digit'}).formatToParts(new Date(iso)).reduce((a,x)=>{a[x.type]=x.value;return a;},{});
   return { date:`${p.year}-${p.month}-${p.day}`, time:`${((+p.hour)%24).toString().padStart(2,'0')}:${p.minute}` };
 }
-const BOOK_ERR={ conflict:"That time overlaps another appointment for this person. Pick a different time.", blocked:"That falls in a time-off block. Pick a different time.", in_past:"Pick a time in the future.", forbidden:"You can only manage your own appointments.", no_staff:"Pick a staff member.", bad_time:"Pick a valid date and time.", insert_failed:"Could not save the booking. Try again.", not_signed_in:"Please sign in again." };
+const BOOK_ERR={ conflict:"That time overlaps another appointment for this person. Pick a different time.", blocked:"That falls in a time-off block. Pick a different time.", in_past:"Pick a time in the future.", forbidden:"You can only manage your own appointments.", no_staff:"Pick a staff member.", bad_time:"Pick a valid date and time.", insert_failed:"Could not save the booking. Try again.", not_signed_in:"Please sign in again.", unavailable:"That stylist isn't available then. Only they can add an appointment outside their own hours." };
 function bookingCardHTML(){
   if(!salonOn()) return '';
   const mgr=isManager();
@@ -1614,9 +1614,16 @@ function staffFirstName(uid){ const u=(state.staff||[]).find(s=>s.id===uid); con
 async function confirmIfOutsideHours(uid, dateStr, timeStr, durMin, isSelf){
   const av=await withinBookableHours(uid, dateStr, timeStr, durMin);
   if(av.ok) return true;
-  const subj = isSelf ? 'You have' : staffFirstName(uid)+' has';
-  const detail = av.hasRules ? 'no availability set for that day and time' : 'no availability hours set yet';
-  return uiConfirm(subj+' '+detail+'. Book anyway?', {okText:'Book anyway', cancelText:'Go back'});
+  if(isSelf){
+    // You're adding your own appointment — you can book outside your set hours.
+    const detail = av.hasRules ? 'no availability set for that day and time' : 'no availability hours set yet';
+    return uiConfirm('You have '+detail+'. Add it anyway?', {okText:'Add anyway', cancelText:'Go back'});
+  }
+  // Booking someone else: respect the stylist's own availability — don't book.
+  const who = staffFirstName(uid);
+  const detail = av.hasRules ? (who+" isn’t available then") : (who+" hasn’t set their availability yet");
+  await uiAlert(detail+". Only "+who+" can add an appointment outside their own set hours.");
+  return false;
 }
 async function submitBooking(){
   const msg=$("#bk-msg"); const set=(t,c)=>{ if(msg){msg.style.color=c||'var(--muted)';msg.textContent=t;} };
@@ -1629,7 +1636,7 @@ async function submitBooking(){
   const dur=+$("#bk-dur").value||45;
   const typeSel=$("#bk-type"); const typeId=typeSel&&typeSel.value?typeSel.value:null;
   const o=typeSel&&typeSel.selectedOptions[0]; const mode=o&&o.dataset&&o.dataset.mode?o.dataset.mode:null;
-  if(!(await confirmIfOutsideHours(uid, date, time, dur, !mgr))) return;
+  if(!(await confirmIfOutsideHours(uid, date, time, dur, uid===state.owner.id))) return;
   const startIso=zonedToUtcISO(date,time,state.account.timezone);
   const btn=$("#bk-save"); btn.disabled=true; const ob=btn.textContent; btn.textContent="Booking…"; set("Checking the time…");
   let r=null,err=null;
@@ -1784,7 +1791,7 @@ function bindApptActions(){
     if(!d||!t){ set('Pick a date and time.','var(--danger)'); return; }
     const ap=state.appointments.find(x=>x.id===id);
     const durMin = (ap&&ap.end) ? Math.max(5,Math.round((new Date(ap.end)-new Date(ap.start))/60000)) : 45;
-    if(ap && ap.userId && !(await confirmIfOutsideHours(ap.userId, d, t, durMin, !isManager()))) return;
+    if(ap && ap.userId && !(await confirmIfOutsideHours(ap.userId, d, t, durMin, ap.userId===state.owner.id))) return;
     const iso=zonedToUtcISO(d,t,state.account.timezone);
     b.disabled=true; const o=b.textContent; b.textContent='Saving…'; set('Checking the time…');
     let r=null,err=null;
