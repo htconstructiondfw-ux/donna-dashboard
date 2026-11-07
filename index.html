@@ -1594,7 +1594,7 @@ async function addWaitlistFromBooking(){
   // Friendly time label from the 24h input.
   let timePref=null; if(time){ const [h,mi]=time.split(':').map(Number); const ap=h>=12?'PM':'AM'; const h12=((h+11)%12)+1; timePref='around '+h12+':'+String(mi||0).padStart(2,'0')+' '+ap; }
   const row={ account_id:state.account.id, customer_name:name||null, customer_phone:phone, customer_email:email||null,
-    provider_user_id:(isManager()&&!isSolo())?uid:null,
+    provider_user_id:(salonOn()&&!isSolo())?uid:null,
     service_label:svc, time_pref:timePref, earliest_date:date, latest_date:date,
     note:null, source:'dashboard', status:'active' };
   const o=btn?btn.textContent:''; if(btn){ btn.disabled=true; btn.textContent='Adding…'; }
@@ -2040,10 +2040,12 @@ async function loadWaitlist(){
   try{
     if(salonOn() && isManager() && !isSolo() && !(state.staff&&state.staff.length)){ try{ await loadStaff(); }catch(_e){} }
     const { data, error }=await db.from('waitlist').select('*').eq('account_id',state.account.id).in('status',['active','notified']).order('created_at',{ascending:true});
-    state.waitlist = error?[]:(data||[]);
+    let rows = error?[]:(data||[]);
+    if(!isManager()) rows = rows.filter(r=> !r.provider_user_id || r.provider_user_id===state.owner.id); // stylist sees their own + any-stylist
+    state.waitlist = rows;
   }catch(_e){ state.waitlist=state.waitlist||[]; }
 }
-function wlStylistName(uid){ if(!uid) return 'Any '+providerLabel(); const u=(state.staff||[]).find(s=>s.id===uid); return u?(u.full_name||u.email||('This '+providerLabel())):'—'; }
+function wlStylistName(uid){ if(!uid) return 'Any '+providerLabel(); if(uid===state.owner.id) return state.owner.name||'You'; const u=(state.staff||[]).find(s=>s.id===uid); return u?(u.full_name||u.email||('This '+providerLabel())):('This '+providerLabel()); }
 function pageWaitlist(){
   const team = salonOn() && isManager() && !isSolo();
   const rows = state.waitlist||[];
@@ -2058,7 +2060,8 @@ function pageWaitlist(){
     const win = (r.earliest_date||r.latest_date) ? `${r.earliest_date?esc(r.earliest_date):'any'} → ${r.latest_date?esc(r.latest_date):'any'}` : '';
     const when = r.time_pref?esc(r.time_pref):'';
     const note = r.note?esc(r.note):'';
-    const badge = r.status==='notified' ? `<span class="tag" style="background:#fde68a;color:#92400e">Notified</span>` : `<span class="tag">Waiting</span>`;
+    const pill=(bg,fg,txt)=>`<span style="display:inline-block;font-size:10.5px;font-weight:600;letter-spacing:.02em;text-transform:uppercase;padding:2px 7px;border-radius:999px;background:${bg};color:${fg};vertical-align:middle;margin-left:6px">${txt}</span>`;
+    const badge = r.status==='notified' ? pill('#fde68a','#92400e','Notified') : pill('#e2e8f0','#475569','Waiting');
     const meta=[svc,who,win,when].filter(Boolean).join(' · ');
     return `<div data-id="${esc(r.id)}" style="display:flex;justify-content:space-between;gap:12px;padding:12px 0;border-top:1px solid var(--line)">
       <div style="min-width:0">
@@ -2105,7 +2108,7 @@ async function addToWaitlist(){
   if(!name.trim() && !phone.trim() && !email.trim()){ if(msg){ msg.style.color='var(--danger)'; msg.textContent='Add at least a name or a way to reach them.'; } return; }
   const provEl=$("#wl-prov");
   const row={ account_id:state.account.id, customer_name:name.trim()||null, customer_phone:phone.trim()||null, customer_email:email.trim()||null,
-    provider_user_id: (provEl&&provEl.value)?provEl.value:null,
+    provider_user_id: provEl ? (provEl.value||null) : ((salonOn()&&!isSolo())?state.owner.id:null),
     service_label:(($("#wl-service")||{}).value||'').trim()||null,
     time_pref:(($("#wl-time")||{}).value||'').trim()||null,
     earliest_date:(($("#wl-early")||{}).value||'')||null,
