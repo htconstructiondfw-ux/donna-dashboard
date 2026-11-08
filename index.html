@@ -441,7 +441,7 @@ function renderApp(){
   let navConfig, navActivity, soon=[];
   if(mgr){
     const pm=pmMode();
-    navConfig=[["assistant","Assistant",I.bot],["schedule","Schedule",I.cal],["types",pm?"Visit types":"Appointment types",I.tag]];
+    navConfig=[["assistant","Assistant",I.bot],["schedule","Schedule",I.cal],["types",pm?"Visit types":(salonOn()?"Services":"Appointment types"),I.tag]];
     if(showStaff()) navConfig.push(["staff","Staff",I.users]);
     navConfig.push(["knowledge","Knowledge",I.book],["booking",pm?"Self-scheduling":"Booking page",I.link]);
     if(!pm) navConfig.push(["intake","Intake forms",I.clip],["promotions","Promotions",I.promo]);
@@ -475,7 +475,7 @@ function renderApp(){
     </aside>
     <main class="main">
       <div class="topbar">
-        <div class="crumbs">${['settings','notifications'].includes(state.view)?'Account':(['messages','appointments','waitlist','calls','contacts','clients','gaps','conversations','requests'].includes(state.view)?'Activity':'Configure')} · <b>${esc(({assistant:"Assistant",schedule:"Schedule",types:(pmMode()?"Visit types":"Appointment types"),staff:"Staff",messages:"Phone messages",appointments:(pmMode()?"Visits & appointments":"Appointments"),settings:"Settings",notifications:"Notifications",calls:"Calls",knowledge:"Knowledge",contacts:(salonOn()?"Clients":"Contacts"),clients:"Clients",gaps:"Open questions",conversations:"Email inbox",waitlist:"Waitlist",promotions:"Promotions",booking:(pmMode()?"Self-scheduling":"Booking page"),mylink:"My booking link",intake:"Intake forms",properties:"Properties",contractors:"Contractors",requests:"Service requests"})[state.view])}</b></div>
+        <div class="crumbs">${['settings','notifications'].includes(state.view)?'Account':(['messages','appointments','waitlist','calls','contacts','clients','gaps','conversations','requests'].includes(state.view)?'Activity':'Configure')} · <b>${esc(({assistant:"Assistant",schedule:"Schedule",types:(pmMode()?"Visit types":(salonOn()?"Services":"Appointment types")),staff:"Staff",messages:"Phone messages",appointments:(pmMode()?"Visits & appointments":"Appointments"),settings:"Settings",notifications:"Notifications",calls:"Calls",knowledge:"Knowledge",contacts:(salonOn()?"Clients":"Contacts"),clients:"Clients",gaps:"Open questions",conversations:"Email inbox",waitlist:"Waitlist",promotions:"Promotions",booking:(pmMode()?"Self-scheduling":"Booking page"),mylink:"My booking link",intake:"Intake forms",properties:"Properties",contractors:"Contractors",requests:"Service requests"})[state.view])}</b></div>
         <div class="acct-chip"><span class="av">${initials}</span><div class="who"><b>${esc(state.account.company)}</b><span>${esc((state.account.status||'trial'))} · ${esc(state.account.plan||'starter')}</span></div></div>
       </div>
       <div id="approve-banner"></div>
@@ -492,7 +492,7 @@ function renderPage(){
   if('speechSynthesis' in window) window.speechSynthesis.cancel();
   teardownRealtime();
   document.querySelectorAll(".nav-item[data-v]").forEach(b=>b.classList.toggle("active",b.dataset.v===state.view));
-  $(".crumbs").innerHTML=`${['settings','notifications'].includes(state.view)?'Account':(['messages','appointments','waitlist','calls','contacts','clients','gaps','conversations','requests'].includes(state.view)?'Activity':'Configure')} · <b>${esc(({assistant:"Assistant",schedule:"Schedule",types:(pmMode()?"Visit types":"Appointment types"),staff:"Staff",messages:"Phone messages",appointments:(pmMode()?"Visits & appointments":"Appointments"),settings:"Settings",notifications:"Notifications",calls:"Calls",knowledge:"Knowledge",contacts:(salonOn()?"Clients":"Contacts"),clients:"Clients",gaps:"Open questions",conversations:"Email inbox",waitlist:"Waitlist",promotions:"Promotions",booking:(pmMode()?"Self-scheduling":"Booking page"),mylink:"My booking link",intake:"Intake forms",properties:"Properties",contractors:"Contractors",requests:"Service requests"})[state.view])}</b>`;
+  $(".crumbs").innerHTML=`${['settings','notifications'].includes(state.view)?'Account':(['messages','appointments','waitlist','calls','contacts','clients','gaps','conversations','requests'].includes(state.view)?'Activity':'Configure')} · <b>${esc(({assistant:"Assistant",schedule:"Schedule",types:(pmMode()?"Visit types":(salonOn()?"Services":"Appointment types")),staff:"Staff",messages:"Phone messages",appointments:(pmMode()?"Visits & appointments":"Appointments"),settings:"Settings",notifications:"Notifications",calls:"Calls",knowledge:"Knowledge",contacts:(salonOn()?"Clients":"Contacts"),clients:"Clients",gaps:"Open questions",conversations:"Email inbox",waitlist:"Waitlist",promotions:"Promotions",booking:(pmMode()?"Self-scheduling":"Booking page"),mylink:"My booking link",intake:"Intake forms",properties:"Properties",contractors:"Contractors",requests:"Service requests"})[state.view])}</b>`;
   const PAGES={assistant:pageAssistant, schedule:pageSchedule, types:pageTypes, staff:pageStaff, messages:pageMessages, appointments:renderAppts, settings:pageSettings, notifications:pageNotifications, calls:pageCalls, knowledge:pageKnowledge, contacts:pageContacts, clients:pageClients, gaps:pageGaps, conversations:pageConversations, waitlist:pageWaitlist, promotions:pagePromotions, booking:pageBookingPage, mylink:pageMyLink, intake:pageIntakeForms, properties:pageProperties, contractors:pageContractors, requests:pageServiceRequests};
   const LOADERS={appointments:loadAppointments, messages:loadMessages, calls:loadCalls, contacts:loadContacts, clients:loadContacts, gaps:loadGaps, conversations:loadConversations, staff:loadStaff, waitlist:loadWaitlist};
   const v=state.view;
@@ -630,7 +630,7 @@ async function saveAssistant(){
 function pageSchedule(){
   $("#page").innerHTML=`
   <div class="page">
-    <div class="page-head"><h1>Schedule</h1><p style="margin-bottom:6px">Two separate schedules, both different from your general hours of operation (those live in Knowledge).</p><p><b>Live transfer hours</b> are when someone is available for ${esc(aName())} to transfer a live call to. <b>Booking hours</b> are when ${esc(aName())} is allowed to schedule ${pmMode()?'a visit — showings, inspections, walkthroughs, meetings — checked on every booking. Emergency dispatch is not limited by these hours.':'an appointment, checked on every booking.'}</p></div>
+    <div class="page-head"><h1>Schedule</h1><p style="margin-bottom:6px">Two separate schedules, both different from your general hours of operation (those live in Knowledge).</p><p><b>Live transfer hours</b> are when someone is available for ${esc(aName())} to transfer a live call to. <b>Booking hours</b> are when ${esc(aName())} is allowed to schedule ${pmMode()?'a visit — showings, inspections, walkthroughs, meetings — checked on every booking. Emergency dispatch is not limited by these hours.':'an appointment, checked on every booking.'}</p>${salonOn()?(isSolo()?`<p style="margin-top:6px">You're the ${esc(providerLabel())}, so these booking hours are the hours clients can book you.</p>`:(isManager()?`<p style="margin-top:6px">These are <b>your own</b> booking hours${state.owner.bookable?', and clients can book you in them because you are marked bookable on the Staff page':' — right now you are marked "not bookable" on the Staff page, so ${esc(aName())} only books your team'}. Each ${esc(providerLabel())} sets their own hours when they sign in, and ${esc(aName())} books each of them only inside theirs.</p>`:`<p style="margin-top:6px">These are your hours. ${esc(aName())} only books you inside your booking hours, by phone, email, or the booking page.</p>`)):''}</div>
     <div class="card">
       <div class="card-h"><h2>Weekly hours</h2><button class="btn sm" id="hours-save">Save hours</button></div>
       <div class="col-h"><span></span><span>Live transfer hours</span><span>Booking hours</span></div>
@@ -728,19 +728,19 @@ function pageTypes(){
   const salon=salonOn();
   $("#page").innerHTML=`
   <div class="page">
-    <div class="page-head"><h1>Appointment types</h1><p>The services customers can book, each with its own length and buffer time. In-person types reserve travel time automatically when ${esc(aName())} books them.</p></div>
-    <div class="card"><div class="card-h"><h2>Your types</h2></div><div id="types">${state.types.map(typeHTML).join("")||`<div class="empty">${I.tag}<div>No appointment types yet.</div></div>`}</div></div>
+    <div class="page-head"><h1>${salon?'Services':'Appointment types'}</h1><p>${salon?`Your menu. ${esc(aName())} quotes these lengths and prices on the phone and by email, and books the right amount of time for each. They also show on your booking page.`:`The services customers can book, each with its own length and buffer time. In-person types reserve travel time automatically when ${esc(aName())} books them.`}</p></div>
+    <div class="card"><div class="card-h"><h2>${salon?'Your services':'Your types'}</h2></div><div id="types">${state.types.map(typeHTML).join("")||`<div class="empty">${I.tag}<div>${salon?'No services yet. Add your menu below.':'No appointment types yet.'}</div></div>`}</div></div>
     <div class="card">
-      <div class="card-h"><h2>Add a type</h2></div>
+      <div class="card-h"><h2>${salon?'Add a service':'Add a type'}</h2></div>
       <div class="grid-2">
-        <div class="field"><label class="lab">Name</label><input class="inp" id="t-name" placeholder="e.g. Estimate visit"></div>
-        <div class="field"><label class="lab">Mode</label><select class="inp" id="t-mode"><option value="phone">Phone</option><option value="virtual">Virtual</option><option value="in_person">In person</option></select></div>
+        <div class="field"><label class="lab">Name</label><input class="inp" id="t-name" placeholder="${salon?'e.g. Balayage':'e.g. Estimate visit'}"></div>
+        <div class="field"${salon?' style="display:none"':''}><label class="lab">Mode</label><select class="inp" id="t-mode"><option value="phone">Phone</option><option value="virtual">Virtual</option><option value="in_person"${salon?' selected':''}>In person</option></select></div>
       </div>
       <div class="grid-2">
         <div class="field"><label class="lab">Length (min)</label><input class="inp" type="number" id="t-dur" value="30" min="5" step="5"></div>
         <div class="field"><label class="lab">Buffer after (min)</label><input class="inp" type="number" id="t-after" value="0" min="0" step="5"></div>
       </div>
-      <div class="field"><label class="switch"><input type="checkbox" id="t-travel"><span class="track"></span><span class="txt">Reserve travel time<small>Auto-on for in-person — drive time is checked before booking.</small></span></label></div>
+      <div class="field"${salon?' style="display:none"':''}><label class="switch"><input type="checkbox" id="t-travel"><span class="track"></span><span class="txt">Reserve travel time<small>Auto-on for in-person — drive time is checked before booking.</small></span></label></div>
       ${salon?`<div class="field"><label class="switch"><input type="checkbox" id="t-overlap-on"><span class="track"></span><span class="txt">Allow overlap during processing<small>For services with wait time, like color developing. Only the hands-on part blocks the ${providerLabel()}; they can start another client during the overlap.</small></span></label></div>
       <div class="field" id="t-overlap-row" style="display:none"><label class="lab">Overlap minutes <span class="sub">the processing tail that can overlap another booking</span></label><input class="inp" type="number" id="t-overlap" value="60" min="0" step="5"></div>
       <div class="field"><label class="lab">Remind to rebook after <span class="sub">days — ${esc(aName())} nudges a client to come back for this service that many days after their last one, if they have nothing booked. Leave blank for off.</span></label><input class="inp" type="number" id="t-recall" placeholder="e.g. 14" min="0" step="1" style="max-width:200px"></div>`:''}
@@ -758,15 +758,15 @@ function pageTypes(){
         </div>
         <div class="field" style="margin-top:8px"><label class="switch"><input type="checkbox" id="t-newonly"><span class="track"></span><span class="txt">New clients only</span></label></div>
       </div>
-      <div style="margin-top:8px"><button class="btn primary" id="t-add">+ Add type</button></div>
+      <div style="margin-top:8px"><button class="btn primary" id="t-add">${salon?'+ Add service':'+ Add type'}</button></div>
     </div>
-    <div class="card">
+    ${salon?'':`<div class="card">
       <div class="card-h"><h2>Video meetings</h2><span class="hint">for virtual types</span></div>
       <div id="video-card-body"></div>
-    </div>
+    </div>`}
   </div>`;
   const modeSel=$("#t-mode"), travel=$("#t-travel");
-  modeSel.onchange=()=>{ travel.checked = modeSel.value==="in_person"; };
+  modeSel.onchange=()=>{ travel.checked = !salon && modeSel.value==="in_person"; };
   const ovOn=$("#t-overlap-on"); if(ovOn) ovOn.onchange=()=>{ const r=$("#t-overlap-row"); if(r) r.style.display=ovOn.checked?'block':'none'; };
   const sp=$("#t-special"); if(sp) sp.onchange=()=>{ const r=$("#t-special-row"); if(r) r.style.display=sp.checked?'block':'none'; };
   $("#t-add").onclick=addType;
@@ -814,21 +814,22 @@ async function verifyVideo(provider){
   setMsg("Couldn't verify "+pname+". Try again.","var(--danger)");
 }
 function typeHTML(t){
-  const lbl={phone:"Phone",virtual:"Virtual",in_person:"In person"}[t.mode]; const icon={phone:I.phone,virtual:I.vid,in_person:I.pin}[t.mode]; const id=t.id||'';
+  const salon=salonOn();
+  const lbl=salon?(t.category||""):{phone:"Phone",virtual:"Virtual",in_person:"In person"}[t.mode]; const icon=salon?I.tag:{phone:I.phone,virtual:I.vid,in_person:I.pin}[t.mode]; const id=t.id||'';
   return `<div class="type-wrap">
-    <div class="type-item"><span class="ic ${t.mode}">${icon}</span><span class="nm">${esc(t.name)}${t.special?` <span style="display:inline-block;font-size:9.5px;font-weight:700;letter-spacing:.03em;text-transform:uppercase;padding:1px 6px;border-radius:999px;background:#fef3c7;color:#92400e;vertical-align:middle">Special</span>`:""}<small>${t.dur} min${t.price?` · ${esc(t.price)}`:""}${t.category?` · ${esc(t.category)}`:""}${t.after?` · ${t.after} min buffer`:""}${t.travel?" · travel reserved":""}${t.overlap?` · ${t.overlap} min can overlap`:""}${t.recall?` · rebook reminder ${t.recall}d`:""}</small></span><span class="mode">${lbl}</span>
+    <div class="type-item"><span class="ic ${t.mode}">${icon}</span><span class="nm">${esc(t.name)}${t.special?` <span style="display:inline-block;font-size:9.5px;font-weight:700;letter-spacing:.03em;text-transform:uppercase;padding:1px 6px;border-radius:999px;background:#fef3c7;color:#92400e;vertical-align:middle">Special</span>`:""}<small>${t.dur} min${t.price?` · ${esc(t.price)}`:""}${t.category&&!salon?` · ${esc(t.category)}`:""}${t.after?` · ${t.after} min buffer`:""}${t.travel&&!salon?" · travel reserved":""}${t.overlap?` · ${t.overlap} min can overlap`:""}${t.recall?` · rebook reminder ${t.recall}d`:""}</small></span><span class="mode">${lbl}</span>
       <button class="btn sm" data-edit="${id}" style="margin-left:12px">Edit</button>
       <button class="rm" data-id="${id}" title="Remove" style="margin-left:8px;background:none;border:none;color:var(--muted-2);font-size:13px">✕</button></div>
     <div class="type-edit" id="te-${id}" style="display:none;border:1px solid var(--line);border-top:none;border-radius:0 0 var(--r-sm) var(--r-sm);padding:12px 14px;margin:-7px 0 9px;background:#fbfcfe">
       <div class="grid-2">
         <div class="field"><label class="lab">Name</label><input class="inp" id="te-name-${id}" value="${esc(t.name)}"></div>
-        <div class="field"><label class="lab">Mode</label><select class="inp" id="te-mode-${id}"><option value="in_person"${t.mode==='in_person'?' selected':''}>In person</option><option value="phone"${t.mode==='phone'?' selected':''}>Phone</option><option value="virtual"${t.mode==='virtual'?' selected':''}>Virtual</option></select></div>
+        <div class="field"${salon?' style="display:none"':''}><label class="lab">Mode</label><select class="inp" id="te-mode-${id}"><option value="in_person"${t.mode==='in_person'?' selected':''}>In person</option><option value="phone"${t.mode==='phone'?' selected':''}>Phone</option><option value="virtual"${t.mode==='virtual'?' selected':''}>Virtual</option></select></div>
       </div>
       <div class="grid-2">
         <div class="field"><label class="lab">Length (min)</label><input class="inp" type="number" id="te-dur-${id}" value="${t.dur}" min="5" step="5"></div>
         <div class="field"><label class="lab">Buffer after (min)</label><input class="inp" type="number" id="te-after-${id}" value="${t.after||0}" min="0" step="5"></div>
       </div>
-      <div class="field"><label class="switch"><input type="checkbox" id="te-travel-${id}"${t.travel?' checked':''}><span class="track"></span><span class="txt">Reserve travel time</span></label></div>
+      <div class="field"${salon?' style="display:none"':''}><label class="switch"><input type="checkbox" id="te-travel-${id}"${t.travel?' checked':''}><span class="track"></span><span class="txt">Reserve travel time</span></label></div>
       ${salonOn()?`<div class="field"><label class="switch"><input type="checkbox" id="te-ov-${id}"${t.overlap?' checked':''}><span class="track"></span><span class="txt">Allow overlap during processing</span></label></div>
       <div class="field" id="te-ovrow-${id}" style="display:${t.overlap?'block':'none'}"><label class="lab">Overlap minutes <span class="sub">processing tail that can overlap another booking</span></label><input class="inp" type="number" id="te-ovmin-${id}" value="${t.overlap||60}" min="0" step="5"></div>
       <div class="field"><label class="lab">Remind to rebook after <span class="sub">days — nudge past clients back for this service; blank for off</span></label><input class="inp" type="number" id="te-recall-${id}" value="${t.recall||''}" placeholder="off" min="0" step="1" style="max-width:180px"></div>`:''}
@@ -869,7 +870,7 @@ async function saveTypeEdit(id){
   const recall=(+((g('recall')&&g('recall').value)||0)||0);
   const incl=((g('includes')&&g('includes').value)||'').split('\n').map(s=>s.trim()).filter(Boolean);
   const special=!!(g('special')&&g('special').checked);
-  const patch={ name, mode, default_duration_min:dur, buffer_after_min:+g('after').value||0, requires_travel:g('travel').checked, overlap_minutes:overlap, rebook_after_days: recall>0?recall:null,
+  const patch={ name, mode, default_duration_min:dur, buffer_after_min:+g('after').value||0, requires_travel:(!salonOn()&&g('travel').checked), overlap_minutes:overlap, rebook_after_days: recall>0?recall:null,
     description:((g('desc')&&g('desc').value.trim())||null), price:((g('price')&&g('price').value.trim())||null), category:((g('category')&&g('category').value.trim())||null), includes: incl.length?incl:null,
     is_special:special, special_starts: special?((g('sstart')&&g('sstart').value)||null):null, special_ends: special?((g('send')&&g('send').value)||null):null, new_clients_only: special?!!(g('newonly')&&g('newonly').checked):false };
   const btn=document.querySelector('#types [data-save-type="'+id+'"]'); if(btn){ btn.disabled=true; btn.textContent='Saving…'; } set('Saving…');
@@ -893,7 +894,7 @@ async function addType(){
   const recall=(+(($("#t-recall")&&$("#t-recall").value)||0)||0);
   const incl=(($("#t-includes")&&$("#t-includes").value)||'').split('\n').map(s=>s.trim()).filter(Boolean);
   const special=!!($("#t-special")&&$("#t-special").checked);
-  const row={ account_id:state.account.id, name, mode, default_duration_min:dur, buffer_before_min:0, buffer_after_min:+$("#t-after").value||0, requires_travel:$("#t-travel").checked, overlap_minutes:overlap, rebook_after_days: recall>0?recall:null,
+  const row={ account_id:state.account.id, name, mode, default_duration_min:dur, buffer_before_min:0, buffer_after_min:+$("#t-after").value||0, requires_travel:(!salonOn()&&$("#t-travel").checked), overlap_minutes:overlap, rebook_after_days: recall>0?recall:null,
     description:(($("#t-desc")&&$("#t-desc").value.trim())||null), price:(($("#t-price")&&$("#t-price").value.trim())||null), category:(($("#t-category")&&$("#t-category").value.trim())||null), includes: incl.length?incl:null,
     is_special:special, special_starts: special?((($("#t-sstart")&&$("#t-sstart").value)||null)):null, special_ends: special?((($("#t-send")&&$("#t-send").value)||null)):null, new_clients_only: special?!!($("#t-newonly")&&$("#t-newonly").checked):false };
   const { data, error } = await db.from('appointment_types').insert(row).select().single();
@@ -1001,7 +1002,7 @@ async function seedPmVisitTypes(){
 
 /* ===================== STAFF PAGE (salon) ===================== */
 async function loadStaff(){
-  const { data } = await db.from('users').select('id,full_name,email,title,role,is_bookable,phone').eq('account_id', state.account.id).order('created_at');
+  const { data } = await db.from('users').select('id,full_name,email,title,role,is_bookable,phone,pronunciation').eq('account_id', state.account.id).order('created_at');
   state.staff = data||[];
 }
 function roleLabel(u){ return ['owner','admin'].includes(u.role) ? (u.role==='owner'?'Owner':'Manager') : providerLabelCap(); }
@@ -1009,7 +1010,8 @@ function staffRowHTML(u){
   const you=u.id===state.owner.id, mgr=['owner','admin'].includes(u.role), lbl=roleLabel(u);
   const book = u.is_bookable ? '<span class="pill ok">Takes bookings</span>' : '<span class="pill">Not bookable</span>';
   const toggle = `<button class="btn sm" data-book="${u.id}" data-val="${u.is_bookable?'0':'1'}">${u.is_bookable?'Stop bookings':'Make bookable'}</button>`;
-  const xfer=`<div style="margin-top:7px;display:flex;gap:6px;align-items:center;flex-wrap:wrap"><span style="font-size:11.5px;color:var(--muted)">Transfer calls to</span><input class="inp" data-phone="${u.id}" value="${esc(u.phone||'')}" placeholder="+18175551234" style="max-width:168px;font-size:12.5px;padding:5px 9px"><button class="btn sm" data-savephone="${u.id}">Save</button><span class="phone-msg" data-msg="${u.id}" style="font-size:11.5px;color:var(--muted)"></span></div>`;
+  const xfer=`<div style="margin-top:7px;display:flex;gap:6px;align-items:center;flex-wrap:wrap"><span style="font-size:11.5px;color:var(--muted)">Transfer calls to</span><input class="inp" data-phone="${u.id}" value="${esc(u.phone||'')}" placeholder="+18175551234" style="max-width:168px;font-size:12.5px;padding:5px 9px"><button class="btn sm" data-savephone="${u.id}">Save</button><span class="phone-msg" data-msg="${u.id}" style="font-size:11.5px;color:var(--muted)"></span></div>`
+    + (u.is_bookable?`<div style="margin-top:6px;display:flex;gap:6px;align-items:center;flex-wrap:wrap"><span style="font-size:11.5px;color:var(--muted)" title="How ${esc(aName())} says the first name on the phone">Said like</span><input class="inp" data-pron="${u.id}" value="${esc(u.pronunciation||'')}" placeholder="e.g. ahn, twong" style="max-width:168px;font-size:12.5px;padding:5px 9px"><button class="btn sm" data-savepron="${u.id}">Save</button><span data-pronmsg="${u.id}" style="font-size:11.5px;color:var(--muted)"></span></div>`:'');
   return `<div class="staff-row">
     <div class="staff-main"><b>${esc(u.full_name||u.email)}${you?' <small style="display:inline;color:var(--muted-2)">(you)</small>':''}</b><small>${esc(u.email)}${u.title?' · '+esc(u.title):''}</small>${xfer}</div>
     <div class="staff-meta"><span class="pill ${mgr?'mgr':''}">${lbl}</span>${book}</div>
@@ -1029,7 +1031,7 @@ function pageStaff(){
   const staff=state.staff||[];
   $("#page").innerHTML=`
   <div class="page">
-    <div class="page-head"><h1>Staff</h1><p>Give each ${providerLabel()} their own login. They see only their own schedule and bookings; you see everyone's. Mark who takes appointments so ${esc(aName())} books the right person.</p></div>
+    <div class="page-head"><h1>Staff</h1><p>Give each ${providerLabel()} their own login. They see only their own schedule and bookings; you see everyone's. Mark who takes appointments so ${esc(aName())} books the right person, and add how to say a name when it isn't obvious so ${esc(aName())} pronounces it right on the phone.</p></div>
     <div class="card"><div class="card-h"><h2>Your team</h2><button class="btn sm" id="st-refresh">Refresh</button></div>
       <div id="staff-list">${staff.length?staff.map(staffRowHTML).join(""):`<div class="empty">${I.users}<div>Loading your team…</div></div>`}</div>
     </div>
@@ -1054,7 +1056,15 @@ function pageStaff(){
   $("#st-add").onclick=addStaff;
   bindBookToggles();
 }
-function bindBookToggles(){ document.querySelectorAll('#staff-list [data-book]').forEach(b=>b.onclick=()=>toggleBookable(b.dataset.book, b.dataset.val==='1')); document.querySelectorAll('#staff-list [data-savephone]').forEach(b=>b.onclick=()=>saveStaffPhone(b.dataset.savephone)); }
+function bindBookToggles(){ document.querySelectorAll('#staff-list [data-book]').forEach(b=>b.onclick=()=>toggleBookable(b.dataset.book, b.dataset.val==='1')); document.querySelectorAll('#staff-list [data-savephone]').forEach(b=>b.onclick=()=>saveStaffPhone(b.dataset.savephone)); document.querySelectorAll('#staff-list [data-savepron]').forEach(b=>b.onclick=()=>saveStaffPron(b.dataset.savepron)); }
+async function saveStaffPron(id){
+  const inp=document.querySelector(`[data-pron="${id}"]`); const m=document.querySelector(`[data-pronmsg="${id}"]`);
+  if(!inp) return; const val=inp.value.trim().toLowerCase().slice(0,40); inp.value=val;
+  if(m){ m.style.color='var(--muted)'; m.textContent='Saving…'; }
+  const { error }=await db.from('users').update({pronunciation:val||null}).eq('id',id);
+  if(!error){ const r=(state.staff||[]).find(s=>s.id===id); if(r) r.pronunciation=val; if(m){ m.style.color='var(--ok)'; m.textContent=val?'Saved':'Cleared'; setTimeout(()=>{ if(m) m.textContent=''; },1400); } }
+  else if(m){ m.style.color='var(--danger)'; m.textContent='Error'; }
+}
 function genPassword(){ const c="ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnpqrstuvwxyz23456789"; let s=""; const a=crypto.getRandomValues(new Uint32Array(12)); for(let i=0;i<12;i++) s+=c[a[i]%c.length]; return s; }
 async function toggleBookable(id,val){ await db.from('users').update({is_bookable:val}).eq('id',id); if(id===state.owner.id) state.owner.bookable=val; await loadStaff(); const el=$("#staff-list"); if(el){ el.innerHTML=(state.staff||[]).map(staffRowHTML).join(""); bindBookToggles(); } }
 async function addStaff(){
