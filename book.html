@@ -210,6 +210,7 @@
 <script>
 const API="https://hingbdtmxozbjetzwibj.supabase.co/functions/v1/book-public";
 const qs=new URLSearchParams(location.search);
+const SRC=(qs.get('src')||'').replace(/[^a-z0-9_-]/gi,'').slice(0,24)||null; // where this visitor came from (google, instagram, recall, sms...)
 const ACCOUNT=qs.get('s')||qs.get('a')||(location.pathname.split('/book/')[1]||'').replace(/\/+$/,'');
 const S={info:null,service:null,stylist:null,slot:null,otpId:null,channel:null,slotStart:null,property:null,unit:'',answers:{},day:null,cat:'',slotsCache:null};
 
@@ -318,7 +319,9 @@ async function boot(){
   if(info.hours) chips.push(`<span class="hchip">${I.clock}${esc(info.hours)}</span>`);
   $("#b-chips").innerHTML=chips.join('');
   document.title=(info.pm?'Schedule · ':'Book · ')+info.business;
-  side(); stepService();
+  side();
+  const preSvc=qs.get('service');
+  if(!(preSvc && pickService(preSvc))) stepService();
 }
 
 function stepService(){
@@ -342,7 +345,15 @@ function stepService(){
   html+=`</div>`;
   card(html);
   document.querySelectorAll('[data-cat]').forEach(el=>el.onclick=()=>{ S.cat=el.dataset.cat; stepService(); });
-  document.querySelectorAll('[data-svc]').forEach(el=>el.onclick=()=>{ S.service=svc.find(x=>x.id===el.dataset.svc); S.slot=null; S.slotStart=null; S.answers={}; S.day=null; S.slotsCache=null; side(); if(isPm()){ S.stylist=null; if(needsProp()) stepProperty(); else { S.property=null; S.unit=''; stepTime(); } return; } if(S.preStylist){ S.stylist=S.preStylist; stepTime(); } else { S.stylist=null; (S.info.salon_team?stepStylist():stepTime()); } });
+  document.querySelectorAll('[data-svc]').forEach(el=>el.onclick=()=>pickService(el.dataset.svc));
+}
+/* Choose a service and move to the next step. Used by the tiles and by ?service= links (rebook texts, "book again"). */
+function pickService(id){
+  const svc=S.info.services||[]; const s=svc.find(x=>x.id===id); if(!s) return false;
+  S.service=s; S.slot=null; S.slotStart=null; S.answers={}; S.day=null; S.slotsCache=null; side();
+  if(isPm()){ S.stylist=null; if(needsProp()) stepProperty(); else { S.property=null; S.unit=''; stepTime(); } return true; }
+  if(S.preStylist){ S.stylist=S.preStylist; stepTime(); } else { S.stylist=null; (S.info.salon_team?stepStylist():stepTime()); }
+  return true;
 }
 
 /* PM: which property (and unit)? */
@@ -445,7 +456,7 @@ async function sendCode(){
   if(!phone){ setErr('Please enter your mobile number.'); return; }
   if(!gate && !email){ setErr('Please enter your email so we can send your code.'); return; }
   btn.disabled=true; const o=btn.innerHTML; btn.textContent='Sending…'; msg.textContent='';
-  const extra={service_id:S.service.id, stylist_id:S.stylist?S.stylist.id:null, start_iso:S.slot, name, phone, email, hp};
+  const extra={service_id:S.service.id, stylist_id:S.stylist?S.stylist.id:null, start_iso:S.slot, name, phone, email, hp, src:SRC};
   if(isPm()){ const qsl=(S.service&&Array.isArray(S.service.collect))?S.service.collect.filter(Boolean):[]; const answers={}; qsl.forEach((q,i)=>{ const el=$("#d-q-"+i); if(el&&el.value.trim()) answers[q]=el.value.trim(); }); S.answers=answers; extra.property_id=S.property?S.property.id:null; extra.unit=S.unit||null; extra.answers=answers; }
   const r=await api('start',extra);
   btn.disabled=false; btn.innerHTML=o;
@@ -489,12 +500,15 @@ function stepWaitlist(){
     <label class="f">Your name</label><input class="inp" id="w-name" autocomplete="name" placeholder="First and last name">
     <div class="grid2"><div><label class="f">Mobile number</label><input class="inp" id="w-phone" inputmode="tel" autocomplete="tel" placeholder="(555) 123-4567"></div>
     <div><label class="f">Email <small>(optional)</small></label><input class="inp" id="w-email" type="email" autocomplete="email" placeholder="you@email.com"></div></div>
-    <label class="f">Anything we should know? <small>(optional)</small></label><input class="inp" id="w-note" placeholder="e.g. mornings work best">
+    <label class="f">When works best?</label><div class="tabs" id="w-pref"><button class="tab on" data-pref="">Any time</button><button class="tab" data-pref="morning">Mornings</button><button class="tab" data-pref="afternoon">Afternoons</button><button class="tab" data-pref="evening">Evenings</button></div>
+    <label class="f">Anything we should know? <small>(optional)</small></label><input class="inp" id="w-note" placeholder="e.g. only Tuesdays or Thursdays">
     <input class="hp" id="w-hp" tabindex="-1" autocomplete="off" placeholder="Leave this blank">
     <button class="btn" id="w-go">Join the waitlist</button>
     <div class="msg" id="w-msg"></div>`);
   $("#bk").onclick=stepTime;
   $("#w-go").onclick=joinWaitlist;
+  S.wPref='';
+  document.querySelectorAll('#w-pref [data-pref]').forEach(el=>el.onclick=()=>{ S.wPref=el.dataset.pref; document.querySelectorAll('#w-pref .tab').forEach(t=>t.classList.toggle('on',t===el)); });
 }
 async function joinWaitlist(){
   const btn=$("#w-go"), msg=$("#w-msg");
@@ -503,7 +517,7 @@ async function joinWaitlist(){
   if(!name){ setErr('Please enter your name.'); return; }
   if(!phone){ setErr('Please enter your mobile number.'); return; }
   btn.disabled=true; const o=btn.textContent; btn.textContent='Adding…'; msg.textContent='';
-  const r=await api('waitlist',{service_id:S.service.id, stylist_id:S.stylist?S.stylist.id:null, name, phone, email, note, hp:$("#w-hp").value});
+  const r=await api('waitlist',{service_id:S.service.id, stylist_id:S.stylist?S.stylist.id:null, name, phone, email, note, time_pref:S.wPref||null, hp:$("#w-hp").value, src:SRC});
   btn.disabled=false; btn.textContent=o;
   if(r&&r.ok){ waitlistDone(r.already); return; }
   const reasons={need_phone:'Please enter your mobile number.',missing:'Please enter your name.',spam:'Something went wrong. Please try again.',failed:'We could not add you right now. Please try again.'};

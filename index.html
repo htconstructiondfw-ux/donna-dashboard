@@ -434,9 +434,9 @@ function providerLabelPlural(){ return providerLabel()+'s'; }
 function teamAllowed(){ const p=String((state.account&&state.account.plan)||'').toLowerCase(); return p==='pro'||p==='enterprise'; }
 function renderApp(){
   const mgr=isManager();
-  if(!mgr && !['schedule','appointments','clients','messages','waitlist','mylink'].includes(state.view)) state.view='appointments';
-  // A solo owner lives in their appointments; land there on first load, then leave navigation free.
-  if(mgr && isSolo() && !state._homed){ state._homed=true; if(state.view==='assistant') state.view='appointments'; }
+  if(!mgr && !['today','schedule','appointments','clients','messages','waitlist','mylink'].includes(state.view)) state.view='today';
+  // A solo owner lives in their day; land there on first load, then leave navigation free.
+  if(mgr && isSolo() && !state._homed){ state._homed=true; if(state.view==='assistant') state.view='today'; }
   if(mgr && new URLSearchParams(location.search).get('calendar')) state.view='settings';
   let navConfig, navActivity, soon=[];
   if(mgr){
@@ -446,13 +446,14 @@ function renderApp(){
     navConfig.push(["knowledge","Knowledge",I.book],["booking",pm?"Self-scheduling":"Booking page",I.link]);
     if(!pm) navConfig.push(["intake","Intake forms",I.clip],["promotions","Promotions",I.promo]);
     navConfig.push(["notifications","Notifications",I.bell],["settings","Settings",I.gear]);
-    navActivity=[["calls","Calls",I.phone],["appointments","Appointments",I.appt],["messages","Phone messages",I.msg],["contacts",salonOn()?"Clients":"Contacts",I.users],["gaps","Questions",I.book],["conversations","Email inbox",I.mail]];
+    navActivity=[["calls","Calls",I.phone],["appointments","Appointments",I.appt],["messages","Phone messages",I.msg],["contacts",salonOn()?"Clients":"Contacts",I.users],["gaps","Questions",I.book],["conversations","Inbox",I.mail]];
     if(salonOn()) navActivity.splice(2,0,["waitlist","Waitlist",I.clock]);
+    if(!pmMode()) navActivity.splice(0,0,["today","Today",I.clock]);
     if(propertyOn()){ navConfig.splice(1,0,["properties","Properties",I.building]); navConfig.splice(2,0,["contractors","Contractors",I.users]); navActivity.splice(0,0,["requests","Service requests",I.wrench]); }
     soon=[["billing","Billing",I.card]];
   } else {
     // Stylist: focused view — their own bookings, messages, clients, and their own availability.
-    navConfig=[["appointments","My appointments",I.appt],["messages","Phone messages",I.msg],["clients","Clients",I.users],["schedule","My availability",I.cal]];
+    navConfig=[["today","Today",I.clock],["appointments","My appointments",I.appt],["messages","Phone messages",I.msg],["clients","Clients",I.users],["schedule","My availability",I.cal]];
     if(salonOn()) navConfig.splice(3,0,["waitlist","Waitlist",I.clock]);
     if(salonOn()) navConfig.push(["mylink","My booking link",I.link]);
     navActivity=[];
@@ -475,7 +476,7 @@ function renderApp(){
     </aside>
     <main class="main">
       <div class="topbar">
-        <div class="crumbs">${['settings','notifications'].includes(state.view)?'Account':(['messages','appointments','waitlist','calls','contacts','clients','gaps','conversations','requests'].includes(state.view)?'Activity':'Configure')} · <b>${esc(({assistant:"Assistant",schedule:"Schedule",types:(pmMode()?"Visit types":(salonOn()?"Services":"Appointment types")),staff:"Staff",messages:"Phone messages",appointments:(pmMode()?"Visits & appointments":"Appointments"),settings:"Settings",notifications:"Notifications",calls:"Calls",knowledge:"Knowledge",contacts:(salonOn()?"Clients":"Contacts"),clients:"Clients",gaps:"Open questions",conversations:"Email inbox",waitlist:"Waitlist",promotions:"Promotions",booking:(pmMode()?"Self-scheduling":"Booking page"),mylink:"My booking link",intake:"Intake forms",properties:"Properties",contractors:"Contractors",requests:"Service requests"})[state.view])}</b></div>
+        <div class="crumbs">${['settings','notifications'].includes(state.view)?'Account':(['today','messages','appointments','waitlist','calls','contacts','clients','gaps','conversations','requests'].includes(state.view)?'Activity':'Configure')} · <b>${esc(({today:"Today",assistant:"Assistant",schedule:"Schedule",types:(pmMode()?"Visit types":(salonOn()?"Services":"Appointment types")),staff:"Staff",messages:"Phone messages",appointments:(pmMode()?"Visits & appointments":"Appointments"),settings:"Settings",notifications:"Notifications",calls:"Calls",knowledge:"Knowledge",contacts:(salonOn()?"Clients":"Contacts"),clients:"Clients",gaps:"Open questions",conversations:"Inbox",waitlist:"Waitlist",promotions:"Promotions",booking:(pmMode()?"Self-scheduling":"Booking page"),mylink:"My booking link",intake:"Intake forms",properties:"Properties",contractors:"Contractors",requests:"Service requests"})[state.view])}</b></div>
         <div class="acct-chip"><span class="av">${initials}</span><div class="who"><b>${esc(state.account.company)}</b><span>${esc((state.account.status||'trial'))} · ${esc(state.account.plan||'starter')}</span></div></div>
       </div>
       <div id="approve-banner"></div>
@@ -488,13 +489,13 @@ function renderApp(){
   paintApproveBanner();
 }
 function renderPage(){
-  if(!isManager() && !['schedule','appointments','clients','messages','waitlist','mylink'].includes(state.view)) state.view='appointments';
+  if(!isManager() && !['today','schedule','appointments','clients','messages','waitlist','mylink'].includes(state.view)) state.view='today';
   if('speechSynthesis' in window) window.speechSynthesis.cancel();
   teardownRealtime();
   document.querySelectorAll(".nav-item[data-v]").forEach(b=>b.classList.toggle("active",b.dataset.v===state.view));
-  $(".crumbs").innerHTML=`${['settings','notifications'].includes(state.view)?'Account':(['messages','appointments','waitlist','calls','contacts','clients','gaps','conversations','requests'].includes(state.view)?'Activity':'Configure')} · <b>${esc(({assistant:"Assistant",schedule:"Schedule",types:(pmMode()?"Visit types":(salonOn()?"Services":"Appointment types")),staff:"Staff",messages:"Phone messages",appointments:(pmMode()?"Visits & appointments":"Appointments"),settings:"Settings",notifications:"Notifications",calls:"Calls",knowledge:"Knowledge",contacts:(salonOn()?"Clients":"Contacts"),clients:"Clients",gaps:"Open questions",conversations:"Email inbox",waitlist:"Waitlist",promotions:"Promotions",booking:(pmMode()?"Self-scheduling":"Booking page"),mylink:"My booking link",intake:"Intake forms",properties:"Properties",contractors:"Contractors",requests:"Service requests"})[state.view])}</b>`;
-  const PAGES={assistant:pageAssistant, schedule:pageSchedule, types:pageTypes, staff:pageStaff, messages:pageMessages, appointments:renderAppts, settings:pageSettings, notifications:pageNotifications, calls:pageCalls, knowledge:pageKnowledge, contacts:pageContacts, clients:pageClients, gaps:pageGaps, conversations:pageConversations, waitlist:pageWaitlist, promotions:pagePromotions, booking:pageBookingPage, mylink:pageMyLink, intake:pageIntakeForms, properties:pageProperties, contractors:pageContractors, requests:pageServiceRequests};
-  const LOADERS={appointments:loadAppointments, messages:loadMessages, calls:loadCalls, contacts:loadContacts, clients:loadContacts, gaps:loadGaps, conversations:loadConversations, staff:loadStaff, waitlist:loadWaitlist};
+  $(".crumbs").innerHTML=`${['settings','notifications'].includes(state.view)?'Account':(['today','messages','appointments','waitlist','calls','contacts','clients','gaps','conversations','requests'].includes(state.view)?'Activity':'Configure')} · <b>${esc(({today:"Today",assistant:"Assistant",schedule:"Schedule",types:(pmMode()?"Visit types":(salonOn()?"Services":"Appointment types")),staff:"Staff",messages:"Phone messages",appointments:(pmMode()?"Visits & appointments":"Appointments"),settings:"Settings",notifications:"Notifications",calls:"Calls",knowledge:"Knowledge",contacts:(salonOn()?"Clients":"Contacts"),clients:"Clients",gaps:"Open questions",conversations:"Email inbox",waitlist:"Waitlist",promotions:"Promotions",booking:(pmMode()?"Self-scheduling":"Booking page"),mylink:"My booking link",intake:"Intake forms",properties:"Properties",contractors:"Contractors",requests:"Service requests"})[state.view])}</b>`;
+  const PAGES={today:pageToday, assistant:pageAssistant, schedule:pageSchedule, types:pageTypes, staff:pageStaff, messages:pageMessages, appointments:renderAppts, settings:pageSettings, notifications:pageNotifications, calls:pageCalls, knowledge:pageKnowledge, contacts:pageContacts, clients:pageClients, gaps:pageGaps, conversations:pageConversations, waitlist:pageWaitlist, promotions:pagePromotions, booking:pageBookingPage, mylink:pageMyLink, intake:pageIntakeForms, properties:pageProperties, contractors:pageContractors, requests:pageServiceRequests};
+  const LOADERS={today:loadAppointments, appointments:loadAppointments, messages:loadMessages, calls:loadCalls, contacts:loadContacts, clients:loadContacts, gaps:loadGaps, conversations:loadConversations, staff:loadStaff, waitlist:loadWaitlist};
   const v=state.view;
   (PAGES[v]||(()=>{}))();
   const ld=LOADERS[v];
@@ -1149,8 +1150,8 @@ function updateNavBadge(){
 /* ===================== KNOWLEDGE GAPS (OPEN QUESTIONS) ===================== */
 /* ===================== CONVERSATIONS (EMAIL INBOX) ===================== */
 async function loadConversations(){
-  const { data } = await db.from('conversations').select('*').eq('account_id', state.account.id).eq('channel','email').order('updated_at',{ascending:false});
-  state.conversations = data || [];
+  const { data } = await db.from('conversations').select('*').eq('account_id', state.account.id).in('channel',['email','sms']).order('updated_at',{ascending:false});
+  state.conversations = (data || []).filter(c=>c.channel==='email' || c.last_inbound_at || c.last_outbound_at);
   state.pendingApprovals = (data||[]).filter(c=>c.status==='awaiting_staff').length;
   if(typeof paintApproveBanner==='function') paintApproveBanner();
 }
@@ -1203,18 +1204,19 @@ function pageConversations(){
     .th-msgtxt{font-size:12.5px;margin-right:auto}
   </style>
   <div class="page">
-    <div class="page-head"><h1>Email inbox</h1><p>Email threads with ${pmMode()?'residents, owners, tenants, vendors, and prospects':'customers'}. ${esc(aName())} drafts replies here, and anything marked "Needs you" is waiting for your review before it sends.</p></div>
+    <div class="page-head"><h1>Inbox</h1><p>Email and text conversations with ${pmMode()?'residents, owners, tenants, vendors, and prospects':'clients'}. ${esc(aName())} answers texts on her own (confirmations, moves, cancellations, running late) and drafts email replies here; anything marked "Needs you" is waiting for your review before it sends. You can jump into any thread and reply yourself.</p></div>
     <div class="card">
       <div class="card-h"><h2>Conversations${needs?` <span class="hint">${needs} need you</span>`:''}</h2><button class="btn sm" id="cv-refresh">Refresh</button></div>
-      <div id="cv-list">${rows.length?rows.map(convRow).join(""):`<div class="empty">${I.inbox}<div>No email conversations yet. When a customer emails, ${esc(aName())} will draft a reply here for you.</div></div>`}</div>
+      <div id="cv-list">${rows.length?rows.map(convRow).join(""):`<div class="empty">${I.inbox}<div>No conversations yet. When a ${pmMode()?'resident':'client'} emails or texts, it shows up here.</div></div>`}</div>
     </div>
   </div>`;
   $("#cv-refresh").onclick=async()=>{ const b=$("#cv-refresh"); b.disabled=true; b.textContent="\u2026"; await loadConversations(); pageConversations(); };
   document.querySelectorAll('#cv-list [data-conv]').forEach(el=>el.onclick=()=>{ state.openConvId=el.dataset.conv; renderThread(); });
 }
+function contactNameFor(c){ if(!c||!c.contact_id) return ''; const k=(state.contacts||[]).find(x=>x.id===c.contact_id); return k?(k.preferred_name||k.name||''):''; }
 function convRow(c){
   return `<div class="cv-item" data-conv="${c.id}">
-    <div><div class="cv-who">${esc(c.customer_name||c.customer_identifier||'Customer')}</div>
+    <div><div class="cv-who">${esc(c.customer_name||contactNameFor(c)||c.customer_identifier||'Customer')} <span class="c-badge" style="background:${c.channel==='sms'?'#eef7f1':'#eef2fb'};color:${c.channel==='sms'?'#1e6b3e':'#2b4a8a'};margin-left:6px">${c.channel==='sms'?'Text':'Email'}</span></div>
       <div class="cv-meta">${esc(c.customer_identifier||'')}</div></div>
     <div class="cv-right">${convStatusBadge(c.status)}<div class="cv-meta">${c.last_inbound_at?fmtWhen(c.last_inbound_at):''}</div></div>
   </div>`;
@@ -1229,11 +1231,18 @@ async function renderThread(){
   const replyingTo = lastIn ? `<div class="th-replyto"><div class="th-role">Replying to ${esc(c.customer_name||c.customer_identifier||'the customer')}</div><div class="th-quote">${esc((lastIn.subject?('Re: '+lastIn.subject+'\n\n'):'')+(lastIn.body||''))}</div></div>` : '';
   const rowsHtml = state.threadMsgs.map(m=>{
     if(m.direction==='outbound' && m.status!=='sent') return '';
-    const role = m.direction==='inbound'?'Customer':(m.actor==='staff'?'You':aName());
+    const role = m.direction==='inbound'?(c.channel==='sms'?'Client (text)':'Customer'):(m.actor==='staff'?'You':aName());
     const cls = m.direction==='inbound'?'th-in':'th-out';
     return `<div class="th-msg ${cls}"><div class="th-role">${esc(role)}${m.subject?' \u00b7 '+esc(m.subject):''}</div><div class="th-body">${esc(m.body||'')}</div></div>`;
   }).join("");
-  const draftHtml = draft ? `
+  const draftHtml = c.channel==='sms' ? `
+    <div class="th-msg th-out">
+      <div class="th-role">Text back as ${esc(state.account.name||'the business')}</div>
+      <textarea class="th-edit" id="th-draft" style="min-height:80px" placeholder="Type a text to ${esc(c.customer_name||c.customer_identifier||'the client')}… ${esc(aName())} keeps handling their replies."></textarea>
+      <div class="th-actions"><span class="th-msgtxt" id="th-msg"></span>
+        <button class="btn sm primary" data-act="sendsms">Send text</button>
+      </div>
+    </div>` : draft ? `
     <div class="th-msg th-draft">
       <div class="th-role">${esc(aName())}'s draft \u2014 review before sending</div>
       ${replyingTo}
@@ -1287,6 +1296,12 @@ function bindThreadActions(c){
     }catch(e){ btns.forEach(b=>b.disabled=false); if(msg){msg.style.color='var(--danger)';msg.textContent='Could not send. '+(e.message||'');} }
   };
   const sBtn=document.querySelector('[data-act="send"]'); if(sBtn) sBtn.onclick=()=>send(sBtn.dataset.mid);
+  const tBtn=document.querySelector('[data-act="sendsms"]'); if(tBtn) tBtn.onclick=async()=>{
+    const ta=$("#th-draft"); const bodyText=ta?ta.value.trim():""; if(!bodyText){ if(msg){msg.style.color='var(--danger)';msg.textContent='Nothing to send.';} return; }
+    tBtn.disabled=true; if(msg){ msg.style.color='var(--muted)'; msg.textContent='Sending…'; }
+    try{ const { data, error }=await db.functions.invoke("staff-text",{ body:{ action:'reply', conversation_id:c.id, body:bodyText } }); if(error||!data||!data.ok) throw new Error((data&&data.error)||(error&&error.message)||'send failed'); await loadConversations(); state.openConvId=c.id; renderThread(); }
+    catch(e){ tBtn.disabled=false; if(msg){ msg.style.color='var(--danger)'; msg.textContent='Could not send. '+(e.message||''); } }
+  };
   const nBtn=document.querySelector('[data-act="sendnew"]'); if(nBtn) nBtn.onclick=()=>send(null);
   const dBtn=document.querySelector('[data-act="discard"]');
   if(dBtn) dBtn.onclick=async()=>{
@@ -1367,7 +1382,8 @@ async function loadContacts(){
     language:c.language||"", listType:c.list_type||"normal", callCount:c.call_count||0,
     lastCallAt:c.last_call_at||null, lastSummary:c.last_call_summary||"", notes:c.notes||"", memory:c.memory||"",
     preferredName:c.preferred_name||"", pronunciation:c.pronunciation||"",
-    email:c.email||"", label:c.label||"", source:c.source||""
+    email:c.email||"", label:c.label||"", source:c.source||"",
+    allergies:c.allergies||"", formulas:c.formulas||"", preferences:c.preferences||"", stylistNotes:c.stylist_notes||""
   }));
 }
 function contactMatch(c,q){
@@ -1467,6 +1483,7 @@ function contactHTML(c){
       <span class="c-name">${esc(c.name||"Unknown caller")}</span>
       ${vip?`<span class="c-badge vip">${pmMode()?'Priority':'VIP'}</span>`:''}${blocked?'<span class="c-badge blocked">Blocked</span>':''}
       ${langBadge(c.language)}
+      ${c.allergies?`<span class="c-badge" style="background:#fde8e8;color:#9b1c1c" title="${esc(c.allergies)}">Allergy</span>`:''}
       ${c.phone?`<a class="c-num" href="tel:${esc(tel)}">${esc(c.phone)}</a>`:''}
     </div>
     ${meta.length?`<div class="c-meta">${meta.join(" \u00b7 ")}</div>`:''}
@@ -1530,7 +1547,7 @@ function clientsListHTML(list){
   return list.map(c=>{
     const tel=c.phone?c.phone.replace(/[^\d+]/g,''):'';
     return `<div class="c-item">
-      <div class="c-top"><span class="c-name">${esc(c.name||'Unknown')}</span>${c.phone?`<a class="c-num" href="tel:${esc(tel)}">${esc(c.phone)}</a>`:''}</div>
+      <div class="c-top"><span class="c-name">${esc(c.name||'Unknown')}</span>${c.allergies?`<span class="c-badge" style="background:#fde8e8;color:#9b1c1c;font-size:10px;letter-spacing:.05em;text-transform:uppercase;padding:2px 7px;border-radius:20px;font-weight:600" title="${esc(c.allergies)}">Allergy</span>`:''}${c.phone?`<a class="c-num" href="tel:${esc(tel)}">${esc(c.phone)}</a>`:''}</div>
       ${c.email?`<div class="c-meta"><a href="mailto:${esc(c.email)}" style="color:var(--muted)">${esc(c.email)}</a></div>`:''}
       <div class="c-actions"><button class="btn sm" data-visits="${c.id}">Visits</button></div>
       <div class="c-visits" id="c-visits-${c.id}" style="display:none;margin-top:11px;border-top:1px solid var(--line-2);padding-top:10px"></div>
@@ -1545,15 +1562,25 @@ async function loadVisits(id){
   try{
     const [aRes,cRes]=await Promise.all([
       db.from('appointments').select('starts_at,title,status,user_id,appointment_type_id,notes').eq('contact_id',id).order('starts_at',{ascending:false}).limit(50),
-      db.from('contacts').select('stylist_notes').eq('id',id).maybeSingle()
+      db.from('contacts').select('stylist_notes, allergies, formulas, preferences').eq('id',id).maybeSingle()
     ]);
-    rows=aRes.data||[]; cnotes=(cRes.data&&cRes.data.stylist_notes)||'';
+    rows=aRes.data||[]; cnotes=(cRes.data&&cRes.data.stylist_notes)||''; var ccard=cRes.data||{};
   }catch(_e){ rows=[]; }
   const typeName=tid=>{ const t=(state.types||[]).find(x=>x.id===tid); return t?t.name:''; };
   const pm=pmMode();
   const notesLabel = salonOn() ? 'Stylist notes &amp; formula' : (pm ? 'Notes about this person' : 'Notes');
   const notesPh = salonOn() ? 'e.g. Color formula: 6N + 20 vol, 35 min. Prefers a side part. Note: sensitive scalp.' : (pm ? 'e.g. Prefers text. Dog in the yard — knock first. Board treasurer at Sunset Ridge. Authorized for Suite 210 billable work.' : 'e.g. Prefers afternoon appointments. Ask about the warranty.');
-  const formulaBox=`<div style="margin-bottom:12px">
+  const cc=(typeof ccard!=='undefined'&&ccard)||{};
+  const L=t=>`<div style="font-size:11px;text-transform:uppercase;letter-spacing:.05em;color:var(--muted);font-weight:600;margin-bottom:4px">${t}</div>`;
+  const formulaBox= salonOn()
+    ? `<div style="margin-bottom:12px;display:grid;grid-template-columns:1fr 1fr;gap:10px" class="client-card">
+    <div style="grid-column:1/-1;padding:10px 12px;border:1px solid ${cc.allergies?'#f3b4b4':'var(--line)'};border-radius:10px;background:${cc.allergies?'#fff5f5':'var(--surface)'}">${L('<span style="color:#9b1c1c">Allergies &amp; sensitivities</span> <span style="font-weight:400;text-transform:none;letter-spacing:0">— '+esc(aName())+' reads this before booking and never books a chemical service without flagging it</span>')}<textarea class="inp" id="al-${id}" rows="2" placeholder="e.g. PPD allergy (no permanent color). Sensitive scalp — use low-volume developer.">${esc(cc.allergies||'')}</textarea></div>
+    <div>${L('Color formulas')}<textarea class="inp" id="fm-${id}" rows="3" placeholder="e.g. Roots: 6N + 6NB (1:1) 20 vol, 35 min. Gloss: 8V + clear, 10 min.">${esc(cc.formulas||'')}</textarea></div>
+    <div>${L('Preferences')}<textarea class="inp" id="pf-${id}" rows="3" placeholder="e.g. Side part, no bangs. Likes it quiet. Always books with An. Coffee, black.">${esc(cc.preferences||'')}</textarea></div>
+    <div style="grid-column:1/-1">${L('Stylist notes')}<textarea class="inp" id="sn-${id}" rows="2" placeholder="e.g. Growing out layers — trim only until spring. Mentioned a wedding in June.">${esc(cnotes)}</textarea></div>
+    <div style="grid-column:1/-1;display:flex;align-items:center;gap:10px"><button class="btn sm primary" id="sn-save-${id}">Save client card</button><span id="sn-msg-${id}" style="font-size:12px;color:var(--muted)"></span></div>
+  </div>`
+    : `<div style="margin-bottom:12px">
     <div style="font-size:11px;text-transform:uppercase;letter-spacing:.05em;color:var(--muted);font-weight:600;margin-bottom:6px">${notesLabel}</div>
     <textarea class="inp" id="sn-${id}" rows="3" placeholder="${esc(notesPh)}">${esc(cnotes)}</textarea>
     <div style="margin-top:6px;display:flex;align-items:center;gap:10px"><button class="btn sm primary" id="sn-save-${id}">Save notes</button><span id="sn-msg-${id}" style="font-size:12px;color:var(--muted)"></span></div>
@@ -1592,7 +1619,11 @@ async function loadVisits(id){
   if(sb) sb.onclick=async()=>{
     const ta=document.getElementById('sn-'+id), msg=document.getElementById('sn-msg-'+id);
     const val=ta?ta.value.trim():''; sb.disabled=true; const o=sb.textContent; sb.textContent='Saving…';
-    const { error }=await db.from('contacts').update({stylist_notes:val||null,updated_at:new Date().toISOString()}).eq('id',id);
+    const patch={stylist_notes:val||null,updated_at:new Date().toISOString()};
+    const gv=k=>{ const e=document.getElementById(k+'-'+id); return e?e.value.trim()||null:undefined; };
+    if(salonOn()){ patch.allergies=gv('al'); patch.formulas=gv('fm'); patch.preferences=gv('pf'); }
+    const { error }=await db.from('contacts').update(patch).eq('id',id);
+    if(!error){ const c=(state.contacts||[]).find(x=>x.id===id); if(c){ c.stylistNotes=val; if(salonOn()){ c.allergies=patch.allergies||''; c.formulas=patch.formulas||''; c.preferences=patch.preferences||''; } } }
     sb.disabled=false; sb.textContent=o;
     if(msg){ msg.style.color=error?'var(--danger)':'var(--ok)'; msg.textContent=error?'Could not save.':'Saved.'; setTimeout(()=>{ if(msg) msg.textContent=''; },1600); }
   };
@@ -1644,8 +1675,10 @@ const TZS = [
 ];
 function tzLabel(tz){ const f=TZS.find(t=>t[0]===tz); return f?f[1]:tz; }
 async function loadAppointments(){
-  const { data } = await db.from('appointments').select('*, contacts(name,phone,email), properties(name)').eq('account_id', state.account.id).order('starts_at',{ascending:true});
-  state.appointments = (data||[]).map(a=>({ id:a.id, title:a.title, status:a.status, mode:a.mode, start:a.starts_at, end:a.ends_at, notes:a.notes||"", language:a.language||null, location:a.location_address||null, meetingUrl:a.meeting_url||null, userId:a.user_id||null, clientName:a.contacts?a.contacts.name:null, clientPhone:a.contacts?a.contacts.phone:null, clientEmail:a.contacts?(a.contacts.email||a.customer_email):a.customer_email||null, propertyId:a.property_id||null, propertyName:a.properties?a.properties.name:null, unit:a.unit||null, kind:a.kind||null, locKind:a.location_kind||null }));
+  const { data } = await db.from('appointments').select('*, contacts(name,phone,email,allergies,preferences,stylist_notes,formulas), properties(name)').eq('account_id', state.account.id).order('starts_at',{ascending:true});
+  state.appointments = (data||[]).map(a=>({ id:a.id, title:a.title, status:a.status, mode:a.mode, start:a.starts_at, end:a.ends_at, notes:a.notes||"", language:a.language||null, location:a.location_address||null, meetingUrl:a.meeting_url||null, userId:a.user_id||null, contactId:a.contact_id||null, clientName:a.contacts?a.contacts.name:null, clientPhone:a.contacts?a.contacts.phone:null, clientEmail:a.contacts?(a.contacts.email||a.customer_email):a.customer_email||null, allergies:a.contacts?(a.contacts.allergies||''):'', prefs:a.contacts?(a.contacts.preferences||''):'', stylistNotes:a.contacts?(a.contacts.stylist_notes||''):'', formulas:a.contacts?(a.contacts.formulas||''):'', source:a.source||null, lateMin:a.late_minutes||0, comboGroup:a.combo_group||null, propertyId:a.property_id||null, propertyName:a.properties?a.properties.name:null, unit:a.unit||null, kind:a.kind||null, locKind:a.location_kind||null, intake:null }));
+  // Intake form status for upcoming appointments (sent / completed).
+  if(!pmMode()){ try{ const ids=state.appointments.filter(a=>a.status!=='cancelled'&&new Date(a.end||a.start).getTime()>=Date.now()-864e5).map(a=>a.id); if(ids.length){ const { data:ir }=await db.from('intake_responses').select('appointment_id, sent_at, submitted_at').in('appointment_id', ids.slice(0,400)); (ir||[]).forEach(r=>{ const a=state.appointments.find(x=>x.id===r.appointment_id); if(a) a.intake = r.submitted_at?'done':(r.sent_at?'sent':'pending'); }); } }catch(_e){} }
   if(pmMode() && !(state.pm&&state.pm.props&&state.pm.props.length)){ try{ await loadProperties(); }catch(_e){} }
   if(pmMode() && !(state.types&&state.types.length)){ try{ const { data:t }=await db.from('appointment_types').select('*').eq('account_id',state.account.id).eq('is_active',true).order('name'); if(t) state.types=t.map(typeFromRow); }catch(_e){} }
   // Managers booking on a stylist's behalf need the staff roster for the picker and name labels.
@@ -1952,6 +1985,86 @@ function pmBookingCardHTML(){
     </div>
   </div>`;
 }
+/* ===================== TODAY (stylist / solo day view) ===================== */
+function pageToday(){
+  const tz=state.account.timezone; const mgr=isManager();
+  const todayKey=utcToZonedParts(new Date().toISOString(),tz).date;
+  const mine=a=> mgr ? true : a.userId===state.owner.id;
+  const all=(state.appointments||[]).filter(a=>a.status!=='cancelled'&&mine(a));
+  const today=all.filter(a=>utcToZonedParts(a.start,tz).date===todayKey).sort((a,b)=>new Date(a.start)-new Date(b.start));
+  const now=Date.now();
+  const next=today.find(a=>new Date(a.start).getTime()>now);
+  const dateLbl=new Intl.DateTimeFormat('en-US',{timeZone:tz,weekday:'long',month:'long',day:'numeric'}).format(new Date());
+  const team = mgr && salonOn() && !isSolo();
+  const groups={}; today.forEach(a=>{ const k=team?(a.userId||'_'):'_'; (groups[k]=groups[k]||[]).push(a); });
+  const smsOn=!!(state.account.settings&&state.account.settings.sms&&state.account.settings.sms.enabled);
+  const row=a=>{
+    const past=new Date(a.end||a.start).getTime()<now, live=!past&&new Date(a.start).getTime()<=now;
+    const svc=a.title||'Appointment'; const name=a.clientName||'Walk-in / unknown';
+    const tel=a.clientPhone?a.clientPhone.replace(/[^\d+]/g,''):'';
+    return `<div class="td-row ${past?'past':''} ${live?'live':''}" id="td-${a.id}">
+      <div class="td-time"><b>${esc(fmtAppt(a.start,false))}</b><span>${a.end?esc(fmtAppt(a.end,false)):''}</span>${live?'<em>now</em>':(next&&next.id===a.id?'<em>next</em>':'')}</div>
+      <div class="td-body">
+        <div class="td-head"><span class="td-svc">${esc(svc)}</span>${a.lateMin?`<span class="flag" style="background:#fff3e0;color:#9a4b00">client ${a.lateMin} min late</span>`:''}</div>
+        <div class="td-client">${esc(name)}${tel?` · <a href="tel:${esc(tel)}">${esc(a.clientPhone)}</a>`:''}</div>
+        ${apptFlagsHTML(a)}
+        ${(a.formulas||a.stylistNotes)?`<details class="td-notes"><summary>Formula &amp; notes</summary>${a.formulas?`<div><b>Formula:</b> ${esc(a.formulas)}</div>`:''}${a.stylistNotes?`<div><b>Notes:</b> ${esc(a.stylistNotes)}</div>`:''}</details>`:''}
+        ${a.notes?`<div class="m-text" style="margin-top:4px">${esc(a.notes)}</div>`:''}
+        ${past?'':`<div class="td-actions">
+          ${smsOn&&a.clientPhone?`<button class="btn sm" data-late="${a.id}">Running late</button><button class="btn sm" data-text="${a.id}">Text client</button>`:''}
+          ${a.contactId?`<button class="btn sm" data-card="${a.contactId}">Client card</button>`:''}
+          <button class="btn sm" data-goappt="${a.id}">Move / cancel</button>
+        </div>
+        <div class="td-late" id="td-late-${a.id}" style="display:none"><span>How far behind?</span>${[10,15,20,30,45].map(m=>`<button class="btn sm" data-late-go="${a.id}" data-min="${m}">${m} min</button>`).join('')}<span class="td-msg" id="td-msg-${a.id}"></span></div>
+        <div class="td-text" id="td-text-${a.id}" style="display:none"><textarea class="inp" rows="2" id="td-ta-${a.id}" placeholder="e.g. Hi ${esc((name||'').split(' ')[0])}, I'm ready a few minutes early if you're nearby!"></textarea><div style="display:flex;gap:8px;align-items:center;margin-top:6px"><button class="btn sm primary" data-text-go="${a.id}">Send text</button><span class="td-msg" id="td-tmsg-${a.id}"></span></div></div>`}
+        ${a.contactId?`<div class="c-visits" id="c-visits-${a.contactId}" style="display:none;margin-top:10px;border-top:1px solid var(--line-2);padding-top:10px"></div>`:''}
+      </div>
+    </div>`;
+  };
+  const sections = Object.keys(groups).map(k=>`${team?`<h3 class="td-who">${esc(staffName(k)||'Unassigned')}</h3>`:''}${groups[k].map(row).join('')}`).join('');
+  const bookingOn=!!(state.account.settings&&state.account.settings.booking&&state.account.settings.booking.enabled===true);
+  $("#page").innerHTML=`
+  <style>
+    .td-sum{display:flex;gap:18px;flex-wrap:wrap;font-size:13px;color:var(--muted);margin-top:4px}.td-sum b{color:var(--ink);font-size:20px;display:block;line-height:1.1}
+    .td-who{font-size:12px;text-transform:uppercase;letter-spacing:.06em;color:var(--muted);margin:16px 0 6px}
+    .td-row{display:flex;gap:14px;padding:12px 0;border-top:1px solid var(--line-2)}.td-row.past{opacity:.55}.td-row.live{background:var(--signal-soft,#f3f8f4);margin:0 -14px;padding:12px 14px;border-radius:10px;border-top-color:transparent}
+    .td-time{flex:none;width:86px;display:flex;flex-direction:column;font-size:13px}.td-time b{font-size:15px}.td-time span{color:var(--muted);font-size:12px}.td-time em{font-style:normal;font-size:10.5px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:var(--signal,#2f6f4f);margin-top:4px}
+    .td-body{flex:1;min-width:0}.td-head{display:flex;gap:8px;align-items:center;flex-wrap:wrap}.td-svc{font-weight:600;font-size:15px}.td-client{font-size:13.5px;color:var(--ink-2);margin-top:2px}.td-client a{color:var(--ink-2)}
+    .td-notes{margin-top:7px;font-size:12.5px;color:var(--ink-2)}.td-notes summary{cursor:pointer;color:var(--muted);font-weight:600}.td-notes div{margin-top:4px;line-height:1.5}
+    .td-actions{display:flex;gap:7px;flex-wrap:wrap;margin-top:9px}.td-late,.td-text{margin-top:8px}.td-late{display:flex;gap:6px;align-items:center;flex-wrap:wrap;font-size:12.5px;color:var(--muted)}.td-msg{font-size:12px;color:var(--muted)}
+    @media (max-width:640px){.td-row{flex-direction:column;gap:6px}.td-time{flex-direction:row;gap:8px;width:auto;align-items:baseline}}
+  </style>
+  <div class="page">
+    <div class="page-head"><h1>Today</h1><p>${esc(dateLbl)} · ${mgr?(team?'everyone’s day at a glance':'your day at a glance'):'your day at a glance'}. Times in ${esc(tzLabel(tz))}.</p>
+      <div class="td-sum"><div><b>${today.length}</b>${today.length===1?'appointment':'appointments'}</div><div><b>${today.filter(a=>new Date(a.start).getTime()>now).length}</b>still to come</div><div><b>${today.filter(a=>a.allergies).length}</b>with an allergy flag</div>${next?`<div><b style="font-size:15px;margin-top:3px">${esc(fmtAppt(next.start,false))}</b>next: ${esc(next.clientName||next.title||'')}</div>`:''}</div>
+    </div>
+    <div class="card"><div class="card-h"><h2>Schedule</h2><div style="display:flex;gap:8px"><button class="btn sm" id="td-refresh">Refresh</button>${mgr?'':`<button class="btn sm" data-v="schedule" id="td-block">Block time</button>`}</div></div>
+      ${today.length?sections:`<div class="empty">${I.clock}<div>Nothing on the books today.${bookingOn?' Your booking link is live, so clients can still grab a spot.':''}</div></div>`}
+    </div>
+    ${!mgr&&salonOn()?`<div class="card"><div class="card-h"><h2>My booking link</h2><button class="btn sm" data-v="mylink">Open</button></div><p style="font-size:12.5px;color:var(--muted);margin:0">Share it and clients land straight on your calendar.</p></div>`:''}
+  </div>`;
+  $("#td-refresh").onclick=async()=>{ const b=$("#td-refresh"); b.disabled=true; b.textContent='…'; await loadAppointments(); pageToday(); };
+  document.querySelectorAll('#page [data-v]').forEach(b=>b.onclick=()=>{ state.view=b.dataset.v; renderPage(); });
+  document.querySelectorAll('#page [data-goappt]').forEach(b=>b.onclick=()=>{ state.view='appointments'; state._calSel=todayKey; renderPage(); });
+  document.querySelectorAll('#page [data-late]').forEach(b=>b.onclick=()=>{ const el=document.getElementById('td-late-'+b.dataset.late); if(el) el.style.display=el.style.display==='none'?'flex':'none'; });
+  document.querySelectorAll('#page [data-text]').forEach(b=>b.onclick=()=>{ const el=document.getElementById('td-text-'+b.dataset.text); if(el){ el.style.display=el.style.display==='none'?'block':'none'; const ta=document.getElementById('td-ta-'+b.dataset.text); if(ta&&el.style.display==='block') ta.focus(); } });
+  document.querySelectorAll('#page [data-card]').forEach(b=>b.onclick=()=>{ const id=b.dataset.card; const p=document.getElementById('c-visits-'+id); if(!p) return; const open=p.style.display!=='none'; p.style.display=open?'none':'block'; if(!open&&!p.dataset.loaded){ p.dataset.loaded='1'; loadVisits(id); } });
+  document.querySelectorAll('#page [data-late-go]').forEach(b=>b.onclick=async()=>{
+    const id=b.dataset.lateGo, min=+b.dataset.min, msg=document.getElementById('td-msg-'+id);
+    b.disabled=true; if(msg) msg.textContent='Sending…';
+    try{ const { data, error }=await db.functions.invoke('staff-text',{ body:{ action:'late', appointment_id:id, minutes:min } }); if(error||!(data&&data.ok)) throw new Error((data&&data.error)||'failed'); if(msg){ msg.style.color='var(--ok)'; msg.textContent='Sent — the client knows.'; } setTimeout(()=>{ const el=document.getElementById('td-late-'+id); if(el) el.style.display='none'; },1800); }
+    catch(e){ if(msg){ msg.style.color='var(--danger)'; msg.textContent=String(e.message)==='no_phone'?'No mobile number on file for this client.':'Could not send. Try again.'; } }
+    b.disabled=false;
+  });
+  document.querySelectorAll('#page [data-text-go]').forEach(b=>b.onclick=async()=>{
+    const id=b.dataset.textGo, ta=document.getElementById('td-ta-'+id), msg=document.getElementById('td-tmsg-'+id);
+    const text=ta?ta.value.trim():''; if(!text){ if(msg){ msg.style.color='var(--danger)'; msg.textContent='Type a message first.'; } return; }
+    b.disabled=true; if(msg){ msg.style.color='var(--muted)'; msg.textContent='Sending…'; }
+    try{ const { data, error }=await db.functions.invoke('staff-text',{ body:{ action:'custom', appointment_id:id, body:text } }); if(error||!(data&&data.ok)) throw new Error((data&&data.error)||'failed'); if(msg){ msg.style.color='var(--ok)'; msg.textContent='Sent.'; } if(ta) ta.value=''; }
+    catch(e){ if(msg){ msg.style.color='var(--danger)'; msg.textContent=String(e.message)==='no_phone'?'No mobile number on file for this client.':'Could not send. Try again.'; } }
+    b.disabled=false;
+  });
+}
 function renderAppts(){
   const lede = pmMode()
     ? `Showings, inspections, walkthroughs, and meetings — each tied to a property and unit so the address goes on the calendar and the confirmation. ${esc(aName())} books these on calls too; whatever she books lands here.`
@@ -1998,7 +2111,8 @@ function apptHTML(a){
     ${detail}
     ${(a.clientPhone||a.clientEmail)?`<div class="m-text" style="opacity:.9">${a.clientPhone?`<a href="tel:${esc(a.clientPhone.replace(/[^\d+]/g,''))}" style="color:var(--ink-2)">${esc(a.clientPhone)}</a>`:''}${a.clientPhone&&a.clientEmail?'  ·  ':''}${a.clientEmail?`<a href="mailto:${esc(a.clientEmail)}" style="color:var(--ink-2)">${esc(a.clientEmail)}</a>`:''}</div>`:''}
     ${a.notes?`<div class="m-text">${esc(a.notes)}</div>`:''}
-    <div class="m-actions"><span class="appt-status s-${a.status}">${esc(a.status)}</span>${upcoming?`<button class="btn sm" data-resched="${a.id}" style="margin-left:10px">Reschedule</button>`:''}${cancelled?'':`<button class="btn sm" data-cancel="${a.id}" style="margin-left:10px">Cancel</button>`}</div>
+    ${apptFlagsHTML(a)}
+    <div class="m-actions"><span class="appt-status s-${a.status}">${esc(a.status)}</span>${a.lateMin?`<span class="appt-status" style="background:#fff3e0;color:#9a4b00;margin-left:8px">running ${a.lateMin} min late</span>`:''}${upcoming?`<button class="btn sm" data-resched="${a.id}" style="margin-left:10px">Reschedule</button>`:''}${cancelled?'':`<button class="btn sm" data-cancel="${a.id}" style="margin-left:10px">Cancel</button>`}</div>
     ${upcoming?`<div id="rb-${a.id}" style="display:none;margin-top:10px;border-top:1px solid var(--line);padding-top:10px">
       <div class="grid-2">
         <div class="field"><label class="lab">New date</label><input class="inp" type="date" id="rb-date-${a.id}"></div>
@@ -2008,6 +2122,18 @@ function apptHTML(a){
       <button class="btn sm primary" data-resched-save="${a.id}">Save new time</button>
     </div>`:''}
   </div>`;
+}
+const SRC_LABEL={online:'Booked online',google:'From Google',instagram:'From Instagram',facebook:'From Facebook',website:'From your website',qr:'From your QR code',recall:'Rebooked from a reminder',winback:'Came back from a win-back note',sms:'Booked by text',text:'Booked by text',phone:'Booked by phone',waitlist:'From the waitlist',staff:'Added by staff',manual:'Added by staff'};
+function apptFlagsHTML(a){
+  const chips=[];
+  if(a.allergies) chips.push(`<span class="flag flag-red" title="${esc(a.allergies)}">⚠ ${esc(a.allergies.length>60?a.allergies.slice(0,57)+'…':a.allergies)}</span>`);
+  if(salonOn()&&a.prefs) chips.push(`<span class="flag" title="${esc(a.prefs)}">${esc(a.prefs.length>60?a.prefs.slice(0,57)+'…':a.prefs)}</span>`);
+  if(a.intake==='done') chips.push(`<span class="flag flag-ok">Form completed</span>`); else if(a.intake==='sent') chips.push(`<span class="flag">Form sent — not filled in yet</span>`);
+  if(a.source&&SRC_LABEL[a.source]) chips.push(`<span class="flag flag-dim">${SRC_LABEL[a.source]}</span>`);
+  if(a.comboGroup) chips.push(`<span class="flag flag-dim">Part of a combo</span>`);
+  if(!chips.length) return '';
+  if(!document.getElementById('flag-css')){ const st=document.createElement('style'); st.id='flag-css'; st.textContent=`.flags{display:flex;flex-wrap:wrap;gap:6px;margin-top:7px}.flag{font-size:11.5px;padding:3px 8px;border-radius:999px;background:var(--bg-2,#f3f4f6);color:var(--ink-2);border:1px solid var(--line-2)}.flag-red{background:#fde8e8;color:#9b1c1c;border-color:#f3b4b4;font-weight:600}.flag-ok{background:#e6f4ea;color:#1e6b3a;border-color:#b7dfc3}.flag-dim{color:var(--muted)}`; document.head.appendChild(st); }
+  return `<div class="flags">${chips.join('')}</div>`;
 }
 function bindApptActions(){
   document.querySelectorAll('#page [data-cancel]').forEach(b=>b.onclick=async()=>{
@@ -2794,7 +2920,7 @@ async function renderBookingLinks(team){
   let slug=state._bookingSlug;
   if(slug===undefined){ try{ const { data }=await db.from('accounts').select('booking_slug').eq('id',state.account.id).maybeSingle(); slug=(data&&data.booking_slug)||null; }catch(_e){ slug=null; } state._bookingSlug=slug; }
   const url = slug ? `${BOOK_BASE}/book/${slug}` : `${BOOK_BASE}/book.html?a=${state.account.id}`;
-  const embed = `<iframe src="${url}" style="width:100%;max-width:560px;height:760px;border:0" title="Book an appointment"></iframe>`;
+  const embed = `<iframe src="${url}${url.includes('?')?'&':'?'}src=website" style="width:100%;max-width:560px;height:760px;border:0" title="Book an appointment"></iframe>`;
   let staffLinks='';
   if(team){
     if(!(state.staff&&state.staff.length)){ try{ await loadStaff(); }catch(_e){} }
@@ -2804,12 +2930,29 @@ async function renderBookingLinks(team){
         bk.map(s=>{ const su=`${url}${url.includes('?')?'&':'?'}stylist=${s.id}`; return `<div style="display:flex;justify-content:space-between;align-items:center;gap:10px;padding:9px 0;border-top:1px solid var(--line-2)"><div style="min-width:0"><div style="font-weight:600;font-size:13px">${esc(s.full_name||s.email)}</div><div style="font-size:11.5px;color:var(--muted);word-break:break-all">${esc(su)}</div></div><button class="btn sm" data-copy="${esc(su)}" style="flex:none">Copy</button></div>`; }).join('')+`</div>`;
     }
   }
+  const tag=src=>`${url}${url.includes('?')?'&':'?'}src=${src}`;
+  const qr=`https://api.qrserver.com/v1/create-qr-code/?size=600x600&margin=12&data=${encodeURIComponent(tag('qr'))}`;
+  const who=pmMode()?'people':'clients';
+  const places=[
+    {k:'google', n:'Google Business Profile', why:`When someone searches you on Google or Maps, they see a <b>Book online</b> button.`, steps:[`Open <a href="https://business.google.com" target="_blank" rel="noopener">business.google.com</a> and pick your business.`,`Click <b>Edit profile</b> → <b>Booking</b> (or "Add appointment link").`,`Paste the link below and save. It can take a day to show.`]},
+    {k:'instagram', n:'Instagram', why:`Turns your profile into a booking page with one tap.`, steps:[`Open your profile → <b>Edit profile</b>.`,`Under <b>Links</b> (or "Website"), paste the link below.`,`Optional: add an <b>Action button</b> → "Book now" with the same link.`]},
+    {k:'facebook', n:'Facebook Page', why:`Adds a <b>Book now</b> button to the top of your page.`, steps:[`On your Page, click <b>+ Add action button</b> (near the cover photo).`,`Choose <b>Book now</b> → "Link to website".`,`Paste the link below and save.`]},
+    {k:'website', n:'Your website', why:`A "Book" button or the whole booking form on your own site.`, steps:[`Add a button that links to the address below, or`,`paste the embed code (next card) where you want the form to appear.`]},
+    {k:'text', n:'Texts & email signature', why:`${esc(aName())} already texts this link to callers who want to book later. Add it to your own texts and email signature too.`, steps:[]},
+  ];
+  const placesHtml=places.map(p=>`<details class="share-row"><summary><span class="sr-name">${p.n}</span><span class="sr-why">${p.why}</span><span class="sr-arrow">${I.arrow||'›'}</span></summary><div class="sr-body">${p.steps.length?`<ol>${p.steps.map(x=>`<li>${x}</li>`).join('')}</ol>`:''}<div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap"><input class="inp" readonly value="${esc(tag(p.k))}" style="flex:1;min-width:220px;font-size:12px"><button class="btn sm primary" data-copy="${esc(tag(p.k))}">Copy link</button></div><div style="font-size:11.5px;color:var(--muted);margin-top:6px">This copy of the link is tagged <b>${p.k}</b>, so your Appointments page can show which bookings came from here.</div></div></details>`).join('');
+  if(!document.getElementById('share-css')){ const st=document.createElement('style'); st.id='share-css'; st.textContent=`.share-row{border-top:1px solid var(--line-2)}.share-row summary{display:flex;align-items:center;gap:12px;padding:11px 0;cursor:pointer;list-style:none}.share-row summary::-webkit-details-marker{display:none}.sr-name{font-weight:600;font-size:13.5px;flex:none;min-width:170px}.sr-why{font-size:12.5px;color:var(--muted);flex:1}.sr-arrow{color:var(--muted);transition:transform .15s}.share-row[open] .sr-arrow{transform:rotate(90deg)}.sr-body{padding:0 0 14px}.sr-body ol{margin:0 0 10px 18px;font-size:13px;line-height:1.7;color:var(--ink)}.qr-wrap{display:flex;gap:16px;align-items:center;flex-wrap:wrap}.qr-wrap img{width:132px;height:132px;border:1px solid var(--line);border-radius:12px;background:#fff;padding:6px}`; document.head.appendChild(st); }
   el.innerHTML=`
     <div class="card"><div class="card-h"><h2>Your booking link</h2></div>
       <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap"><input class="inp" readonly value="${esc(url)}" style="flex:1;min-width:240px" id="bp-url"><button class="btn sm primary" data-copy="${esc(url)}">Copy link</button><a class="btn sm" href="${esc(url)}" target="_blank" rel="noopener">Preview</a></div>
+      <div class="qr-wrap" style="margin-top:14px"><img src="${esc(qr)}" alt="QR code for your booking page"><div style="font-size:12.5px;color:var(--muted);line-height:1.6"><b style="color:var(--ink)">QR code</b> — print it for your front desk, mirror, window, business cards or flyers. ${who[0].toUpperCase()+who.slice(1)} point their phone camera at it and land on your booking page.<br><a class="btn sm" style="margin-top:8px;display:inline-block" href="${esc(qr)}" download="booking-qr.png" target="_blank" rel="noopener">Download QR (PNG)</a></div></div>
+    </div>
+    <div class="card"><div class="card-h"><h2>Put your Book button everywhere</h2></div>
+      <p style="font-size:12.5px;color:var(--muted);margin:0 0 4px">The more places ${who} can tap "Book", the fewer calls you miss. Open a row for the exact steps, then copy that row's link.</p>
+      ${placesHtml}
     </div>
     <div class="card"><div class="card-h"><h2>Embed on your website</h2></div>
-      <p style="font-size:12.5px;color:var(--muted);margin-bottom:8px">Paste this where you want the booking form to appear on your site.</p>
+      <p style="font-size:12.5px;color:var(--muted);margin-bottom:8px">Paste this where you want the booking form to appear on your site (or send it to whoever manages your website).</p>
       <textarea class="inp" readonly rows="3" style="font-family:ui-monospace,monospace;font-size:12px">${esc(embed)}</textarea>
       <div style="margin-top:8px"><button class="btn sm" data-copy="${esc(embed)}">Copy embed code</button></div>
     </div>
@@ -4918,6 +5061,15 @@ const WZ_RENDER={
       try{ await loadData(); }catch(e){
         try{ const { data:acct }=await db.from('accounts').select('settings').eq('id',state.account.id).maybeSingle(); if(acct&&acct.settings) state.account.settings=acct.settings; }catch(_e){}
       }
+      // Online booking is on from day one when there is something to book. The owner can switch it off under Booking page.
+      try{
+        const bk=(state.account.settings&&state.account.settings.booking)||{};
+        if(bk.enabled===undefined && state.types && state.types.length){
+          const settings=Object.assign({}, state.account.settings||{}, { booking:Object.assign({}, bk, { enabled:true }) });
+          const { error:eb }=await db.from('accounts').update({settings}).eq('id',state.account.id);
+          if(!eb) state.account.settings=settings;
+        }
+      }catch(_e){}
       state.wizStep=0; state.wz=null;
       renderApp();
       wzStartTutorial(address);
@@ -4931,6 +5083,7 @@ function wzStartTutorial(address){
     {t:"Inbox", b:"Email conversations show up under Inbox. "+aName()+" drafts replies and holds them for your approval, so nothing goes out without you."},
     {t:"Knowledge", b:"Everything "+aName()+" says comes from Knowledge. Review what we imported from your website, add documents, or type answers. Approve an item before she uses it."},
     {t:"Messages and Calls", b:"Missed calls, messages, and booking requests land here and get emailed to you, so you can follow up fast."},
+    {t:"Your booking link", b:"Under Booking page you'll find a link and a QR code people can use to book themselves, any time. Put it on your Google listing, Instagram, and website, and "+aName()+" can text it to callers too."},
     {t:"Try her now", b:"Call your own number and say hello. That's the fastest way to hear how "+aName()+" sounds to your customers."}
   ];
   let i=0;
