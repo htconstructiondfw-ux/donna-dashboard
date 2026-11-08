@@ -11,6 +11,7 @@ import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 //   done {job}                         -> status done, returns proposed lines + menu for the confirm step
 //   finalize {job, lines, notes?}      -> builds the invoice (via payments), returns total + pay_url (nothing sent yet)
 //   note {job, text}                   -> append a note
+//   text_me {text}                     -> text the signed-in user their own phone (app link, etc.)
 // Sending / marking paid stays in `payments` (invoice_send / invoice_mark_paid) so every vertical shares it.
 
 const SUPA_URL = Deno.env.get("SUPABASE_URL")!;
@@ -121,6 +122,13 @@ Deno.serve(async (req: Request) => {
     const byAppt = new Map((jobs || []).map((j: any) => [j.appointment_id, j]));
     const out = (appts || []).map((a: any) => { const j: any = byAppt.get(a.id); return { appointment_id: a.id, job_id: j?.id || null, title: a.appointment_types?.name || a.title, price: a.appointment_types?.price || null, starts_at: a.starts_at, ends_at: a.ends_at, customer_name: a.contacts?.name || j?.customer_name || null, customer_phone: a.contacts?.phone || j?.customer_phone || null, address: a.location_address || j?.address || null, notes: a.notes, tech: a.users?.full_name || null, user_id: a.user_id, status: j?.status || (a.status === "completed" ? "done" : "scheduled"), invoice_id: j?.invoice_id || null, eta_minutes: j?.eta_minutes || null }; });
     return json({ ok: true, date: ymd, jobs: out });
+  }
+
+  if (action === "text_me") {
+    const { data: u } = await supabase.from("users").select("phone").eq("id", caller.userId).maybeSingle();
+    if (!(u as any)?.phone) return json({ ok: false, error: "no_phone", message: "Add your mobile number to your profile first." });
+    const sent = await textCustomer(acct, (u as any).phone, String(body.text || "").slice(0, 400));
+    return json({ ok: sent });
   }
 
   const job = await ensureJob(acct, ref);

@@ -436,7 +436,7 @@ function providerLabelPlural(){ return providerLabel()+'s'; }
 function teamAllowed(){ const p=String((state.account&&state.account.plan)||'').toLowerCase(); return p==='pro'||p==='enterprise'; }
 function renderApp(){
   const mgr=isManager();
-  if(!mgr && !['today','schedule','appointments','clients','messages','waitlist','mylink'].includes(state.view)) state.view='today';
+  if(!mgr && !['today','schedule','appointments','clients','messages','waitlist','mylink','jobs'].includes(state.view)) state.view='today';
   // A solo owner lives in their day; land there on first load, then leave navigation free.
   if(mgr && isSolo() && !state._homed){ state._homed=true; if(state.view==='assistant') state.view='today'; }
   if(mgr && new URLSearchParams(location.search).get('calendar')) state.view='settings';
@@ -452,6 +452,7 @@ function renderApp(){
     navActivity=[["calls","Calls",I.phone],["appointments","Appointments",I.appt],["messages","Phone messages",I.msg],["contacts",salonOn()?"Clients":"Contacts",I.users],["gaps","Questions",I.book],["conversations","Inbox",I.mail]];
     if(salonOn()) navActivity.splice(2,0,["waitlist","Waitlist",I.clock]);
     if(!pmMode()) navActivity.splice(0,0,["today","Today",I.clock]);
+    if(paymentsOn()) navActivity.splice(1,0,["jobs","Jobs & money",I.card]);
     if(propertyOn()){ navConfig.splice(1,0,["properties","Properties",I.building]); navConfig.splice(2,0,["contractors","Contractors",I.users]); navActivity.splice(0,0,["requests","Service requests",I.wrench]); }
     soon=[["billing","Billing",I.card]];
   } else {
@@ -459,6 +460,7 @@ function renderApp(){
     navConfig=[["today","Today",I.clock],["appointments","My appointments",I.appt],["messages","Phone messages",I.msg],["clients","Clients",I.users],["schedule","My availability",I.cal]];
     if(salonOn()) navConfig.splice(3,0,["waitlist","Waitlist",I.clock]);
     if(salonOn()) navConfig.push(["mylink","My booking link",I.link]);
+    if(paymentsOn()) navConfig.splice(1,0,["jobs","Jobs & money",I.card]);
     navActivity=[];
   }
   const navCount=v=>{ if(v==='messages') return unreadCount(); if(v==='conversations') return (state.conversations||[]).filter(c=>c.status==='awaiting_staff').length; if(v==='gaps') return (state.gaps||[]).length; return 0; };
@@ -492,12 +494,12 @@ function renderApp(){
   paintApproveBanner();
 }
 function renderPage(){
-  if(!isManager() && !['today','schedule','appointments','clients','messages','waitlist','mylink'].includes(state.view)) state.view='today';
+  if(!isManager() && !['today','schedule','appointments','clients','messages','waitlist','mylink','jobs'].includes(state.view)) state.view='today';
   if('speechSynthesis' in window) window.speechSynthesis.cancel();
   teardownRealtime();
   document.querySelectorAll(".nav-item[data-v]").forEach(b=>b.classList.toggle("active",b.dataset.v===state.view));
   $(".crumbs").innerHTML=`${['settings','notifications'].includes(state.view)?'Account':(['today','messages','appointments','waitlist','calls','contacts','clients','gaps','conversations','requests'].includes(state.view)?'Activity':'Configure')} · <b>${esc(({today:"Today",assistant:"Assistant",schedule:"Schedule",types:(pmMode()?"Visit types":(salonOn()?"Services":"Appointment types")),staff:"Staff",messages:"Phone messages",appointments:(pmMode()?"Visits & appointments":"Appointments"),settings:"Settings",notifications:"Notifications",calls:"Calls",knowledge:"Knowledge",contacts:(salonOn()?"Clients":"Contacts"),clients:"Clients",gaps:"Open questions",conversations:"Email inbox",waitlist:"Waitlist",promotions:"Promotions",booking:(pmMode()?"Self-scheduling":"Booking page"),mylink:"My booking link",intake:"Intake forms",properties:"Properties",contractors:"Contractors",requests:"Service requests"})[state.view])}</b>`;
-  const PAGES={today:pageToday, assistant:pageAssistant, schedule:pageSchedule, types:pageTypes, staff:pageStaff, messages:pageMessages, appointments:renderAppts, settings:pageSettings, notifications:pageNotifications, calls:pageCalls, knowledge:pageKnowledge, contacts:pageContacts, clients:pageClients, gaps:pageGaps, conversations:pageConversations, waitlist:pageWaitlist, promotions:pagePromotions, booking:pageBookingPage, mylink:pageMyLink, intake:pageIntakeForms, properties:pageProperties, contractors:pageContractors, requests:pageServiceRequests};
+  const PAGES={today:pageToday, assistant:pageAssistant, schedule:pageSchedule, types:pageTypes, staff:pageStaff, messages:pageMessages, appointments:renderAppts, settings:pageSettings, notifications:pageNotifications, calls:pageCalls, knowledge:pageKnowledge, contacts:pageContacts, clients:pageClients, gaps:pageGaps, conversations:pageConversations, waitlist:pageWaitlist, promotions:pagePromotions, booking:pageBookingPage, mylink:pageMyLink, intake:pageIntakeForms, properties:pageProperties, contractors:pageContractors, requests:pageServiceRequests, jobs:pageJobs};
   const LOADERS={today:loadAppointments, appointments:loadAppointments, messages:loadMessages, calls:loadCalls, contacts:loadContacts, clients:loadContacts, gaps:loadGaps, conversations:loadConversations, staff:loadStaff, waitlist:loadWaitlist};
   const v=state.view;
   (PAGES[v]||(()=>{}))();
@@ -2174,6 +2176,39 @@ function bindApptActions(){
     set(BOOK_ERR[r&&r.error]||'Could not reschedule. Try again.','var(--danger)');
   });
 }
+// ---------- Jobs & money (contractors): today's jobs, open invoices, the phone app, text commands ----------
+async function pageJobs(){
+  const ac=state.account; const appUrl=location.origin+'/app';
+  $("#page").innerHTML=`<div class="page">
+    <div class="page-head"><h1>Jobs & money</h1><p>Run the day from your phone. Every job ${esc(aName())} books shows up here and on the phone app; when you tap Done she bills it.</p></div>
+    <div class="grid-2">
+      <div class="card"><div class="card-h"><h2>The phone app</h2></div>
+        <p style="font-size:13px;color:var(--muted)">Open this on your phone and add it to your home screen. Big buttons: On my way, I'm here, Done. No app store, nothing to install from a computer.</p>
+        <div style="display:flex;gap:14px;align-items:center;margin:12px 0"><img alt="QR" width="120" height="120" style="border:1px solid var(--line);border-radius:12px;background:#fff" src="https://api.qrserver.com/v1/create-qr-code/?size=240x240&margin=8&data=${encodeURIComponent(appUrl)}"><div><div style="font-weight:700;font-size:15px">${esc(appUrl)}</div><div style="font-size:12.5px;color:var(--muted);margin-top:4px">iPhone: open in Safari, tap Share, then <b>Add to Home Screen</b>.<br>Android: open in Chrome, tap <b>Install</b> when it offers.</div><button class="btn sm" id="jb-copy" style="margin-top:8px">Copy link</button> <button class="btn sm" id="jb-text" style="margin-top:8px">Text it to me</button> <span id="jb-msg" style="font-size:12px;color:var(--muted)"></span></div></div>
+      </div>
+      <div class="card"><div class="card-h"><h2>Or just text ${esc(aName())}</h2></div>
+        <p style="font-size:13px;color:var(--muted)">From the phone number on your account, text ${esc(aName())}'s number${state.assistant&&state.assistant.number?` (<b>${esc(state.assistant.number)}</b>)`:''}:</p>
+        <table style="width:100%;font-size:13.5px;border-collapse:collapse;margin-top:6px">${[["OMW 20","Tells the customer you're on the way, about 20 minutes"],["HERE","You've started"],["DONE","She lists the work and add-ons, totals it, and asks SEND / LATER / PAID"],["LATE 15","Tells the customer you're running 15 minutes behind"],["TODAY","Your jobs today"],["NEXT","Next stop with the address and a map link"],["NOTE gate code 4411","Puts a note on the job"],["(a photo)","Saved to the job"]].map(r=>`<tr><td style="padding:6px 8px 6px 0;font-weight:700;white-space:nowrap;font-family:ui-monospace,monospace">${esc(r[0])}</td><td style="padding:6px 0;color:var(--ink2)">${esc(r[1])}</td></tr>`).join('')}</table>
+      </div>
+    </div>
+    <div class="card"><div class="card-h"><h2>Today</h2><button class="btn sm" id="jb-refresh">Refresh</button></div><div id="jb-today"><p style="font-size:13px;color:var(--muted)">Loading…</p></div></div>
+    <div class="card"><div class="card-h"><h2>Invoices</h2><div style="display:flex;gap:8px"><select class="inp" id="jb-filter" style="min-width:140px"><option value="open">Waiting to be paid</option><option value="paid">Paid</option><option value="all">All</option></select><button class="btn sm" id="jb-export">Download CSV</button></div></div><div id="jb-inv"><p style="font-size:13px;color:var(--muted)">Loading…</p></div></div>
+  </div>`;
+  $("#jb-copy").onclick=()=>{ try{ navigator.clipboard&&navigator.clipboard.writeText(appUrl); }catch(e){} $("#jb-msg").textContent='Copied.'; };
+  $("#jb-text").onclick=async()=>{ const m=$("#jb-msg"); m.textContent='Sending…'; try{ const { data, error }=await db.functions.invoke('jobs',{ body:{ action:'text_me', text:`${ac.company||'Donna'}: here's your Donna app. Open it on your phone and add it to your home screen: ${appUrl}` } }); m.textContent=(data&&data.ok)?'Sent to your phone.':'Could not text it (is your phone on your profile?).'; }catch(e){ m.textContent='Could not text it.'; } };
+  const money=c=>'$'+(Math.round(c||0)/100).toLocaleString('en-US',{minimumFractionDigits:2,maximumFractionDigits:2});
+  const loadToday=async()=>{ const el=$("#jb-today"); try{ const { data }=await db.functions.invoke('jobs',{ body:{ action:'today' } }); const jobs=(data&&data.jobs)||[]; if(!jobs.length){ el.innerHTML='<p style="font-size:13px;color:var(--muted)">Nothing on the books today.</p>'; return; } el.innerHTML=`<table class="tbl" style="width:100%"><thead><tr><th>Time</th><th>Job</th><th>Customer</th><th>Where</th><th>Who</th><th>Status</th></tr></thead><tbody>${jobs.map(j=>`<tr><td>${esc(new Date(j.starts_at).toLocaleTimeString('en-US',{hour:'numeric',minute:'2-digit',timeZone:state.account.timezone||undefined}))}</td><td><b>${esc(j.title)}</b>${j.price?` <span style="color:var(--muted)">${esc(j.price)}</span>`:''}</td><td>${esc(j.customer_name||'')}${j.customer_phone?`<div style="font-size:12px;color:var(--muted)">${esc(j.customer_phone)}</div>`:''}</td><td style="font-size:12.5px">${esc(j.address||'')}</td><td>${esc(j.tech||'')}</td><td><span class="pill">${esc((j.status||'scheduled').replace('_',' '))}</span></td></tr>`).join('')}</tbody></table>`; }catch(e){ el.innerHTML='<p style="font-size:13px;color:var(--danger)">Could not load.</p>'; } };
+  const loadInv=async()=>{ const el=$("#jb-inv"); const f=$("#jb-filter").value; try{ const { data }=await db.functions.invoke('payments',{ body:{ action:'invoice_list', limit:120 } }); let inv=(data&&data.invoices)||[]; if(f==='open') inv=inv.filter(i=>['draft','sent'].includes(i.status)); if(f==='paid') inv=inv.filter(i=>i.status==='paid'); if(!inv.length){ el.innerHTML=`<p style="font-size:13px;color:var(--muted)">${f==='open'?'Nothing waiting. When a job is done, tap Done on the phone (or text DONE) and the invoice lands here.':'Nothing yet.'}</p>`; return; }
+      el.innerHTML=`<table class="tbl" style="width:100%"><thead><tr><th>Invoice</th><th>Customer</th><th>Work</th><th style="text-align:right">Total</th><th>Status</th><th></th></tr></thead><tbody>${inv.map(i=>`<tr><td><b>${esc(i.number)}</b><div style="font-size:12px;color:var(--muted)">${esc(new Date(i.created_at).toLocaleDateString())}</div></td><td>${esc(i.customer_name||'')}<div style="font-size:12px;color:var(--muted)">${esc(i.customer_phone||i.customer_email||'')}</div></td><td style="font-size:12.5px">${(i.lines||[]).map(l=>esc(l.desc)).join(', ')}</td><td style="text-align:right;font-weight:700">${money(i.total_cents)}</td><td><span class="pill">${i.status==='draft'?'not sent':esc(i.status)}${i.paid_method?' · '+esc(i.paid_method):''}</span></td><td style="white-space:nowrap;text-align:right"><a class="btn sm" href="${esc(i.pay_url)}" target="_blank" rel="noopener">View</a> ${['draft','sent'].includes(i.status)?`<button class="btn sm" data-send="${i.id}">${i.status==='draft'?'Send':'Send again'}</button> <button class="btn sm primary" data-paid="${i.id}">Mark paid</button> <button class="btn sm" data-void="${i.id}" title="Cancel this invoice">Void</button>`:''}</td></tr>`).join('')}</tbody></table>`;
+      el.querySelectorAll('[data-send]').forEach(b=>b.onclick=async()=>{ b.disabled=true; const { data }=await db.functions.invoke('payments',{ body:{ action:'invoice_send', id:b.dataset.send } }); if(!(data&&data.ok)){ alert((data&&data.message)||'Could not send.'); b.disabled=false; } loadInv(); });
+      el.querySelectorAll('[data-paid]').forEach(b=>b.onclick=async()=>{ const how=prompt('How did they pay? cash / check / card','cash'); if(how===null) return; await db.functions.invoke('payments',{ body:{ action:'invoice_mark_paid', id:b.dataset.paid, method:['cash','check','card'].includes(how.trim().toLowerCase())?how.trim().toLowerCase():'other' } }); loadInv(); });
+      el.querySelectorAll('[data-void]').forEach(b=>b.onclick=async()=>{ if(!confirm('Void this invoice? The customer link will show it as cancelled.')) return; await db.functions.invoke('payments',{ body:{ action:'invoice_void', id:b.dataset.void } }); loadInv(); });
+    }catch(e){ el.innerHTML='<p style="font-size:13px;color:var(--danger)">Could not load.</p>'; } };
+  $("#jb-refresh").onclick=loadToday; $("#jb-filter").onchange=loadInv;
+  $("#jb-export").onclick=async()=>{ const b=$("#jb-export"); b.disabled=true; try{ const { data }=await db.functions.invoke('payments',{ body:{ action:'export_csv' } }); const dl=(name,text)=>{ const a=document.createElement('a'); a.href=URL.createObjectURL(new Blob([text],{type:'text/csv'})); a.download=name; document.body.appendChild(a); a.click(); a.remove(); }; const stamp=new Date().toISOString().slice(0,10); dl(`invoices-${stamp}.csv`,data.invoices_csv); setTimeout(()=>dl(`payments-${stamp}.csv`,data.payments_csv),400); }catch(e){ alert('Export failed.'); } b.disabled=false; };
+  loadToday(); loadInv();
+}
+
 // ---------- Getting paid (shared payments module; Stripe Connect, the business's OWN account) ----------
 async function paymentsApi(body){ const { data, error }=await db.functions.invoke('payments',{ body }); if(error) throw new Error(error.message||'failed'); return data||{}; }
 async function paintPaymentsCard(forceRefresh){
@@ -3117,6 +3152,16 @@ function pageSettings(){
     </div>
 
     ${(paymentsOn()&&isManager())?`
+    <div class="card"><div class="card-h"><h2>Trip fee & after hours</h2><button class="btn sm primary" id="ctr-save">Save</button></div>
+      <p style="font-size:13px;color:var(--muted);margin-bottom:12px">${esc(aName())} quotes these on the phone and puts them on the invoice when you tap Done. Leave the trip fee at 0 if you don't charge one.</p>
+      <div class="grid-2">
+        <div class="field"><label class="lab">Trip / service-call fee</label><div style="display:flex;align-items:center;gap:6px"><span style="color:var(--muted)">$</span><input class="inp" id="ctr-trip" type="number" min="0" step="1" value="${Math.round(((ac.settings&&ac.settings.contractor&&ac.settings.contractor.trip_fee_cents)||0)/100)}" style="max-width:120px"></div></div>
+        <div class="field"><label class="lab">When the customer goes ahead with the work</label><select class="inp" id="ctr-waive"><option value="1" ${((ac.settings&&ac.settings.contractor&&ac.settings.contractor.trip_fee_waived_if_work)===false)?'':'selected'}>Waive the trip fee</option><option value="0" ${((ac.settings&&ac.settings.contractor&&ac.settings.contractor.trip_fee_waived_if_work)===false)?'selected':''}>Still charge it</option></select></div>
+        <div class="field"><label class="lab">After-hours & Sunday pricing</label><select class="inp" id="ctr-ah">${[[0,'Same price'],[1.25,'1.25× (25% more)'],[1.5,'1.5× (50% more)'],[2,'2× (double)']].map(x=>`<option value="${x[0]}" ${Number((ac.settings&&ac.settings.contractor&&ac.settings.contractor.after_hours_multiplier)||0)===x[0]?'selected':''}>${x[1]}</option>`).join('')}</select></div>
+        <div class="field"><label class="lab">Regular hours</label><div style="display:flex;gap:6px;align-items:center"><select class="inp" id="ctr-start">${Array.from({length:13},(_,i)=>i+5).map(h=>`<option value="${h}" ${Number((ac.settings&&ac.settings.contractor&&ac.settings.contractor.day_start_hour)??7)===h?'selected':''}>${h%12||12}${h<12?' am':' pm'}</option>`).join('')}</select><span style="color:var(--muted)">to</span><select class="inp" id="ctr-end">${Array.from({length:10},(_,i)=>i+14).map(h=>`<option value="${h}" ${Number((ac.settings&&ac.settings.contractor&&ac.settings.contractor.day_end_hour)??19)===h?'selected':''}>${h%12||12} pm</option>`).join('')}</select></div></div>
+      </div>
+      <span id="ctr-msg" style="font-size:12px;color:var(--muted)"></span>
+    </div>
     <div class="card" id="pay-card"><div class="card-h"><h2>Getting paid</h2><span class="hint" id="pay-state">Checking…</span></div>
       <div id="pay-body"><p style="font-size:13px;color:var(--muted)">Loading…</p></div>
     </div>`:''}
@@ -3203,6 +3248,7 @@ function pageSettings(){
   { const pl=$("#prov-label-save"); if(pl) pl.onclick=saveProviderLabel; }
   $("#tz-save").onclick=saveTimezone;
   if($("#pay-card")) paintPaymentsCard();
+  { const cs=$("#ctr-save"); if(cs) cs.onclick=async()=>{ const msg=$("#ctr-msg"); const prev=(state.account.settings||{}).contractor||{}; const contractor=Object.assign({}, prev, { trip_fee_cents: Math.round((parseFloat($("#ctr-trip").value)||0)*100), trip_fee_waived_if_work: $("#ctr-waive").value==='1', after_hours_multiplier: parseFloat($("#ctr-ah").value)||0, day_start_hour: parseInt($("#ctr-start").value,10), day_end_hour: parseInt($("#ctr-end").value,10) }); const settings=Object.assign({}, state.account.settings||{}, { contractor }); msg.textContent='Saving…'; const { error }=await db.from('accounts').update({ settings }).eq('id',state.account.id); if(error){ msg.textContent='Could not save.'; return; } state.account.settings=settings; msg.textContent='Saved.'; setTimeout(()=>{ if(msg) msg.textContent=''; },1500); }; }
   { const ae=$("#alert-save"); if(ae) ae.onclick=saveAlertEmail; }
   { const is=$("#inbound-save"); if(is) is.onclick=saveInbound; const ic=$("#inbound-copy"); if(ic) ic.onclick=()=>{ const a=$("#inbound-addr"); if(a&&a.value){ try{ navigator.clipboard&&navigator.clipboard.writeText(a.value.trim()); }catch(e){} const m=$("#inbound-msg"); if(m){ m.style.color='var(--muted)'; m.textContent='Copied.'; } } }; }
   { const dc=$("#donna-email-copy"); if(dc) dc.onclick=()=>{ const a=$("#donna-email"); if(a&&a.value){ try{ navigator.clipboard&&navigator.clipboard.writeText(a.value.trim()); }catch(e){} } dc.textContent='Copied'; setTimeout(()=>{dc.textContent='Copy';},1200); }; }
@@ -4786,6 +4832,7 @@ async function bootImpersonation(){
 const WZ_PM_TYPES=[["residential","Residential rentals","Homes, apartments, and units you lease and maintain for owners"],["commercial","Commercial & flex","Office, retail, industrial, and flex buildings with business tenants"],["hoa","Communities (HOA & condo)","Associations you manage for a board — common areas, dues, ARC, violations"]];
 // Which product features an industry turns on. (Without this, a real signup never saw the right dashboard.)
 const INDUSTRY_FEATURES={ property_management:{property_management:true,after_hours_emergency:true}, hair_salon:{salon:true}, nail_salon:{salon:true}, barbershop:{salon:true}, spa:{salon:true}, lash_brow:{salon:true} };
+const WZ_TRADES=[["hvac","HVAC / heating & air"],["plumbing","Plumbing"],["electrical","Electrical"],["landscaping","Landscaping"],["lawn","Mowing / lawn care"],["pool","Pool service"],["handyman","Handyman"],["roofing","Roofing"],["painting","Painting"],["remodeling","Remodeling / general contractor"],["flooring","Flooring"],["fencing","Fencing / gates"],["concrete","Concrete"],["garage_door","Garage doors"],["appliance","Appliance repair"],["pest","Pest control"],["pressure_washing","Pressure washing"],["windows","Window cleaning"],["gutters","Gutters"],["tree","Tree service"],["irrigation","Irrigation / sprinklers"],["locksmith","Locksmith"],["junk","Junk removal / hauling"],["cleaning","House / commercial cleaning"],["chimney","Chimney"],["septic","Septic"],["well","Well & pump"],["solar","Solar"],["insulation","Insulation"],["drywall","Drywall"],["tile","Tile"],["carpentry","Carpentry / decks"],["welding","Welding"],["detailing","Mobile detailing"],["other_trade","Something else"]];
 const WZ_INDUSTRIES=[["property_management","Property management"],["hair_salon","Hair salon"],["nail_salon","Nail salon"],["barbershop","Barbershop"],["spa","Spa or skin care"],["lash_brow","Lash & brow"],["restaurant","Restaurant"],["contractor","Contractor or trades"],["real_estate","Real estate"],["professional","Professional services"],["other","Something else"]];
 const WZ_TITLES=["Welcome","Your business","Your assistant","Hours","Knowledge","Appointments","Calls","Notifications","Go live"];
 const WZ_TZ=[["America/New_York","Eastern"],["America/Chicago","Central"],["America/Denver","Mountain"],["America/Phoenix","Arizona"],["America/Los_Angeles","Pacific"],["America/Anchorage","Alaska"],["Pacific/Honolulu","Hawaii"]];
@@ -4868,6 +4915,7 @@ function renderWizard(){
   if(!state.wz){ state.wz={
     industry: state.account.industry||'',
     pmTypes: ((state.account.settings&&Array.isArray(state.account.settings.property_types))?state.account.settings.property_types.slice():[]),
+    trades: ((state.account.settings&&Array.isArray(state.account.settings.trades))?state.account.settings.trades.slice():[]),
     company: state.account.company||'',
     tz: state.account.timezone||'America/Chicago',
     owner: (state.owner&&state.owner.name)||'',
@@ -4893,10 +4941,13 @@ const WZ_RENDER={
       <p class="lede">${esc(DEFAULT_NAME)} is your AI receptionist. In a few short steps you'll tell her about your business, how to answer, and when you're available. You can stop any time and pick up where you left off. Your phone number stays private until you finish and go live.</p>
       <div class="wz-field"><label>What kind of business is this? <span class="hint">helps ${esc(DEFAULT_NAME)} start with the right setup</span></label>
       <div class="wz-choices" id="wz-ind">${WZ_INDUSTRIES.map(x=>`<div class="wz-choice ${g.industry===x[0]?'sel':''}" data-v="${x[0]}">${esc(x[1])}</div>`).join("")}</div></div>
+      <div class="wz-field" id="wz-trade-wrap" style="display:${g.industry==='contractor'?'block':'none'}"><label>What's your trade? <span class="hint">${esc(DEFAULT_NAME)} loads the right questions, emergencies and reminders for it</span></label>
+      <div class="wz-choices" id="wz-trades">${WZ_TRADES.map(x=>`<div class="wz-choice ${(g.trades||[]).includes(x[0])?'sel':''}" data-v="${x[0]}">${esc(x[1])}</div>`).join("")}</div></div>
       <div class="wz-field" id="wz-pmtypes-wrap" style="display:${g.industry==='property_management'?'block':'none'}"><label>What do you manage? <span class="hint">pick all that apply — each works differently</span></label>
       <div class="wz-choices" id="wz-pmtypes">${WZ_PM_TYPES.map(x=>`<div class="wz-choice ${(g.pmTypes||[]).includes(x[0])?'sel':''}" data-v="${x[0]}"><b style="display:block">${esc(x[1])}</b><span style="font-size:12px;color:var(--muted);font-weight:400">${esc(x[2])}</span></div>`).join("")}</div></div>
     `,{});
-    document.querySelectorAll('#wz-ind .wz-choice').forEach(el=>el.onclick=()=>{ state.wz.industry=el.dataset.v; document.querySelectorAll('#wz-ind .wz-choice').forEach(c=>c.classList.toggle('sel',c===el)); const w=$("#wz-pmtypes-wrap"); if(w) w.style.display=el.dataset.v==='property_management'?'block':'none'; });
+    document.querySelectorAll('#wz-ind .wz-choice').forEach(el=>el.onclick=()=>{ state.wz.industry=el.dataset.v; document.querySelectorAll('#wz-ind .wz-choice').forEach(c=>c.classList.toggle('sel',c===el)); const w=$("#wz-pmtypes-wrap"); if(w) w.style.display=el.dataset.v==='property_management'?'block':'none'; const tw=$("#wz-trade-wrap"); if(tw) tw.style.display=el.dataset.v==='contractor'?'block':'none'; });
+    document.querySelectorAll('#wz-trades .wz-choice').forEach(el=>el.onclick=()=>{ const v=el.dataset.v; const cur=new Set(state.wz.trades||[]); if(cur.has(v)) cur.delete(v); else cur.add(v); state.wz.trades=[...cur]; el.classList.toggle('sel',cur.has(v)); });
     document.querySelectorAll('#wz-pmtypes .wz-choice').forEach(el=>el.onclick=()=>{ const v=el.dataset.v; const cur=new Set(state.wz.pmTypes||[]); if(cur.has(v)) cur.delete(v); else cur.add(v); state.wz.pmTypes=[...cur]; el.classList.toggle('sel',cur.has(v)); });
     wzBindNav(async()=>{ if(state.wz.industry==='property_management' && !(state.wz.pmTypes||[]).length){ const w=$("#wz-pmtypes-wrap"); if(w){ w.scrollIntoView({behavior:'smooth',block:'center'}); w.style.outline='2px solid var(--danger)'; w.style.borderRadius='10px'; setTimeout(()=>{ w.style.outline=''; },1800); } return false; } return true; },{});
   },
@@ -4922,6 +4973,7 @@ const WZ_RENDER={
       // Turn on the features for this industry; for property management, record what they manage.
       const feat=Object.assign({}, settings.features||{}, INDUSTRY_FEATURES[state.wz.industry]||{});
       if(state.wz.industry==='property_management'){ settings.property_types=(state.wz.pmTypes||[]).slice(); if(feat.salon) delete feat.salon; }
+      if(state.wz.industry==='contractor'){ settings.trades=(state.wz.trades||[]).slice(); settings.contractor=Object.assign({ trip_fee_cents:0, trip_fee_waived_if_work:true, after_hours_multiplier:1.5, day_start_hour:7, day_end_hour:19 }, settings.contractor||{}); if(!settings.sms) settings.sms={ enabled:true, confirmations:true, reminders:true }; }
       else if(INDUSTRY_FEATURES[state.wz.industry] && INDUSTRY_FEATURES[state.wz.industry].salon && feat.property_management){ delete feat.property_management; }
       settings.features=feat;
       const { error:e1 }=await db.from('accounts').update({ name:company, industry:state.wz.industry||null, settings }).eq('id',state.account.id);
