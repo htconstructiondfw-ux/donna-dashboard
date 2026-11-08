@@ -1,0 +1,305 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover,maximum-scale=1">
+<title>Donna</title>
+<meta name="theme-color" content="#1f6f4a">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Donna">
+<meta name="mobile-web-app-capable" content="yes">
+<link rel="manifest" href="/crew.webmanifest">
+<link rel="apple-touch-icon" href="/icons/donna-180.png">
+<link rel="icon" href="/icons/donna-192.png">
+<link href="https://fonts.googleapis.com/css2?family=Figtree:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<style>
+  :root{--accent:#1f6f4a;--accent-deep:#164f35;--accent-soft:#e6f2ea;--bg:#f4f6f3;--card:#fff;--ink:#17201b;--ink2:#4c5a52;--muted:#7d8a82;--line:#e1e7e2;--ok:#2d7a4f;--warn:#b7791f;--danger:#b4443a;--r:18px}
+  *{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+  html,body{height:100%}
+  body{margin:0;background:var(--bg);color:var(--ink);font:17px/1.45 'Figtree',-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;-webkit-font-smoothing:antialiased;padding-bottom:calc(110px + env(safe-area-inset-bottom))}
+  button{font:inherit;cursor:pointer;border:0}
+  input,textarea,select{font:inherit}
+  .top{position:sticky;top:0;z-index:5;background:var(--accent);color:#fff;padding:calc(14px + env(safe-area-inset-top)) 18px 14px;display:flex;align-items:center;justify-content:space-between;gap:10px}
+  .top h1{margin:0;font-size:20px;font-weight:800;letter-spacing:-.01em}
+  .top .sub{font-size:13px;opacity:.85;margin-top:1px}
+  .top .pill{background:rgba(255,255,255,.18);border-radius:999px;padding:7px 12px;font-size:13px;font-weight:600;color:#fff}
+  .wrap{padding:16px 16px 0;max-width:560px;margin:0 auto}
+  .card{background:var(--card);border:1px solid var(--line);border-radius:var(--r);padding:16px;margin-bottom:12px;box-shadow:0 8px 24px -20px rgba(0,0,0,.3)}
+  .big{display:flex;align-items:center;justify-content:center;gap:12px;width:100%;min-height:72px;border-radius:20px;font-size:21px;font-weight:800;background:var(--accent);color:#fff;margin-bottom:12px;box-shadow:0 10px 24px -14px rgba(31,111,74,.7)}
+  .big.alt{background:#fff;color:var(--ink);border:2px solid var(--line);box-shadow:none}
+  .big.warn{background:#fff;color:var(--warn);border:2px solid #f0dcb6;box-shadow:none}
+  .big{scroll-margin-bottom:120px}
+  .big:active{transform:scale(.985)}
+  .big:disabled{opacity:.55}
+  .big svg{width:28px;height:28px;flex:none}
+  .row{display:flex;gap:10px}
+  .row .big{margin-bottom:0}
+  .job{display:flex;gap:12px;align-items:flex-start;padding:14px 0;border-top:1px solid var(--line)}
+  .job:first-child{border-top:0;padding-top:0}
+  .job .t{min-width:74px;font-weight:800;font-size:17px}
+  .job .t small{display:block;font-weight:600;color:var(--muted);font-size:12px;margin-top:2px}
+  .job .b{flex:1;min-width:0}
+  .job .n{font-weight:700;font-size:17px}
+  .job .a{color:var(--ink2);font-size:14.5px;margin-top:2px}
+  .chip{display:inline-block;font-size:11.5px;font-weight:700;padding:3px 9px;border-radius:999px;background:#eef2ee;color:var(--ink2);margin-top:6px;text-transform:uppercase;letter-spacing:.04em}
+  .chip.en_route{background:#e6f0fb;color:#2457a6}.chip.in_progress{background:#fff2d9;color:var(--warn)}.chip.done,.chip.invoiced{background:#e4f3ea;color:var(--ok)}.chip.paid{background:var(--accent);color:#fff}
+  .h{font-size:13px;letter-spacing:.08em;text-transform:uppercase;color:var(--muted);font-weight:800;margin:4px 0 10px}
+  .mins{display:flex;gap:8px;margin:0 0 12px}
+  .mins button{flex:1;min-height:56px;border-radius:14px;background:#fff;border:2px solid var(--line);font-size:19px;font-weight:800;color:var(--ink)}
+  .mins button.on{border-color:var(--accent);background:var(--accent-soft);color:var(--accent-deep)}
+  .line{display:flex;align-items:center;gap:10px;padding:12px 0;border-top:1px solid var(--line)}
+  .line:first-of-type{border-top:0}
+  .line .d{flex:1;font-weight:600}
+  .line .d small{display:block;color:var(--muted);font-weight:500;font-size:12.5px}
+  .line .p{font-weight:800;font-variant-numeric:tabular-nums;min-width:84px;text-align:right}
+  .line .p input{width:92px;text-align:right;font-weight:800;font-size:17px;padding:8px;border:2px solid var(--line);border-radius:10px}
+  .line .x{width:38px;height:38px;border-radius:50%;background:#f3f5f3;color:var(--muted);font-size:20px;font-weight:700}
+  .total{display:flex;justify-content:space-between;align-items:center;padding:14px 0 4px;border-top:2px solid var(--ink);margin-top:6px;font-size:22px;font-weight:800}
+  .addons{display:flex;flex-wrap:wrap;gap:8px;margin:8px 0 4px}
+  .addons button{min-height:48px;padding:0 14px;border-radius:14px;background:#fff;border:2px solid var(--line);font-weight:700;font-size:15px;color:var(--ink)}
+  .addons button.ghost{border-style:dashed;color:var(--accent-deep)}
+  .msg{margin-top:10px;font-size:14.5px;color:var(--muted)}
+  .msg.ok{color:var(--ok);font-weight:600}.msg.err{color:var(--danger);font-weight:600}
+  .nav{position:fixed;left:0;right:0;bottom:0;background:#fff;border-top:1px solid var(--line);display:flex;padding:6px 6px calc(6px + env(safe-area-inset-bottom));z-index:6}
+  .nav button{flex:1;background:none;display:flex;flex-direction:column;align-items:center;gap:3px;padding:8px 4px;border-radius:14px;color:var(--muted);font-size:11.5px;font-weight:700}
+  .nav button.on{color:var(--accent-deep);background:var(--accent-soft)}
+  .nav svg{width:24px;height:24px}
+  .chat{display:flex;flex-direction:column;gap:10px;min-height:40vh}
+  .bub{max-width:88%;padding:12px 14px;border-radius:18px;white-space:pre-wrap;font-size:16px;line-height:1.4}
+  .bub.me{align-self:flex-end;background:var(--accent);color:#fff;border-bottom-right-radius:6px}
+  .bub.d{align-self:flex-start;background:#fff;border:1px solid var(--line);border-bottom-left-radius:6px}
+  .bub a{color:inherit}
+  .quick{display:flex;gap:8px;overflow-x:auto;padding:10px 0 4px;scrollbar-width:none}
+  .quick button{flex:none;min-height:44px;padding:0 14px;border-radius:999px;background:#fff;border:2px solid var(--line);font-weight:700;font-size:14.5px}
+  .compose{position:sticky;bottom:calc(84px + env(safe-area-inset-bottom));display:flex;gap:8px;background:var(--bg);padding:8px 0 10px}
+  .compose input{flex:1;min-height:56px;border:2px solid var(--line);border-radius:16px;padding:0 16px;font-size:17px;background:#fff}
+  .compose button{width:56px;height:56px;border-radius:16px;background:var(--accent);color:#fff;flex:none;display:flex;align-items:center;justify-content:center}
+  .compose button.mic{background:#fff;color:var(--accent-deep);border:2px solid var(--line)}
+  .compose button.mic.live{background:#fde8e6;color:var(--danger);border-color:#f3c4bf}
+  .auth input{width:100%;min-height:58px;border:2px solid var(--line);border-radius:16px;padding:0 16px;font-size:18px;margin-bottom:10px;background:#fff}
+  .auth .big{min-height:62px;font-size:19px}
+  .lang{display:flex;gap:8px;flex-wrap:wrap;margin-top:10px}
+  .lang button{min-height:44px;padding:0 14px;border-radius:999px;background:#fff;border:2px solid var(--line);font-weight:700}
+  .lang button.on{border-color:var(--accent);background:var(--accent-soft)}
+  .install{background:#fff8e8;border:1px solid #f3e2b8;border-radius:var(--r);padding:12px 14px;font-size:14px;color:#6b4e12;margin-bottom:12px}
+  .install b{display:block;margin-bottom:2px}
+  .install button{margin-top:8px;background:var(--warn);color:#fff;border-radius:12px;padding:10px 14px;font-weight:700}
+  .empty{text-align:center;color:var(--muted);padding:24px 8px;font-size:16px}
+  .back{background:none;color:#fff;font-weight:700;font-size:15px;padding:6px 10px;border-radius:10px}
+  a.map{display:inline-block;margin-top:8px;color:var(--accent-deep);font-weight:700;text-decoration:none;font-size:15px}
+  .skel{height:16px;border-radius:8px;background:linear-gradient(90deg,#eceeec,#f6f7f6,#eceeec);background-size:200% 100%;animation:sh 1.2s infinite;margin:10px 0}
+  @keyframes sh{to{background-position:-200% 0}}
+  .inv{display:flex;justify-content:space-between;align-items:center;padding:12px 0;border-top:1px solid var(--line);gap:10px}
+  .inv:first-child{border-top:0}
+  .inv .n{font-weight:700}.inv .s{font-size:13px;color:var(--muted)}
+  .inv .amt{font-weight:800;font-variant-numeric:tabular-nums}
+  .sm{min-height:42px;padding:0 14px;border-radius:12px;background:var(--accent-soft);color:var(--accent-deep);font-weight:700;font-size:14px}
+</style>
+</head>
+<body>
+<div class="top"><div><h1 id="title">Donna</h1><div class="sub" id="subtitle"></div></div><div id="topRight"></div></div>
+<div class="wrap" id="view"><div class="card"><div class="skel" style="width:50%"></div><div class="skel"></div><div class="skel" style="width:70%"></div></div></div>
+<div class="nav" id="nav" style="display:none">
+  <button data-go="today"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="5" width="18" height="16" rx="3"/><path d="M3 10h18M8 3v4M16 3v4"/></svg><span data-t="nav_today">Today</span></button>
+  <button data-go="talk"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12a8 8 0 0 1-11.6 7.1L4 21l1.9-5.4A8 8 0 1 1 21 12z"/></svg><span data-t="nav_talk">Talk to Donna</span></button>
+  <button data-go="money"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="6" width="20" height="13" rx="3"/><path d="M2 10h20M7 15h3"/></svg><span data-t="nav_money">Money</span></button>
+  <button data-go="more"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"/></svg><span data-t="nav_more">More</span></button>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.min.js"></script>
+<script>
+const SB_URL="https://hingbdtmxozbjetzwibj.supabase.co";
+const SB_KEY="eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImhpbmdiZHRteG96YmpldHp3aWJqIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODE1NDMzMzUsImV4cCI6MjA5NzExOTMzNX0.7WoJYMeIl2sclHQRSjl_AoLgYgLbQXBSn-hHV2rwlgI";
+const db = window.supabase.createClient(SB_URL, SB_KEY);
+const FN = SB_URL + "/functions/v1/";
+
+// ---------- strings (owner language; Donna's own replies stay in the language she's set to) ----------
+const STR = {
+  en:{ nav_today:"Today", nav_talk:"Talk to Donna", nav_money:"Money", nav_more:"More", signin:"Sign in", email:"Email", password:"Password", magic:"Email me a sign-in link", or:"or", sent_link:"Check your email and tap the link.", bad_login:"That didn't work. Check the email and password.", today:"Today", nothing:"Nothing on the books today. Donna will add jobs as they call in.", omw:"On my way", here:"I'm here", late:"Running late", done:"Done", min:"min", told:"Told {n} you're on the way.", told_late:"Told {n} you're running about {m} minutes behind.", started:"Started. Tap Done when you finish.", confirm_work:"Confirm the work", addons:"Add-ons", add_other:"+ Something else", what:"What", price:"Price", add:"Add", total:"Total", build:"Looks right", send:"Send invoice now", later:"Hold for later", paid:"They paid me", paid_how:"How did they pay?", cash:"Cash", check:"Check", card:"Card", other:"Other", sent:"Sent to {n}: {t}.", sent_pay:"They can tap Pay right from the text.", held:"Holding it. You'll find it under Money.", marked:"Marked paid. Nice work.", err:"Something didn't go through. Try again.", talk_hint:"Tell Donna what's going on. Try: \"on my way 20\", \"done\", \"running late\", \"what's next\".", say:"Say something…", open:"Waiting to be paid", recent:"Paid", none_open:"Nothing waiting. Finish a job and Donna will bill it.", view:"View", mark_paid:"Mark paid", resend:"Send again", install_t:"Put Donna on your home screen", install_ios:"Tap the Share button, then \"Add to Home Screen\".", install_and:"Tap Install to add the Donna icon.", install_btn:"Install", lang:"Language", signout:"Sign out", dash:"Open full dashboard", text_too:"You can also text these to Donna's number from your phone.", trip_waived:"Trip fee (waived, work done)", no_price:"Set the price", back:"Back", map:"Open in Maps", call:"Call", note:"Notes", photos:"Photos" },
+  es:{ nav_today:"Hoy", nav_talk:"Hablar con Donna", nav_money:"Dinero", nav_more:"Más", signin:"Entrar", email:"Correo", password:"Contraseña", magic:"Envíame un enlace para entrar", or:"o", sent_link:"Revisa tu correo y toca el enlace.", bad_login:"No funcionó. Revisa el correo y la contraseña.", today:"Hoy", nothing:"No hay trabajos hoy. Donna los agrega cuando llamen.", omw:"Voy en camino", here:"Llegué", late:"Voy tarde", done:"Terminé", min:"min", told:"Le avisé a {n} que vas en camino.", told_late:"Le avisé a {n} que vas unos {m} minutos tarde.", started:"Empezado. Toca Terminé cuando acabes.", confirm_work:"Confirma el trabajo", addons:"Extras", add_other:"+ Otra cosa", what:"Qué", price:"Precio", add:"Agregar", total:"Total", build:"Está bien", send:"Enviar factura ahora", later:"Guardar para después", paid:"Ya me pagaron", paid_how:"¿Cómo pagaron?", cash:"Efectivo", check:"Cheque", card:"Tarjeta", other:"Otro", sent:"Enviada a {n}: {t}.", sent_pay:"Puede pagar tocando el botón en el mensaje.", held:"Guardada. La encuentras en Dinero.", marked:"Marcada como pagada. Buen trabajo.", err:"Algo falló. Intenta de nuevo.", talk_hint:"Dile a Donna qué pasa. Prueba: \"voy en camino 20\", \"terminé\", \"voy tarde\", \"qué sigue\".", say:"Escribe aquí…", open:"Por cobrar", recent:"Pagadas", none_open:"Nada pendiente. Termina un trabajo y Donna lo factura.", view:"Ver", mark_paid:"Marcar pagada", resend:"Enviar otra vez", install_t:"Pon a Donna en tu pantalla de inicio", install_ios:"Toca Compartir y luego \"Agregar a inicio\".", install_and:"Toca Instalar para agregar el ícono de Donna.", install_btn:"Instalar", lang:"Idioma", signout:"Salir", dash:"Abrir el panel completo", text_too:"También puedes mandar estos mensajes al número de Donna.", trip_waived:"Viaje (sin cargo, trabajo hecho)", no_price:"Pon el precio", back:"Atrás", map:"Abrir en Mapas", call:"Llamar", note:"Notas", photos:"Fotos" }
+};
+// Spanish command aliases so a Spanish-speaking owner can talk to Donna naturally; mapped to the English commands crew-text understands.
+const ES_CMD = [[/^(voy en camino|en camino|saliendo|ya voy)\s*(\d+)?/i,(m)=>"omw "+(m[2]||"")],[/^(llegu[eé]|ya llegu[eé]|aqu[ií] estoy)/i,()=>"here"],[/^(termin[eé]|listo|ya acab[eé]|acab[eé])/i,()=>"done"],[/^(voy tarde|tarde|retrasado)\s*(\d+)?/i,(m)=>"late "+(m[2]||"")],[/^(hoy|trabajos|agenda)/i,()=>"today"],[/^(qu[eé] sigue|siguiente|pr[oó]ximo)/i,()=>"next"],[/^(ayuda)/i,()=>"help"],[/^(s[ií]|ok|bien|est[aá] bien|correcto)$/i,()=>"ok"],[/^(enviar|env[ií]a|manda|mandar)/i,()=>"send"],[/^(despu[eé]s|luego|espera)/i,()=>"later"],[/^(pagado|pagaron|me pagaron|efectivo)/i,()=>"paid cash"],[/^(cheque)/i,()=>"paid check"],[/^(nota)\s+(.+)/i,(m)=>"note "+m[2]],[/^(agrega|agregar|a[ñn]ade)\s+(.+?)\s+(\d+(?:\.\d+)?)$/i,(m)=>`add ${m[2]} ${m[3]}`],[/^(precio)\s+(\d+(?:\.\d+)?)/i,(m)=>"price "+m[2]],[/^(descuento)\s+(\d+(?:\.\d+)?)/i,(m)=>"discount "+m[2]]];
+
+let lang = (()=>{ try{ return localStorage.getItem("donna_lang") || ((navigator.language||"en").startsWith("es") ? "es" : "en"); }catch(e){ return "en"; } })();
+const t = (k, vars) => { let s = (STR[lang] && STR[lang][k]) || STR.en[k] || k; if(vars) for(const v in vars) s = s.replace("{"+v+"}", vars[v]); return s; };
+const esc = s => String(s ?? "").replace(/[&<>"]/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
+const money = c => "$" + (Math.round(c||0)/100).toLocaleString("en-US",{minimumFractionDigits:2,maximumFractionDigits:2});
+const firstName = n => String(n||"").trim().split(/\s+/)[0] || (lang==="es"?"el cliente":"the customer");
+const view = document.getElementById("view"), nav = document.getElementById("nav");
+let session=null, me=null, acct=null, state={ screen:"today", jobs:[], job:null, flow:null, chat:[] };
+
+async function api(fn, body){
+  const { data:{ session: s } } = await db.auth.getSession(); if(!s) throw new Error("no session");
+  const r = await fetch(FN+fn, { method:"POST", headers:{ "Content-Type":"application/json", Authorization:"Bearer "+s.access_token, apikey:SB_KEY }, body:JSON.stringify(body||{}) });
+  return r.json();
+}
+function fmtTime(iso){ try{ return new Intl.DateTimeFormat(lang==="es"?"es-US":"en-US",{ timeZone:(acct&&acct.settings&&acct.settings.timezone)||undefined, hour:"numeric", minute:"2-digit" }).format(new Date(iso)); }catch(e){ return ""; } }
+function setTop(title, sub, right){ document.getElementById("title").textContent=title; document.getElementById("subtitle").textContent=sub||""; document.getElementById("topRight").innerHTML=right||""; }
+function paintNav(){ nav.style.display="flex"; nav.querySelectorAll("button").forEach(b=>{ b.classList.toggle("on", b.dataset.go===state.screen || (state.screen==="job"&&b.dataset.go==="today")); }); nav.querySelectorAll("[data-t]").forEach(el=>el.textContent=t(el.dataset.t)); }
+nav.querySelectorAll("button").forEach(b=>b.onclick=()=>go(b.dataset.go));
+function go(screen){ state.screen=screen; render(); }
+
+// ---------- install banner ----------
+let deferredInstall=null; window.addEventListener("beforeinstallprompt", e=>{ e.preventDefault(); deferredInstall=e; });
+function installBanner(){
+  const standalone = window.matchMedia("(display-mode: standalone)").matches || navigator.standalone; if(standalone) return "";
+  let dismissed=false; try{ dismissed = localStorage.getItem("donna_install_dismissed")==="1"; }catch(e){}
+  if(dismissed) return "";
+  const ios = /iphone|ipad|ipod/i.test(navigator.userAgent);
+  return `<div class="install"><b>${t("install_t")}</b>${ios?t("install_ios"):t("install_and")}${(!ios&&deferredInstall)?`<br><button id="installBtn">${t("install_btn")}</button>`:""} <button id="installX" style="background:none;color:#6b4e12;float:right;margin-top:0;padding:0 6px;font-size:18px">×</button></div>`;
+}
+function wireInstall(){ const b=document.getElementById("installBtn"); if(b) b.onclick=async()=>{ if(deferredInstall){ deferredInstall.prompt(); await deferredInstall.userChoice; deferredInstall=null; render(); } }; const x=document.getElementById("installX"); if(x) x.onclick=()=>{ try{ localStorage.setItem("donna_install_dismissed","1"); }catch(e){} render(); }; }
+
+// ---------- auth ----------
+function renderAuth(msg){
+  nav.style.display="none"; setTop("Donna", lang==="es"?"Tu asistente":"Your assistant");
+  view.innerHTML = `<div class="card auth">
+    <div class="h">${t("signin")}</div>
+    <input id="em" type="email" inputmode="email" autocomplete="username" placeholder="${t("email")}">
+    <input id="pw" type="password" autocomplete="current-password" placeholder="${t("password")}">
+    <button class="big" id="login">${t("signin")}</button>
+    <div style="text-align:center;color:var(--muted);margin:2px 0 10px">${t("or")}</div>
+    <button class="big alt" id="magic">${t("magic")}</button>
+    <div class="msg ${msg&&msg.ok?'ok':(msg?'err':'')}">${msg?esc(msg.text):""}</div>
+    <div class="h" style="margin-top:16px">${t("lang")}</div>
+    <div class="lang">${langButtons()}</div>
+  </div>`;
+  wireLang();
+  document.getElementById("login").onclick=async()=>{ const b=document.getElementById("login"); b.disabled=true; const { error } = await db.auth.signInWithPassword({ email:document.getElementById("em").value.trim(), password:document.getElementById("pw").value }); if(error){ b.disabled=false; renderAuth({text:t("bad_login")}); return; } boot(); };
+  document.getElementById("magic").onclick=async()=>{ const em=document.getElementById("em").value.trim(); if(!em){ renderAuth({text:t("bad_login")}); return; } const { error } = await db.auth.signInWithOtp({ email:em, options:{ emailRedirectTo: location.origin + "/crew" } }); renderAuth(error?{text:t("bad_login")}:{ok:true,text:t("sent_link")}); };
+}
+function langButtons(){ return [["en","English"],["es","Español"]].map(([k,n])=>`<button data-lang="${k}" class="${lang===k?'on':''}">${n}</button>`).join(""); }
+function wireLang(){ view.querySelectorAll("[data-lang]").forEach(b=>b.onclick=()=>{ lang=b.dataset.lang; try{ localStorage.setItem("donna_lang",lang); }catch(e){} render(); }); }
+
+// ---------- screens ----------
+async function render(){
+  if(!session){ renderAuth(); return; }
+  paintNav(); wireInstall();
+  if(state.screen==="today") return renderToday();
+  if(state.screen==="job") return renderJob();
+  if(state.screen==="talk") return renderTalk();
+  if(state.screen==="money") return renderMoney();
+  if(state.screen==="more") return renderMore();
+}
+async function loadToday(){ const r = await api("jobs",{ action:"today" }); state.jobs = (r&&r.jobs)||[]; return state.jobs; }
+async function renderToday(){
+  setTop(acct?acct.name:"Donna", new Intl.DateTimeFormat(lang==="es"?"es-US":"en-US",{weekday:"long",month:"long",day:"numeric"}).format(new Date()), `<span class="pill">${esc((me&&me.full_name||"").split(" ")[0]||"")}</span>`);
+  view.innerHTML = installBanner() + `<div class="card"><div class="h">${t("today")}</div><div id="list"><div class="skel"></div><div class="skel" style="width:70%"></div></div></div>`; wireInstall();
+  try{ await loadToday(); }catch(e){}
+  const list=document.getElementById("list"); if(!list) return;
+  if(!state.jobs.length){ list.innerHTML=`<div class="empty">${t("nothing")}</div>`; return; }
+  list.innerHTML = state.jobs.map((j,i)=>`<div class="job" data-i="${i}"><div class="t">${fmtTime(j.starts_at)}<small>${j.price?esc(j.price):""}</small></div><div class="b"><div class="n">${esc(j.title)}</div><div class="a">${esc(j.customer_name||"")}${j.address?(j.customer_name?" · ":"")+esc(j.address.split(",")[0]):""}</div>${j.status&&j.status!=="scheduled"?`<span class="chip ${j.status}">${esc(j.status.replace("_"," "))}</span>`:""}</div><div style="color:var(--muted);font-size:22px;padding-top:4px">›</div></div>`).join("");
+  list.querySelectorAll(".job").forEach(el=>el.onclick=()=>{ state.job=state.jobs[+el.dataset.i]; state.flow=null; go("job"); });
+}
+function jobHead(j){ return `<div class="card"><div class="h">${fmtTime(j.starts_at)}</div><div style="font-size:22px;font-weight:800">${esc(j.title)}</div><div style="color:var(--ink2);margin-top:2px">${esc(j.customer_name||"")}${j.customer_phone?` · <a href="tel:${esc(j.customer_phone)}" style="color:var(--accent-deep);font-weight:700;text-decoration:none">${t("call")}</a>`:""}</div>${j.address?`<div style="color:var(--ink2);margin-top:4px">${esc(j.address)}</div><a class="map" target="_blank" rel="noopener" href="https://maps.google.com/?q=${encodeURIComponent(j.address)}">${t("map")} →</a>`:""}${j.notes?`<div style="margin-top:10px;font-size:14.5px;color:var(--ink2)"><b>${t("note")}:</b> ${esc(j.notes)}</div>`:""}</div>`; }
+async function renderJob(){
+  const j=state.job; if(!j) return go("today");
+  setTop(acct?acct.name:"Donna","", `<button class="back" id="back">‹ ${t("back")}</button>`); document.getElementById("back").onclick=()=>go("today");
+  if(state.flow) return renderFlow();
+  const done = ["done","invoiced","paid"].includes(j.status);
+  view.innerHTML = jobHead(j) + `<div class="card">
+    <div class="h">${t("omw")}</div>
+    <div class="mins" id="mins">${[10,20,30,45].map(m=>`<button data-m="${m}" class="${m===20?'on':''}">${m}<br><small style="font-size:12px;font-weight:600">${t("min")}</small></button>`).join("")}</div>
+    <button class="big" id="omw" ${j.status==="en_route"?"":""}><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12h13M11 6l6 6-6 6"/></svg>${t("omw")}</button>
+    <div class="row"><button class="big alt" id="here">${t("here")}</button><button class="big warn" id="late">${t("late")}</button></div>
+    <div class="msg" id="m1"></div>
+  </div>
+  <div class="card"><button class="big" id="done" style="background:${done?'var(--ok)':'var(--accent-deep)'}"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"><path d="M4 12.5l5 5L20 6.5"/></svg>${t("done")}</button><div class="msg" style="margin-top:0;text-align:center">${t("text_too")}</div></div>`;
+  let mins=20; view.querySelectorAll("#mins button").forEach(b=>b.onclick=()=>{ mins=+b.dataset.m; view.querySelectorAll("#mins button").forEach(x=>x.classList.toggle("on",x===b)); });
+  const m1=document.getElementById("m1");
+  const ref={ appointment_id:j.appointment_id, job_id:j.job_id||undefined };
+  document.getElementById("omw").onclick=async()=>{ const b=document.getElementById("omw"); b.disabled=true; try{ const r=await api("jobs",{action:"en_route",...ref,minutes:mins}); if(r.ok){ j.status="en_route"; j.job_id=r.job.id; m1.className="msg ok"; m1.textContent=t("told",{n:firstName(j.customer_name)}); } else throw 0; }catch(e){ m1.className="msg err"; m1.textContent=t("err"); } b.disabled=false; };
+  document.getElementById("here").onclick=async()=>{ try{ const r=await api("jobs",{action:"start",...ref}); if(r.ok){ j.status="in_progress"; j.job_id=r.job.id; m1.className="msg ok"; m1.textContent=t("started"); } else throw 0; }catch(e){ m1.className="msg err"; m1.textContent=t("err"); } };
+  document.getElementById("late").onclick=async()=>{ try{ const r=await api("crew-text",{ body:"late "+mins }); if(r.handled){ m1.className="msg ok"; m1.textContent=t("told_late",{n:firstName(j.customer_name),m:mins}); } else throw 0; }catch(e){ m1.className="msg err"; m1.textContent=t("err"); } };
+  document.getElementById("done").onclick=async()=>{ const b=document.getElementById("done"); b.disabled=true; try{ const r=await api("jobs",{action:"done",...ref}); if(!r.ok) throw 0; j.job_id=r.job.id; j.status="done"; if(r.has_invoice&&r.job.invoice_id){ state.flow={ step:"send", invoice:{ id:r.job.invoice_id, total_cents:(r.job.lines||[]).reduce((s,l)=>s+(l.cents||0),0) } }; } else { state.flow={ step:"lines", lines:(r.proposed||[]).map(l=>({...l})), menu:r.menu||[] }; } renderFlow(); }catch(e){ b.disabled=false; alert(t("err")); } };
+}
+function sumLines(ls){ return ls.reduce((s,l)=>s+(Number(l.cents)||0),0); }
+function renderFlow(){
+  const j=state.job, f=state.flow;
+  if(f.step==="lines"){
+    view.innerHTML = jobHead(j) + `<div class="card"><div class="h">${t("confirm_work")}</div>
+      <div id="lines">${f.lines.map((l,i)=>`<div class="line"><div class="d">${esc(l.kind==="trip_fee"&&l.cents===0?t("trip_waived"):l.desc)}${l.kind==="addon"?`<small>${t("addons")}</small>`:""}${l.needs_price?`<small style="color:var(--warn)">${t("no_price")}</small>`:""}</div><div class="p"><input type="number" inputmode="decimal" step="0.01" data-i="${i}" value="${(l.cents/100).toFixed(2)}"></div>${i>0&&l.kind!=="trip_fee"?`<button class="x" data-x="${i}">×</button>`:`<span style="width:38px"></span>`}</div>`).join("")}</div>
+      <div class="h" style="margin-top:14px">${t("addons")}</div>
+      <div class="addons">${f.menu.slice(0,8).map((m,i)=>`<button data-a="${i}">${esc(m.name)}${m.cents!=null?" "+money(m.cents):""}</button>`).join("")}<button class="ghost" id="other">${t("add_other")}</button></div>
+      <div id="otherBox" style="display:none;margin-top:8px"><div class="row"><input id="oDesc" placeholder="${t("what")}" style="flex:2;min-height:52px;border:2px solid var(--line);border-radius:14px;padding:0 14px"><input id="oPrice" type="number" inputmode="decimal" placeholder="${t("price")}" style="flex:1;min-height:52px;border:2px solid var(--line);border-radius:14px;padding:0 14px"><button class="sm" id="oAdd" style="min-height:52px">${t("add")}</button></div></div>
+      <div class="total"><span>${t("total")}</span><span id="tot">${money(sumLines(f.lines))}</span></div>
+      <button class="big" id="build" style="margin-top:14px">${t("build")} →</button><div class="msg err" id="fe"></div></div>`;
+    const recalc=()=>{ document.getElementById("tot").textContent=money(sumLines(f.lines)); };
+    view.querySelectorAll("#lines input").forEach(inp=>inp.oninput=()=>{ const l=f.lines[+inp.dataset.i]; const v=Math.round(parseFloat(inp.value||"0")*100)||0; l.cents = l.kind==="discount" ? -Math.abs(v) : v; l.unit_cents=Math.abs(v); delete l.needs_price; if(l.kind==="trip_fee") l.desc = v>0 ? "Trip fee" : "Trip fee (waived)"; if(l.kind==="service") l.desc=l.desc.replace(/ \(after hours\)$/,""); recalc(); });
+    view.querySelectorAll("[data-x]").forEach(b=>b.onclick=()=>{ f.lines.splice(+b.dataset.x,1); renderFlow(); });
+    view.querySelectorAll("[data-a]").forEach(b=>b.onclick=()=>{ const m=f.menu[+b.dataset.a]; f.lines.push({desc:m.name,qty:1,unit_cents:m.cents||0,cents:m.cents||0,kind:"addon"}); renderFlow(); });
+    document.getElementById("other").onclick=()=>{ document.getElementById("otherBox").style.display="block"; document.getElementById("oDesc").focus(); };
+    document.getElementById("oAdd").onclick=()=>{ const d=document.getElementById("oDesc").value.trim(); const c=Math.round(parseFloat(document.getElementById("oPrice").value||"0")*100)||0; if(!d) return; f.lines.push({desc:d,qty:1,unit_cents:c,cents:c,kind:"addon"}); renderFlow(); };
+    document.getElementById("build").onclick=async()=>{ const b=document.getElementById("build"); b.disabled=true; try{ const r=await api("jobs",{action:"finalize",job_id:j.job_id,lines:f.lines}); if(!r.ok) throw 0; state.flow={ step:"send", invoice:r.invoice, pay_url:r.pay_url }; renderFlow(); }catch(e){ b.disabled=false; document.getElementById("fe").textContent=t("err"); } };
+    return;
+  }
+  if(f.step==="send"){
+    view.innerHTML = jobHead(j) + `<div class="card"><div class="total" style="border-top:0;margin-top:0;padding-top:0"><span>${t("total")}</span><span>${money(f.invoice.total_cents)}</span></div>
+      <button class="big" id="send" style="margin-top:14px"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M22 2L11 13M22 2l-7 20-4-9-9-4 20-7z"/></svg>${t("send")}</button>
+      <button class="big alt" id="later">${t("later")}</button>
+      <button class="big alt" id="paid" style="color:var(--ok);border-color:#cfe6d7">${t("paid")}</button>
+      <div id="how" style="display:none"><div class="h">${t("paid_how")}</div><div class="addons">${["cash","check","card","other"].map(k=>`<button data-h="${k}">${t(k)}</button>`).join("")}</div></div>
+      <div class="msg" id="sm"></div></div>`;
+    const sm=document.getElementById("sm");
+    document.getElementById("send").onclick=async()=>{ const b=document.getElementById("send"); b.disabled=true; try{ const r=await api("payments",{action:"invoice_send",id:f.invoice.id}); if(!r.ok) throw new Error(r.message||""); sm.className="msg ok"; sm.textContent=t("sent",{n:firstName(j.customer_name),t:money(f.invoice.total_cents)})+(r.online?" "+t("sent_pay"):""); j.status="invoiced"; setTimeout(()=>go("today"),1800); }catch(e){ b.disabled=false; sm.className="msg err"; sm.textContent=(e&&e.message)||t("err"); } };
+    document.getElementById("later").onclick=()=>{ sm.className="msg ok"; sm.textContent=t("held"); setTimeout(()=>go("today"),1200); };
+    document.getElementById("paid").onclick=()=>{ document.getElementById("how").style.display="block"; };
+    view.querySelectorAll("[data-h]").forEach(b=>b.onclick=async()=>{ try{ const r=await api("payments",{action:"invoice_mark_paid",id:f.invoice.id,method:b.dataset.h}); if(!r.ok) throw 0; sm.className="msg ok"; sm.textContent=t("marked"); j.status="paid"; setTimeout(()=>go("today"),1400); }catch(e){ sm.className="msg err"; sm.textContent=t("err"); } });
+  }
+}
+// ---------- talk ----------
+let rec=null;
+function renderTalk(){
+  setTop("Donna", t("nav_talk"));
+  const quick = lang==="es" ? ["Hoy","Qué sigue","Voy en camino 20","Llegué","Terminé","Voy tarde 15","Ayuda"] : ["Today","Next","On my way 20","Here","Done","Late 15","Help"];
+  view.innerHTML = `<div class="card" style="padding:12px 14px"><div class="chat" id="chat">${state.chat.length?state.chat.map(m=>`<div class="bub ${m.me?'me':'d'}">${linkify(esc(m.text))}</div>`).join(""):`<div class="bub d">${t("talk_hint")}</div>`}</div></div>
+    <div class="quick">${quick.map(q=>`<button data-q="${esc(q)}">${esc(q)}</button>`).join("")}</div>
+    <div class="compose"><input id="say" placeholder="${t("say")}" autocomplete="off"><button class="mic" id="mic" title="voice"><svg viewBox="0 0 24 24" width="24" height="24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="3" width="6" height="11" rx="3"/><path d="M5 11a7 7 0 0 0 14 0M12 18v3"/></svg></button><button id="sendBtn"><svg viewBox="0 0 24 24" width="24" height="24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M22 2L11 13M22 2l-7 20-4-9-9-4 20-7z"/></svg></button></div>`;
+  const chat=document.getElementById("chat"); chat.scrollTop=chat.scrollHeight; window.scrollTo(0,document.body.scrollHeight);
+  const input=document.getElementById("say");
+  const send=async(text)=>{ text=String(text||"").trim(); if(!text) return; state.chat.push({me:true,text}); renderTalk(); let cmd=text; if(lang==="es"){ for(const [re,fn] of ES_CMD){ const m=text.match(re); if(m){ cmd=fn(m).trim(); break; } } } try{ const r=await api("crew-text",{ body:cmd }); state.chat.push({me:false,text:r.handled?r.reply:(lang==="es"?"No entendí. Escribe AYUDA para ver qué puedo hacer.":"Didn't catch that. Text HELP for what I can do.")}); }catch(e){ state.chat.push({me:false,text:t("err")}); } renderTalk(); };
+  document.getElementById("sendBtn").onclick=()=>send(input.value); input.onkeydown=e=>{ if(e.key==="Enter") send(input.value); };
+  view.querySelectorAll("[data-q]").forEach(b=>b.onclick=()=>send(b.dataset.q));
+  const mic=document.getElementById("mic"); const SR=window.SpeechRecognition||window.webkitSpeechRecognition;
+  if(!SR){ mic.style.display="none"; } else mic.onclick=()=>{ if(rec){ rec.stop(); rec=null; mic.classList.remove("live"); return; } rec=new SR(); rec.lang= lang==="es"?"es-US":"en-US"; rec.interimResults=false; mic.classList.add("live"); rec.onresult=e=>{ const txt=e.results[0][0].transcript; rec=null; mic.classList.remove("live"); send(txt); }; rec.onerror=()=>{ rec=null; mic.classList.remove("live"); }; rec.onend=()=>{ mic.classList.remove("live"); }; rec.start(); };
+}
+function linkify(s){ return s.replace(/(https?:\/\/[^\s]+)/g, '<a href="$1" target="_blank" rel="noopener">$1</a>'); }
+// ---------- money ----------
+async function renderMoney(){
+  setTop(acct?acct.name:"Donna", t("nav_money"));
+  view.innerHTML = `<div class="card"><div class="h">${t("open")}</div><div id="open"><div class="skel"></div></div></div><div class="card"><div class="h">${t("recent")}</div><div id="paid"><div class="skel"></div></div></div>`;
+  let invs=[]; try{ const r=await api("payments",{action:"invoice_list",limit:60}); invs=(r&&r.invoices)||[]; }catch(e){}
+  const open=invs.filter(i=>["draft","sent"].includes(i.status)), paid=invs.filter(i=>i.status==="paid").slice(0,15);
+  const row=(i,actions)=>`<div class="inv"><div><div class="n">${esc(i.customer_name||i.number)}</div><div class="s">${esc(i.number)} · ${i.status==="draft"?(lang==="es"?"sin enviar":"not sent"):i.status==="sent"?(lang==="es"?"enviada":"sent"):(lang==="es"?"pagada":"paid")}${i.paid_method?" · "+esc(i.paid_method):""}</div></div><div style="text-align:right"><div class="amt">${money(i.total_cents)}</div>${actions}</div></div>`;
+  const o=document.getElementById("open"); o.innerHTML = open.length ? open.map(i=>row(i,`<div style="display:flex;gap:6px;justify-content:flex-end;margin-top:6px"><button class="sm" data-send="${i.id}">${i.status==="draft"?t("send"):t("resend")}</button><button class="sm" data-paid="${i.id}">${t("mark_paid")}</button></div>`)).join("") : `<div class="empty">${t("none_open")}</div>`;
+  document.getElementById("paid").innerHTML = paid.length ? paid.map(i=>row(i,`<a class="sm" style="display:inline-block;line-height:42px;text-decoration:none;margin-top:6px" href="${esc(i.pay_url)}" target="_blank" rel="noopener">${t("view")}</a>`)).join("") : `<div class="empty">—</div>`;
+  o.querySelectorAll("[data-send]").forEach(b=>b.onclick=async()=>{ b.disabled=true; const r=await api("payments",{action:"invoice_send",id:b.dataset.send}); if(r.ok) renderMoney(); else { b.disabled=false; alert(r.message||t("err")); } });
+  o.querySelectorAll("[data-paid]").forEach(b=>b.onclick=async()=>{ const how=prompt(t("paid_how")+" (cash / check / card)","cash"); if(how===null) return; const r=await api("payments",{action:"invoice_mark_paid",id:b.dataset.paid,method:["cash","check","card"].includes(how.trim().toLowerCase())?how.trim().toLowerCase():"other"}); if(r.ok) renderMoney(); else alert(t("err")); });
+}
+// ---------- more ----------
+function renderMore(){
+  setTop(acct?acct.name:"Donna", t("nav_more"));
+  view.innerHTML = installBanner() + `<div class="card"><div class="h">${t("lang")}</div><div class="lang">${langButtons()}</div></div>
+    <div class="card"><a class="big alt" style="text-decoration:none" href="/">${t("dash")}</a><button class="big alt" id="out" style="color:var(--danger)">${t("signout")}</button></div>
+    <div class="msg" style="text-align:center">${esc(me?me.email||"":"")}</div>`;
+  wireLang(); wireInstall();
+  document.getElementById("out").onclick=async()=>{ await db.auth.signOut(); session=null; render(); };
+}
+// ---------- boot ----------
+async function boot(){
+  const { data:{ session: s } } = await db.auth.getSession(); session=s;
+  if(!session){ renderAuth(); return; }
+  try{
+    const { data: u } = await db.from("users").select("id, full_name, email, account_id, role").eq("id", session.user.id).maybeSingle(); me=u;
+    if(u){ const { data: a } = await db.from("accounts").select("id, name, industry, settings").eq("id", u.account_id).maybeSingle(); acct=a; }
+  }catch(e){}
+  state.screen="today"; render();
+}
+db.auth.onAuthStateChange((ev, s)=>{ if(ev==="SIGNED_IN"&&!session){ session=s; boot(); } });
+if("serviceWorker" in navigator){ navigator.serviceWorker.register("/crew-sw.js").catch(()=>{}); }
+boot();
+</script>
+</body>
+</html>

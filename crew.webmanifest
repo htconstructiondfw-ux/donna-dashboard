@@ -1,0 +1,16 @@
+{
+  "name": "Donna",
+  "short_name": "Donna",
+  "description": "Your jobs, your customers, your money. Talk to Donna.",
+  "start_url": "/crew?src=pwa",
+  "scope": "/",
+  "display": "standalone",
+  "background_color": "#f4f6f3",
+  "theme_color": "#1f6f4a",
+  "orientation": "portrait",
+  "icons": [
+    { "src": "/icons/donna-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
+    { "src": "/icons/donna-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" },
+    { "src": "/icons/donna-maskable-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
+  ]
+}

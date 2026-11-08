@@ -2,10 +2,29 @@
   "$schema": "https://openapi.vercel.sh/vercel.json",
   "cleanUrls": true,
   "rewrites": [
-    { "source": "/book/:slug", "destination": "/book?s=:slug" },
-    { "source": "/intake/:token", "destination": "/intake?t=:token" },
-    { "source": "/coi/:token", "destination": "/coi?t=:token" },
-    { "source": "/arc/:token", "destination": "/arc?t=:token" },
-    { "source": "/pay/:token", "destination": "/pay?t=:token" }
+    {
+      "source": "/book/:slug",
+      "destination": "/book?s=:slug"
+    },
+    {
+      "source": "/intake/:token",
+      "destination": "/intake?t=:token"
+    },
+    {
+      "source": "/coi/:token",
+      "destination": "/coi?t=:token"
+    },
+    {
+      "source": "/arc/:token",
+      "destination": "/arc?t=:token"
+    },
+    {
+      "source": "/pay/:token",
+      "destination": "/pay?t=:token"
+    },
+    {
+      "source": "/app",
+      "destination": "/crew"
+    }
   ]
 }
