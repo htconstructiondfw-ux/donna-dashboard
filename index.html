@@ -422,6 +422,8 @@ async function loadData(){
 function isManager(){ return ['owner','admin'].includes((state.owner&&state.owner.role)||'owner'); }
 function salonOn(){ const f=(state.account&&state.account.settings&&state.account.settings.features)||{}; return !!f.salon; }
 function propertyOn(){ const f=(state.account&&state.account.settings&&state.account.settings.features)||{}; return !!f.property_management; }
+// Payments (shared module, exposed per vertical): contractors today; any account with features.payments later.
+function paymentsOn(){ const ac=state.account||{}; const f=(ac.settings&&ac.settings.features)||{}; return ac.industry==='contractor' || !!f.payments; }
 // Solo vs team is driven by the plan: starter is solo, Pro/Enterprise is a team.
 function salonMode(){ return teamAllowed() ? 'team' : 'solo'; }
 function isSolo(){ return salonOn() && salonMode()==='solo'; }
@@ -438,6 +440,7 @@ function renderApp(){
   // A solo owner lives in their day; land there on first load, then leave navigation free.
   if(mgr && isSolo() && !state._homed){ state._homed=true; if(state.view==='assistant') state.view='today'; }
   if(mgr && new URLSearchParams(location.search).get('calendar')) state.view='settings';
+  if(mgr && new URLSearchParams(location.search).get('payments') && !state._payReturned){ state._payReturned=true; state.view='settings'; setTimeout(()=>{ if($("#pay-card")) paintPaymentsCard(true); },600); try{ history.replaceState(null,'',location.pathname); }catch(e){} }
   let navConfig, navActivity, soon=[];
   if(mgr){
     const pm=pmMode();
@@ -2171,6 +2174,42 @@ function bindApptActions(){
     set(BOOK_ERR[r&&r.error]||'Could not reschedule. Try again.','var(--danger)');
   });
 }
+// ---------- Getting paid (shared payments module; Stripe Connect, the business's OWN account) ----------
+async function paymentsApi(body){ const { data, error }=await db.functions.invoke('payments',{ body }); if(error) throw new Error(error.message||'failed'); return data||{}; }
+async function paintPaymentsCard(forceRefresh){
+  const body=$("#pay-body"), st=$("#pay-state"); if(!body) return;
+  let d; try{ d=await paymentsApi({ action: forceRefresh?'refresh':'status' }); if(forceRefresh) d=Object.assign({configured:true}, d, await paymentsApi({action:'status'})); }catch(e){ body.innerHTML='<p style="font-size:13px;color:var(--danger)">Couldn\'t load payment settings. Try again in a minute.</p>'; if(st) st.textContent=''; return; }
+  const a=d.account||{}; const live=!!(d.enabled&&a.charges_enabled); const connecting=a.status==='onboarding'||a.status==='restricted';
+  if(st) st.textContent= live?'On':(connecting?'Almost there':'Off');
+  const promise=`<div style="border:1px solid var(--line);border-radius:12px;padding:12px 14px;margin:12px 0;background:var(--bg-2,#fafaf9)">
+      <b style="display:block;font-size:13px;margin-bottom:3px">Your money is yours.</b>
+      <span style="font-size:12.5px;color:var(--muted);line-height:1.6">Payments run through <b>your own Stripe account</b> and land in <b>your bank</b>. Sidekick and ${esc(aName())} never hold, touch or route a dollar of it. Stripe's standard card fee applies; ${esc(aName())} adds nothing on top. Refunds, disputes and payouts are handled in your Stripe dashboard, same as any card reader.</span></div>`;
+  if(!d.configured){
+    body.innerHTML=`<p style="font-size:13px;color:var(--muted)">Online card payments are coming soon. Until then, ${esc(aName())} still sends invoices by text and you mark them paid when the customer pays you by cash, check or your own card reader.</p>${promise}`;
+    return;
+  }
+  if(live){
+    body.innerHTML=`<p style="font-size:13px;color:var(--muted)">Connected. Every invoice ${esc(aName())} sends has a <b>Pay</b> button; the customer pays on their phone and the money goes straight to your Stripe account.${d.open_invoices?` <b>${d.open_invoices}</b> invoice${d.open_invoices===1?'':'s'} waiting to be paid.`:''}</p>${promise}
+      <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center"><a class="btn sm" href="https://dashboard.stripe.com/" target="_blank" rel="noopener">Open my Stripe dashboard</a><button class="btn sm" id="pay-export">Download invoices & payments (CSV)</button><button class="btn sm" id="pay-off" style="margin-left:auto">Turn off online payments</button><span id="pay-msg" style="font-size:12px;color:var(--muted)"></span></div>`;
+  } else if(connecting){
+    body.innerHTML=`<p style="font-size:13px;color:var(--muted)">Stripe still needs a few details before you can take cards${a.status==='restricted'?' (they flagged something to finish)':''}. Pick up where you left off; it takes a couple of minutes.</p>${promise}
+      <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center"><button class="btn sm primary" id="pay-connect">Finish setting up Stripe</button><button class="btn sm" id="pay-refresh">I finished, check again</button><span id="pay-msg" style="font-size:12px;color:var(--muted)"></span></div>`;
+  } else if(a.charges_enabled&&!d.enabled){
+    body.innerHTML=`<p style="font-size:13px;color:var(--muted)">Your Stripe account is connected but online payments are switched off. Invoices go out without a Pay button and you mark them paid yourself.</p>${promise}
+      <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center"><button class="btn sm primary" id="pay-on">Turn on online payments</button><button class="btn sm" id="pay-export">Download invoices & payments (CSV)</button><span id="pay-msg" style="font-size:12px;color:var(--muted)"></span></div>`;
+  } else {
+    body.innerHTML=`<p style="font-size:13px;color:var(--muted)">Want customers to pay from the invoice text, right on their phone? Connect Stripe. <b>Already have a Stripe account?</b> Sign in when it asks. <b>Don't?</b> The same button creates one; have your bank account number and your EIN or SSN handy, it takes about five minutes.</p>${promise}
+      <p style="font-size:13px;color:var(--muted);margin-bottom:12px">Not interested in card payments? That's fine. ${esc(aName())} still texts the invoice and you mark it paid when they pay you by cash, check or your own reader.</p>
+      <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center"><button class="btn sm primary" id="pay-connect">Connect Stripe</button><button class="btn sm" id="pay-export">Download invoices & payments (CSV)</button><span id="pay-msg" style="font-size:12px;color:var(--muted)"></span></div>`;
+  }
+  const msg=()=>$("#pay-msg");
+  const c=$("#pay-connect"); if(c) c.onclick=async()=>{ c.disabled=true; c.textContent='Opening Stripe…'; try{ const r=await paymentsApi({action:'connect'}); if(r.ok&&r.url){ location.href=r.url; return; } throw new Error(r.message||r.error||'failed'); }catch(e){ if(msg()){ msg().style.color='var(--danger)'; msg().textContent=String(e.message||e); } c.disabled=false; c.textContent='Connect Stripe'; } };
+  const rf=$("#pay-refresh"); if(rf) rf.onclick=()=>paintPaymentsCard(true);
+  const on=$("#pay-on"); if(on) on.onclick=async()=>{ try{ const r=await paymentsApi({action:'enable'}); if(!r.ok) throw new Error(r.message||r.error); state.account.settings=Object.assign({},state.account.settings||{},{payments:Object.assign({},(state.account.settings||{}).payments||{},{enabled:true})}); paintPaymentsCard(); }catch(e){ if(msg()){ msg().style.color='var(--danger)'; msg().textContent=String(e.message||e); } } };
+  const off=$("#pay-off"); if(off) off.onclick=async()=>{ if(!confirm('Turn off online payments? Invoices will go out without a Pay button until you turn it back on. Your Stripe account stays connected.')) return; try{ await paymentsApi({action:'disable'}); state.account.settings=Object.assign({},state.account.settings||{},{payments:Object.assign({},(state.account.settings||{}).payments||{},{enabled:false})}); paintPaymentsCard(); }catch(e){} };
+  const ex=$("#pay-export"); if(ex) ex.onclick=async()=>{ ex.disabled=true; const o=ex.textContent; ex.textContent='Preparing…'; try{ const r=await paymentsApi({action:'export_csv'}); if(!r.ok) throw new Error('failed'); const dl=(name,text)=>{ const a=document.createElement('a'); a.href=URL.createObjectURL(new Blob([text],{type:'text/csv'})); a.download=name; document.body.appendChild(a); a.click(); a.remove(); }; const stamp=new Date().toISOString().slice(0,10); dl(`invoices-${stamp}.csv`, r.invoices_csv); setTimeout(()=>dl(`payments-${stamp}.csv`, r.payments_csv),400); if(msg()){ msg().style.color='var(--muted)'; msg().textContent=`${r.count.invoices} invoices, ${r.count.payments} payments. Both files open in Excel or import into QuickBooks.`; } }catch(e){ if(msg()){ msg().style.color='var(--danger)'; msg().textContent='Export failed.'; } } ex.disabled=false; ex.textContent=o; };
+}
+
 async function saveTimezone(){
   const sel=$("#tz-select"); if(!sel) return;
   const tz=sel.value, btn=$("#tz-save"); btn.disabled=true; const o=btn.textContent; btn.textContent="Saving…";
@@ -3077,6 +3116,11 @@ function pageSettings(){
       <select class="inp" id="tz-select" style="max-width:340px">${TZS.map(t=>`<option value="${t[0]}" ${ac.timezone===t[0]?'selected':''}>${t[1]}</option>`).join("")}</select>
     </div>
 
+    ${(paymentsOn()&&isManager())?`
+    <div class="card" id="pay-card"><div class="card-h"><h2>Getting paid</h2><span class="hint" id="pay-state">Checking…</span></div>
+      <div id="pay-body"><p style="font-size:13px;color:var(--muted)">Loading…</p></div>
+    </div>`:''}
+
     ${(ac.settings&&ac.settings.email_address)?`
     <div class="card"><div class="card-h"><h2>Your ${esc(aName())} email address</h2></div>
       <p style="font-size:13px;color:var(--muted);margin-bottom:12px">This is ${esc(aName())}'s own email address, created for your account. Customers can email it directly and she answers, or you can forward your business inbox here so she handles that mail too. Put it on your website or share it anywhere you want ${esc(aName())} reachable by email.</p>
@@ -3158,6 +3202,7 @@ function pageSettings(){
   { const b=$("#pmt-save"); if(b) b.onclick=async()=>{ const msg=$("#pmt-msg"); const types=[...document.querySelectorAll('#pmt-chips [data-pmt]')].filter(c=>c.checked).map(c=>c.dataset.pmt); if(!types.length){ msg.textContent='Pick at least one.'; return; } const settings=Object.assign({}, state.account.settings||{}, { property_types:types, office_address:($("#pmt-office").value.trim()||null) }); msg.textContent='Saving…'; const { error }=await db.from('accounts').update({ settings }).eq('id',state.account.id); if(error){ msg.textContent='Could not save.'; return; } state.account.settings=settings; msg.textContent='Saved.'; setTimeout(()=>{ if(msg) msg.textContent=''; },1500); }; }
   { const pl=$("#prov-label-save"); if(pl) pl.onclick=saveProviderLabel; }
   $("#tz-save").onclick=saveTimezone;
+  if($("#pay-card")) paintPaymentsCard();
   { const ae=$("#alert-save"); if(ae) ae.onclick=saveAlertEmail; }
   { const is=$("#inbound-save"); if(is) is.onclick=saveInbound; const ic=$("#inbound-copy"); if(ic) ic.onclick=()=>{ const a=$("#inbound-addr"); if(a&&a.value){ try{ navigator.clipboard&&navigator.clipboard.writeText(a.value.trim()); }catch(e){} const m=$("#inbound-msg"); if(m){ m.style.color='var(--muted)'; m.textContent='Copied.'; } } }; }
   { const dc=$("#donna-email-copy"); if(dc) dc.onclick=()=>{ const a=$("#donna-email"); if(a&&a.value){ try{ navigator.clipboard&&navigator.clipboard.writeText(a.value.trim()); }catch(e){} } dc.textContent='Copied'; setTimeout(()=>{dc.textContent='Copy';},1200); }; }

@@ -1,0 +1,102 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>Invoice</title>
+<meta name="robots" content="noindex">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Figtree:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+  :root{--accent:#1f6f4a;--accent-deep:#164f35;--bg:#f4f6f3;--card:#fff;--ink:#1b2420;--ink2:#4c5a52;--muted:#7d8a82;--line:#e3e8e4;--ok:#2d7a4f;--danger:#b4443a;--radius:18px}
+  *{box-sizing:border-box} body{margin:0;background:var(--bg);color:var(--ink);font:16px/1.5 'Figtree',-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;-webkit-font-smoothing:antialiased;min-height:100vh}
+  .wrap{max-width:520px;margin:0 auto;padding:22px 16px 60px}
+  .biz{display:flex;align-items:center;gap:12px;margin-bottom:16px}
+  .logo{width:44px;height:44px;border-radius:12px;background:var(--accent);color:#fff;display:flex;align-items:center;justify-content:center;font-weight:700;font-size:18px;flex:none}
+  .biz h1{font-size:18px;margin:0;font-weight:700} .biz p{margin:2px 0 0;color:var(--muted);font-size:13.5px}
+  .card{background:var(--card);border:1px solid var(--line);border-radius:var(--radius);padding:18px;box-shadow:0 10px 30px -22px rgba(0,0,0,.25)}
+  .top{display:flex;justify-content:space-between;align-items:flex-start;gap:12px;margin-bottom:12px}
+  .num{font-size:13px;color:var(--muted);letter-spacing:.06em;text-transform:uppercase;font-weight:600} .to{font-weight:600;margin-top:2px} .addr{color:var(--ink2);font-size:14px}
+  .badge{font-size:12px;font-weight:700;padding:5px 10px;border-radius:999px;background:#eef3ef;color:var(--ink2);white-space:nowrap}
+  .badge.paid{background:#e4f3ea;color:var(--ok)} .badge.void{background:#f6e7e5;color:var(--danger)}
+  table{width:100%;border-collapse:collapse;margin-top:6px} td{padding:10px 0;border-top:1px solid var(--line);vertical-align:top;font-size:15px} td.amt{text-align:right;white-space:nowrap;font-variant-numeric:tabular-nums}
+  td .k{display:block;font-size:12px;color:var(--muted)} tr.total td{border-top:2px solid var(--ink);font-weight:700;font-size:18px;padding-top:12px}
+  .notes{margin-top:14px;color:var(--ink2);font-size:14px;white-space:pre-wrap}
+  .pay{display:block;width:100%;margin-top:18px;padding:17px;border:0;border-radius:14px;background:var(--accent);color:#fff;font-weight:700;font-size:18px;cursor:pointer}
+  .pay:disabled{opacity:.6;cursor:default} .pay:hover:not(:disabled){background:var(--accent-deep)}
+  .alt{margin-top:14px;text-align:center;color:var(--muted);font-size:13.5px}
+  .done{margin-top:16px;padding:14px;border-radius:14px;background:#e4f3ea;color:var(--ok);font-weight:600;text-align:center}
+  .err{margin-top:16px;padding:14px;border-radius:14px;background:#f6e7e5;color:var(--danger);text-align:center}
+  .foot{margin-top:26px;text-align:center;color:var(--muted);font-size:12.5px;line-height:1.6}
+  .foot a{color:inherit}
+  .skel{height:14px;border-radius:7px;background:linear-gradient(90deg,#eceeec,#f6f7f6,#eceeec);background-size:200% 100%;animation:sh 1.2s infinite;margin:10px 0}
+  @keyframes sh{to{background-position:-200% 0}}
+</style>
+</head>
+<body>
+<div class="wrap" id="app">
+  <div class="card"><div class="skel" style="width:40%"></div><div class="skel"></div><div class="skel"></div><div class="skel" style="width:60%"></div></div>
+</div>
+<script>
+const SB = "https://hingbdtmxozbjetzwibj.supabase.co";
+const ANON = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImhpbmdiZHRteG96YmpldHp3aWJqIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODE1NDMzMzUsImV4cCI6MjA5NzExOTMzNX0.7WoJYMeIl2sclHQRSjl_AoLgYgLbQXBSn-hHV2rwlgI";
+const q = new URLSearchParams(location.search);
+const token = q.get("t") || (location.pathname.match(/\/pay\/([a-z0-9]+)/i) || [])[1] || "";
+const justPaid = q.get("paid") === "1";
+const esc = s => String(s ?? "").replace(/[&<>"]/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
+const money = c => "$" + (Math.round(c||0)/100).toLocaleString("en-US",{minimumFractionDigits:2,maximumFractionDigits:2});
+const app = document.getElementById("app");
+
+async function load(attempt=0){
+  if(!token){ app.innerHTML = '<div class="card err">This invoice link isn\'t complete. Please use the link from your text or email.</div>'; return; }
+  let inv=null;
+  try{
+    const r = await fetch(`${SB}/rest/v1/rpc/invoice_public`,{method:"POST",headers:{"Content-Type":"application/json",apikey:ANON,Authorization:"Bearer "+ANON},body:JSON.stringify({p_token:token})});
+    inv = await r.json();
+  }catch(e){}
+  if(!inv || !inv.id){ app.innerHTML = '<div class="card err">We couldn\'t find this invoice. It may have been replaced; please check with the business.</div>'; return; }
+  // After Stripe redirects back, the webhook may land a second later: poll briefly until it shows paid.
+  if(justPaid && !inv.paid_at && attempt < 6){ setTimeout(()=>load(attempt+1), 1500); }
+  render(inv);
+}
+
+function render(inv){
+  const b = inv.business || {}; const paid = !!inv.paid_at; const isVoid = inv.status === "void";
+  const initials = (b.name||"?").split(/\s+/).slice(0,2).map(w=>w[0]).join("").toUpperCase();
+  const lines = (inv.lines||[]).filter(l => l.kind !== "tax");
+  document.title = `Invoice ${inv.number} · ${b.name||""}`;
+  app.innerHTML = `
+    <div class="biz"><div class="logo">${esc(initials)}</div><div><h1>${esc(b.name||"Invoice")}</h1><p>${[b.phone,b.email].filter(Boolean).map(esc).join(" · ")}</p></div></div>
+    <div class="card">
+      <div class="top">
+        <div><div class="num">Invoice ${esc(inv.number)}</div>${inv.customer_name?`<div class="to">${esc(inv.customer_name)}</div>`:""}${inv.service_address?`<div class="addr">${esc(inv.service_address)}</div>`:""}</div>
+        <span class="badge ${paid?"paid":isVoid?"void":""}">${paid?"Paid":isVoid?"Cancelled":"Due"}</span>
+      </div>
+      <table>
+        ${lines.map(l=>`<tr><td>${esc(l.desc)}${l.qty>1?`<span class="k">${l.qty} × ${money(l.unit_cents)}</span>`:""}${l.kind==="addon"?`<span class="k">Add-on</span>`:""}</td><td class="amt">${l.cents===0?"No charge":money(l.cents)}</td></tr>`).join("")}
+        ${inv.tax_cents?`<tr><td>Sales tax</td><td class="amt">${money(inv.tax_cents)}</td></tr>`:""}
+        <tr class="total"><td>Total</td><td class="amt">${money(inv.total_cents)}</td></tr>
+      </table>
+      ${inv.notes?`<div class="notes">${esc(inv.notes)}</div>`:""}
+      ${paid ? `<div class="done">Paid${inv.paid_method&&inv.paid_method!=="card"?" ("+esc(inv.paid_method)+")":""} on ${new Date(inv.paid_at).toLocaleDateString("en-US",{month:"long",day:"numeric",year:"numeric"})}. Thank you!</div>`
+        : isVoid ? `<div class="err">This invoice was cancelled by ${esc(b.name||"the business")}.</div>`
+        : inv.can_pay_online ? `<button class="pay" id="payBtn">Pay ${money(inv.total_cents)}</button><div class="alt">Secure card payment through Stripe. Your payment goes directly to ${esc(b.name||"the business")}.</div><div id="payErr"></div>`
+        : (justPaid ? `<div class="alt">Confirming your payment…</div>` : `<div class="alt">Pay ${esc(b.name||"the business")} directly${b.phone?` · ${esc(b.phone)}`:""}.</div>`)}
+    </div>
+    <div class="foot">Sent by ${esc(b.name||"the business")} with Donna.<br>Payments are processed by ${esc(b.name||"the business")}'s own Stripe account; Donna never holds your money.</div>`;
+  const btn = document.getElementById("payBtn");
+  if(btn) btn.onclick = async () => {
+    btn.disabled = true; btn.textContent = "Opening secure checkout…";
+    try{
+      const r = await fetch(`${SB}/functions/v1/payments`,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({action:"checkout",token})});
+      const j = await r.json();
+      if(j.ok && j.url){ location.href = j.url; return; }
+      document.getElementById("payErr").innerHTML = `<div class="err">${j.error==="already_paid"?"This invoice is already paid.":"Online payment isn't available right now. Please pay the business directly."}</div>`;
+    }catch(e){ document.getElementById("payErr").innerHTML = '<div class="err">Couldn\'t open checkout. Please try again.</div>'; }
+    btn.disabled = false; btn.textContent = `Pay ${money(inv.total_cents)}`;
+  };
+}
+load();
+</script>
+</body>
+</html>
