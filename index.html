@@ -218,7 +218,7 @@ const state = {
   account:null, owner:null, assistantId:null,
   assistant:{ name:DEFAULT_NAME, greetingLabel:"the office", voice:"warm-female", languages:["en"], number:"", recordingNotice:true, active:true, routing:{} },
   schedule: DAYS.map((_,i)=>({ working:{on:false,start:"08:00",end:"18:00"}, bookable:{on:false,start:"09:00",end:"15:00"} })),
-  blocks:[], types:[], messages:[], appointments:[], calls:[], contacts:[], gaps:[], conversations:[], openConvId:null, threadMsgs:[], openCallId:null, callTranscript:[], callsChannel:null, txChannel:null, view:"assistant", authMode:"signup"
+  blocks:[], types:[], messages:[], appointments:[], calls:[], contacts:[], gaps:[], conversations:[], openConvId:null, threadMsgs:[], openCallId:null, callTranscript:[], callsChannel:null, txChannel:null, view:"assistant", authMode:(/[?&#](signup|invite)(=|&|$)/.test(location.search+location.hash)?"signup":"login")
 };
 const LANGS = [
   ["ar","Arabic"],["yue","Cantonese"],["nl","Dutch"],["en","English"],["fr","French"],
