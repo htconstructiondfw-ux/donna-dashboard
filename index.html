@@ -475,7 +475,7 @@ function renderApp(){
     </aside>
     <main class="main">
       <div class="topbar">
-        <div class="crumbs">${['settings','notifications'].includes(state.view)?'Account':(['messages','appointments','waitlist','calls','contacts','clients','gaps','conversations','requests'].includes(state.view)?'Activity':'Configure')} · <b>${esc(({assistant:"Assistant",schedule:"Schedule",types:(pmMode()?"Visit types":"Appointment types"),staff:"Staff",messages:"Phone messages",appointments:"Appointments",settings:"Settings",notifications:"Notifications",calls:"Calls",knowledge:"Knowledge",contacts:(salonOn()?"Clients":"Contacts"),clients:"Clients",gaps:"Open questions",conversations:"Email inbox",waitlist:"Waitlist",promotions:"Promotions",booking:(pmMode()?"Self-scheduling":"Booking page"),mylink:"My booking link",intake:"Intake forms",properties:"Properties",contractors:"Contractors",requests:"Service requests"})[state.view])}</b></div>
+        <div class="crumbs">${['settings','notifications'].includes(state.view)?'Account':(['messages','appointments','waitlist','calls','contacts','clients','gaps','conversations','requests'].includes(state.view)?'Activity':'Configure')} · <b>${esc(({assistant:"Assistant",schedule:"Schedule",types:(pmMode()?"Visit types":"Appointment types"),staff:"Staff",messages:"Phone messages",appointments:(pmMode()?"Visits & appointments":"Appointments"),settings:"Settings",notifications:"Notifications",calls:"Calls",knowledge:"Knowledge",contacts:(salonOn()?"Clients":"Contacts"),clients:"Clients",gaps:"Open questions",conversations:"Email inbox",waitlist:"Waitlist",promotions:"Promotions",booking:(pmMode()?"Self-scheduling":"Booking page"),mylink:"My booking link",intake:"Intake forms",properties:"Properties",contractors:"Contractors",requests:"Service requests"})[state.view])}</b></div>
         <div class="acct-chip"><span class="av">${initials}</span><div class="who"><b>${esc(state.account.company)}</b><span>${esc((state.account.status||'trial'))} · ${esc(state.account.plan||'starter')}</span></div></div>
       </div>
       <div id="approve-banner"></div>
@@ -492,7 +492,7 @@ function renderPage(){
   if('speechSynthesis' in window) window.speechSynthesis.cancel();
   teardownRealtime();
   document.querySelectorAll(".nav-item[data-v]").forEach(b=>b.classList.toggle("active",b.dataset.v===state.view));
-  $(".crumbs").innerHTML=`${['settings','notifications'].includes(state.view)?'Account':(['messages','appointments','waitlist','calls','contacts','clients','gaps','conversations','requests'].includes(state.view)?'Activity':'Configure')} · <b>${esc(({assistant:"Assistant",schedule:"Schedule",types:(pmMode()?"Visit types":"Appointment types"),staff:"Staff",messages:"Phone messages",appointments:"Appointments",settings:"Settings",notifications:"Notifications",calls:"Calls",knowledge:"Knowledge",contacts:(salonOn()?"Clients":"Contacts"),clients:"Clients",gaps:"Open questions",conversations:"Email inbox",waitlist:"Waitlist",promotions:"Promotions",booking:(pmMode()?"Self-scheduling":"Booking page"),mylink:"My booking link",intake:"Intake forms",properties:"Properties",contractors:"Contractors",requests:"Service requests"})[state.view])}</b>`;
+  $(".crumbs").innerHTML=`${['settings','notifications'].includes(state.view)?'Account':(['messages','appointments','waitlist','calls','contacts','clients','gaps','conversations','requests'].includes(state.view)?'Activity':'Configure')} · <b>${esc(({assistant:"Assistant",schedule:"Schedule",types:(pmMode()?"Visit types":"Appointment types"),staff:"Staff",messages:"Phone messages",appointments:(pmMode()?"Visits & appointments":"Appointments"),settings:"Settings",notifications:"Notifications",calls:"Calls",knowledge:"Knowledge",contacts:(salonOn()?"Clients":"Contacts"),clients:"Clients",gaps:"Open questions",conversations:"Email inbox",waitlist:"Waitlist",promotions:"Promotions",booking:(pmMode()?"Self-scheduling":"Booking page"),mylink:"My booking link",intake:"Intake forms",properties:"Properties",contractors:"Contractors",requests:"Service requests"})[state.view])}</b>`;
   const PAGES={assistant:pageAssistant, schedule:pageSchedule, types:pageTypes, staff:pageStaff, messages:pageMessages, appointments:renderAppts, settings:pageSettings, notifications:pageNotifications, calls:pageCalls, knowledge:pageKnowledge, contacts:pageContacts, clients:pageClients, gaps:pageGaps, conversations:pageConversations, waitlist:pageWaitlist, promotions:pagePromotions, booking:pageBookingPage, mylink:pageMyLink, intake:pageIntakeForms, properties:pageProperties, contractors:pageContractors, requests:pageServiceRequests};
   const LOADERS={appointments:loadAppointments, messages:loadMessages, calls:loadCalls, contacts:loadContacts, clients:loadContacts, gaps:loadGaps, conversations:loadConversations, staff:loadStaff, waitlist:loadWaitlist};
   const v=state.view;
@@ -630,7 +630,7 @@ async function saveAssistant(){
 function pageSchedule(){
   $("#page").innerHTML=`
   <div class="page">
-    <div class="page-head"><h1>Schedule</h1><p style="margin-bottom:6px">Two separate schedules, both different from your general hours of operation (those live in Knowledge).</p><p><b>Live transfer hours</b> are when someone is available for ${esc(aName())} to transfer a live call to. <b>Booking hours</b> are when ${esc(aName())} is allowed to schedule an appointment, checked on every booking.</p></div>
+    <div class="page-head"><h1>Schedule</h1><p style="margin-bottom:6px">Two separate schedules, both different from your general hours of operation (those live in Knowledge).</p><p><b>Live transfer hours</b> are when someone is available for ${esc(aName())} to transfer a live call to. <b>Booking hours</b> are when ${esc(aName())} is allowed to schedule ${pmMode()?'a visit — showings, inspections, walkthroughs, meetings — checked on every booking. Emergency dispatch is not limited by these hours.':'an appointment, checked on every booking.'}</p></div>
     <div class="card">
       <div class="card-h"><h2>Weekly hours</h2><button class="btn sm" id="hours-save">Save hours</button></div>
       <div class="col-h"><span></span><span>Live transfer hours</span><span>Booking hours</span></div>
@@ -1193,7 +1193,7 @@ function pageConversations(){
     .th-msgtxt{font-size:12.5px;margin-right:auto}
   </style>
   <div class="page">
-    <div class="page-head"><h1>Email inbox</h1><p>Email threads with customers. ${esc(aName())} drafts replies here, and anything marked "Needs you" is waiting for your review before it sends.</p></div>
+    <div class="page-head"><h1>Email inbox</h1><p>Email threads with ${pmMode()?'residents, owners, tenants, vendors, and prospects':'customers'}. ${esc(aName())} drafts replies here, and anything marked "Needs you" is waiting for your review before it sends.</p></div>
     <div class="card">
       <div class="card-h"><h2>Conversations${needs?` <span class="hint">${needs} need you</span>`:''}</h2><button class="btn sm" id="cv-refresh">Refresh</button></div>
       <div id="cv-list">${rows.length?rows.map(convRow).join(""):`<div class="empty">${I.inbox}<div>No email conversations yet. When a customer emails, ${esc(aName())} will draft a reply here for you.</div></div>`}</div>
@@ -1422,7 +1422,7 @@ function pageContacts(){
     .c-edit .save-row{grid-column:1 / -1;display:flex;gap:8px;justify-content:flex-end}
   </style>
   <div class="page">
-    <div class="page-head"><h1>Contacts</h1><p>The customer list ${esc(aName())} builds automatically. Every caller she saves shows up here with what she learned, so you can see who's calling, mark your regulars, or block a number.</p></div>
+    <div class="page-head"><h1>Contacts</h1><p>${pmMode()?`Everyone ${esc(aName())} has talked to — residents, owners, tenants, board members, vendors, prospects — built automatically from calls, emails, and texts, with what she learned about each. Link a person to a property on the Properties page so she knows their unit and role next time.`:`The customer list ${esc(aName())} builds automatically. Every caller she saves shows up here with what she learned, so you can see who's calling, mark your regulars, or block a number.`}</p></div>
     <div class="card">
       <div class="card-h"><h2>People${total?` <span class="hint">${total}</span>`:''}</h2><button class="btn sm" id="c-refresh">Refresh</button></div>
       <div class="c-tools"><input class="c-search" id="c-search" type="search" placeholder="Search name, number, company\u2026" value="${esc(q)}"><button class="btn sm" id="c-add">Add contact</button><button class="btn sm" id="c-import">Import</button><button class="btn sm" id="c-export">Export</button><input type="file" id="c-file" accept=".csv,.vcf,text/csv,text/vcard" style="display:none"></div>
@@ -1455,7 +1455,7 @@ function contactHTML(c){
   return `<div class="c-item ${vip?'vip':''} ${blocked?'blocked':''}" data-id="${c.id}">
     <div class="c-top">
       <span class="c-name">${esc(c.name||"Unknown caller")}</span>
-      ${vip?'<span class="c-badge vip">VIP</span>':''}${blocked?'<span class="c-badge blocked">Blocked</span>':''}
+      ${vip?`<span class="c-badge vip">${pmMode()?'Priority':'VIP'}</span>`:''}${blocked?'<span class="c-badge blocked">Blocked</span>':''}
       ${langBadge(c.language)}
       ${c.phone?`<a class="c-num" href="tel:${esc(tel)}">${esc(c.phone)}</a>`:''}
     </div>
@@ -1465,8 +1465,8 @@ function contactHTML(c){
     ${c.memory?`<div class="c-sum" style="font-style:normal;color:var(--ink-2);line-height:1.5"><strong style="color:var(--muted);font-weight:600;font-size:10px;text-transform:uppercase;letter-spacing:.05em;margin-right:6px">Remembers</strong>${esc(c.memory)}</div>`:''}
     <div class="c-actions">
       <button class="btn sm" data-act="edit" data-id="${c.id}">Edit</button>
-      <button class="btn sm" data-act="visits" data-id="${c.id}">Visits</button>
-      <button class="btn sm" data-act="vip" data-id="${c.id}">${vip?'Remove VIP':'Mark VIP'}</button>
+      <button class="btn sm" data-act="visits" data-id="${c.id}">${pmMode()?'Details':'Visits'}</button>
+      <button class="btn sm" data-act="vip" data-id="${c.id}">${pmMode()?(vip?'Remove priority':'Mark priority'):(vip?'Remove VIP':'Mark VIP')}</button>
       <button class="btn sm" data-act="block" data-id="${c.id}">${blocked?'Unblock':'Block'}</button>
       <button class="btn sm danger" data-act="del" data-id="${c.id}">Delete</button>
     </div>
@@ -1540,18 +1540,36 @@ async function loadVisits(id){
     rows=aRes.data||[]; cnotes=(cRes.data&&cRes.data.stylist_notes)||'';
   }catch(_e){ rows=[]; }
   const typeName=tid=>{ const t=(state.types||[]).find(x=>x.id===tid); return t?t.name:''; };
+  const pm=pmMode();
+  const notesLabel = salonOn() ? 'Stylist notes &amp; formula' : (pm ? 'Notes about this person' : 'Notes');
+  const notesPh = salonOn() ? 'e.g. Color formula: 6N + 20 vol, 35 min. Prefers a side part. Note: sensitive scalp.' : (pm ? 'e.g. Prefers text. Dog in the yard — knock first. Board treasurer at Sunset Ridge. Authorized for Suite 210 billable work.' : 'e.g. Prefers afternoon appointments. Ask about the warranty.');
   const formulaBox=`<div style="margin-bottom:12px">
-    <div style="font-size:11px;text-transform:uppercase;letter-spacing:.05em;color:var(--muted);font-weight:600;margin-bottom:6px">Stylist notes &amp; formula</div>
-    <textarea class="inp" id="sn-${id}" rows="3" placeholder="e.g. Color formula: 6N + 20 vol, 35 min. Prefers a side part. Note: sensitive scalp.">${esc(cnotes)}</textarea>
+    <div style="font-size:11px;text-transform:uppercase;letter-spacing:.05em;color:var(--muted);font-weight:600;margin-bottom:6px">${notesLabel}</div>
+    <textarea class="inp" id="sn-${id}" rows="3" placeholder="${esc(notesPh)}">${esc(cnotes)}</textarea>
     <div style="margin-top:6px;display:flex;align-items:center;gap:10px"><button class="btn sm primary" id="sn-save-${id}">Save notes</button><span id="sn-msg-${id}" style="font-size:12px;color:var(--muted)"></span></div>
   </div>`;
+  // Property management: where this person belongs and what they've asked for.
+  let pmBox='';
+  if(pm){
+    try{
+      const [pcRes,srRes]=await Promise.all([
+        db.from('property_contacts').select('role,unit,company,authorized,properties(name,property_type)').eq('contact_id',id),
+        db.from('service_requests').select('short_ref,title,request_type,status,created_at,properties(name)').eq('contact_id',id).order('created_at',{ascending:false}).limit(8)
+      ]);
+      const links=pcRes.data||[], reqs=srRes.data||[];
+      pmBox = `<div style="font-size:11px;text-transform:uppercase;letter-spacing:.05em;color:var(--muted);font-weight:600;margin:4px 0 6px">Properties</div>`
+        + (links.length ? links.map(l=>`<div style="font-size:12.5px;padding:4px 0">${esc((l.properties&&l.properties.name)||'(property)')} · <b>${esc(pmRoleLabel(l.role))}</b>${l.unit?' · '+esc(l.unit):''}${l.company?' · '+esc(l.company):''}${l.authorized?' · <span style="color:#164a85">authorized</span>':''}</div>`).join('') : `<div style="color:var(--muted);font-size:12.5px">Not linked to a property yet — add them under People on the property's page so ${esc(aName())} knows their unit and role.</div>`)
+        + `<div style="font-size:11px;text-transform:uppercase;letter-spacing:.05em;color:var(--muted);font-weight:600;margin:12px 0 6px">Requests</div>`
+        + (reqs.length ? reqs.map(r=>`<div style="display:flex;justify-content:space-between;gap:10px;font-size:12.5px;padding:4px 0;border-bottom:1px solid var(--line-2)"><span>${esc(r.short_ref||'')} · ${esc(r.title||r.request_type)}${r.properties?' · '+esc(r.properties.name):''}</span><span style="color:var(--muted);flex:none">${esc(r.status)}</span></div>`).join('') : `<div style="color:var(--muted);font-size:12.5px;margin-bottom:8px">No requests yet.</div>`);
+    }catch(_e){ pmBox=''; }
+  }
   const history = rows.length
-    ? '<div style="font-size:11px;text-transform:uppercase;letter-spacing:.05em;color:var(--muted);font-weight:600;margin-bottom:6px">Visit history</div>'+rows.map(a=>{
-        const svc=typeName(a.appointment_type_id)||a.title||'Appointment'; const who=staffName(a.user_id);
+    ? `<div style="font-size:11px;text-transform:uppercase;letter-spacing:.05em;color:var(--muted);font-weight:600;margin:${pm?'12px':'0'} 0 6px">${pm?'Visits':'Visit history'}</div>`+rows.map(a=>{
+        const svc=typeName(a.appointment_type_id)||a.title||(pm?'Visit':'Appointment'); const who=staffName(a.user_id);
         const note=a.notes?`<div style="font-size:12px;color:var(--muted);margin-top:2px">${esc(a.notes)}</div>`:'';
         return `<div style="padding:6px 0;border-bottom:1px solid var(--line-2)"><div style="display:flex;justify-content:space-between;gap:10px;font-size:12.5px"><span>${esc(fmtAppt(a.starts_at))} · ${esc(svc)}${who?` · <b>${esc(who)}</b>`:''}</span><span class="appt-status s-${a.status}" style="flex:none">${esc(a.status)}</span></div>${note}</div>`;
       }).join('')
-    : '<div style="color:var(--muted);font-size:12.5px">No appointments on record for this client yet.</div>';
+    : `<div style="color:var(--muted);font-size:12.5px">${pm?'No visits on record for this person yet.':'No appointments on record for this client yet.'}</div>`;
   let intakeRows=[], intakeForms={};
   try{
     const iRes=await db.from('intake_responses').select('id, form_id, answers, submitted_at').eq('contact_id',id).not('submitted_at','is',null).order('submitted_at',{ascending:false}).limit(5);
@@ -1559,7 +1577,7 @@ async function loadVisits(id){
     if(intakeRows.length){ const fids=[...new Set(intakeRows.map(r=>r.form_id).filter(Boolean))]; const fRes=await db.from('intake_forms').select('id,title,questions').in('id',fids); (fRes.data||[]).forEach(f=>intakeForms[f.id]=f); }
   }catch(_e){}
   const intakeBox = intakeRows.length ? ('<div style="font-size:11px;text-transform:uppercase;letter-spacing:.05em;color:var(--muted);font-weight:600;margin:4px 0 6px">Intake answers</div>'+intakeRows.map(r=>{ const f=intakeForms[r.form_id]; const ans=r.answers||{}; const qs=(f&&Array.isArray(f.questions))?f.questions:[]; const lines=qs.map(q=>{ let v=ans[q.id]; if(Array.isArray(v)) v=v.join(', '); if(v===undefined||v===null||v==='') return ''; return `<div style="margin-bottom:5px"><div style="font-size:11.5px;color:var(--muted)">${esc(q.label||'')}</div><div style="font-size:12.5px">${esc(String(v))}</div></div>`; }).filter(Boolean).join(''); return `<div style="padding:8px 0;border-bottom:1px solid var(--line-2)"><div style="font-size:12px;font-weight:600;margin-bottom:5px">${esc((f&&f.title)||'Intake')} · <span style="color:var(--muted);font-weight:400">${esc(fmtAppt(r.submitted_at))}</span></div>${lines||'<div style="font-size:12px;color:var(--muted)">No answers recorded.</div>'}</div>`; }).join('')) : '';
-  el.innerHTML=formulaBox+intakeBox+history;
+  el.innerHTML=formulaBox+(pm?pmBox:intakeBox)+history;
   const sb=document.getElementById('sn-save-'+id);
   if(sb) sb.onclick=async()=>{
     const ta=document.getElementById('sn-'+id), msg=document.getElementById('sn-msg-'+id);
@@ -1616,8 +1634,10 @@ const TZS = [
 ];
 function tzLabel(tz){ const f=TZS.find(t=>t[0]===tz); return f?f[1]:tz; }
 async function loadAppointments(){
-  const { data } = await db.from('appointments').select('*, contacts(name,phone,email)').eq('account_id', state.account.id).order('starts_at',{ascending:true});
-  state.appointments = (data||[]).map(a=>({ id:a.id, title:a.title, status:a.status, mode:a.mode, start:a.starts_at, end:a.ends_at, notes:a.notes||"", language:a.language||null, location:a.location_address||null, meetingUrl:a.meeting_url||null, userId:a.user_id||null, clientName:a.contacts?a.contacts.name:null, clientPhone:a.contacts?a.contacts.phone:null, clientEmail:a.contacts?(a.contacts.email||a.customer_email):a.customer_email||null }));
+  const { data } = await db.from('appointments').select('*, contacts(name,phone,email), properties(name)').eq('account_id', state.account.id).order('starts_at',{ascending:true});
+  state.appointments = (data||[]).map(a=>({ id:a.id, title:a.title, status:a.status, mode:a.mode, start:a.starts_at, end:a.ends_at, notes:a.notes||"", language:a.language||null, location:a.location_address||null, meetingUrl:a.meeting_url||null, userId:a.user_id||null, clientName:a.contacts?a.contacts.name:null, clientPhone:a.contacts?a.contacts.phone:null, clientEmail:a.contacts?(a.contacts.email||a.customer_email):a.customer_email||null, propertyId:a.property_id||null, propertyName:a.properties?a.properties.name:null, unit:a.unit||null, kind:a.kind||null, locKind:a.location_kind||null }));
+  if(pmMode() && !(state.pm&&state.pm.props&&state.pm.props.length)){ try{ await loadProperties(); }catch(_e){} }
+  if(pmMode() && !(state.types&&state.types.length)){ try{ const { data:t }=await db.from('appointment_types').select('*').eq('account_id',state.account.id).eq('is_active',true).order('name'); if(t) state.types=t.map(typeFromRow); }catch(_e){} }
   // Managers booking on a stylist's behalf need the staff roster for the picker and name labels.
   if(isManager() && salonOn() && !(state.staff&&state.staff.length)){ try{ await loadStaff(); }catch(_e){} }
 }
@@ -1779,18 +1799,27 @@ async function submitBooking(){
   if(!date||!time){ set("Pick a date and time.","var(--danger)"); return; }
   const dur=+$("#bk-dur").value||45;
   const typeSel=$("#bk-type"); const typeId=typeSel&&typeSel.value?typeSel.value:null;
-  const o=typeSel&&typeSel.selectedOptions[0]; const mode=o&&o.dataset&&o.dataset.mode?o.dataset.mode:null;
+  const o=typeSel&&typeSel.selectedOptions[0];
+  // PM: where the visit happens (unit / property / office / video / phone) + which property and unit.
+  const pm=pmMode(); const locSel=$("#bk-loc"); const locKind=pm&&locSel?locSel.value:null;
+  const mode = pm ? pmLocToMode(locKind||'unit') : (o&&o.dataset&&o.dataset.mode?o.dataset.mode:null);
+  const propId=pm&&$("#bk-prop")?($("#bk-prop").value||null):null; const unit=pm&&$("#bk-unit")?($("#bk-unit").value.trim()||null):null;
+  if(pm && (locKind==='unit'||locKind==='property') && !propId){ set("Pick the property this visit is at.","var(--danger)"); return; }
+  if(pm && !typeId){ set("Pick a visit type.","var(--danger)"); return; }
   if(!(await confirmIfOutsideHours(uid, date, time, dur, uid===state.owner.id))) return;
   const startIso=zonedToUtcISO(date,time,state.account.timezone);
-  const btn=$("#bk-save"); btn.disabled=true; const ob=btn.textContent; btn.textContent="Booking…"; set("Checking the time…");
+  const btn=$("#bk-save"); btn.disabled=true; const ob=btn.textContent; btn.textContent=pm?"Scheduling…":"Booking…"; set("Checking the time…");
   let r=null,err=null;
   const phRaw=$("#bk-phone")?$("#bk-phone").value.trim():""; const phone=phRaw?((typeof normPhone==='function'&&normPhone(phRaw))||phRaw):null;
-  try{ const res=await db.functions.invoke('staff-book',{ body:{ action:'book', user_id:uid, start_iso:startIso, dur_min:dur, type_id:typeId, mode, client_name:$("#bk-client").value.trim()||null, client_phone:phone, customer_email:$("#bk-email").value.trim()||null, contact_id:state._bkContactId||null, notes:$("#bk-notes").value.trim()||null, tz:state.account.timezone } }); r=res.data; err=res.error; }catch(e){ err=e; }
+  const bodyX={ action:'book', user_id:uid, start_iso:startIso, dur_min:dur, type_id:typeId, mode, client_name:$("#bk-client").value.trim()||null, client_phone:phone, customer_email:$("#bk-email").value.trim()||null, contact_id:state._bkContactId||null, notes:$("#bk-notes").value.trim()||null, tz:state.account.timezone };
+  if(pm){ bodyX.property_id=propId; bodyX.unit=unit; bodyX.location_kind=locKind; bodyX.kind=(o&&o.dataset&&o.dataset.kind)||null; }
+  try{ const res=await db.functions.invoke('staff-book',{ body:bodyX }); r=res.data; err=res.error; }catch(e){ err=e; }
   btn.disabled=false; btn.textContent=ob;
-  if(err){ set("Could not book. Try again.","var(--danger)"); return; }
-  if(r&&r.ok){ set(`Booked for ${r.when_label||'the selected time'}.`,"var(--ok)"); await loadAppointments(); renderAppts(); return; }
+  if(err){ set("Could not "+(pm?"schedule":"book")+". Try again.","var(--danger)"); return; }
+  if(r&&r.ok){ set(`${pm?'Scheduled':'Booked'} for ${r.when_label||'the selected time'}${r.location?' at '+r.location:''}.`,"var(--ok)"); await loadAppointments(); renderAppts(); return; }
   const errCode=r&&r.error;
-  set(BOOK_ERR[errCode]||"Could not book. Try again.","var(--danger)");
+  const pmErr={ unavailable:"That's outside your working hours on the Schedule page. Pick another time or widen your hours.", notice:`This visit type needs ${r&&r.notice_hours?r.notice_hours+' hours':'more'} notice.`, conflict:"That overlaps another visit on your calendar. Pick a different time.", no_staff:"Could not tell who this visit is for." };
+  set((pm&&pmErr[errCode])||BOOK_ERR[errCode]||"Could not "+(pm?"schedule":"book")+". Try again.","var(--danger)");
   if(salonOn() && (errCode==='conflict' || errCode==='blocked')) showWaitlistOffer();
 }
 // When a time is already taken, offer to add this client to the waitlist instead.
@@ -1864,17 +1893,75 @@ function calendarCardHTML(){
     <div style="margin-top:16px;border-top:1px solid var(--line-2);padding-top:14px"><h3 style="font-size:13px;margin:0 0 11px;color:var(--ink-2)">${esc(selLabel)}${stLabel?` · ${stLabel}`:''}</h3>${detail}</div>
   </div>`;
 }
+/* ---------- PM scheduling form: visit type → property → unit → who → when ---------- */
+function pmBookingCardHTML(){
+  const types=(state.types||[]); const props=(state.pm&&state.pm.props)||[];
+  const typeOpts=types.map(t=>`<option value="${t.id}" data-dur="${t.dur}" data-loc="${t.loc||''}" data-kind="${t.kind||''}" data-collect="${esc((t.collect||[]).join(' · '))}">${esc(t.name)} · ${t.dur} min${t.loc?' · '+esc(pmLocLabel(t.loc)):''}</option>`).join('');
+  return `
+  <div class="card">
+    <div class="card-h"><h2>Schedule a visit</h2><button class="btn sm" id="bk-toggle">+ New visit</button></div>
+    <div id="bk-form" style="display:none">
+      ${types.length?'':`<div style="font-size:12.5px;color:var(--muted);margin-bottom:10px">No visit types yet — add them on the <b>Visit types</b> page (showings, inspections, walkthroughs) so ${esc(aName())} knows where each one happens.</div>`}
+      <div class="grid-2">
+        <div class="field"><label class="lab">Visit type</label><select class="inp" id="bk-type"><option value="">Choose…</option>${typeOpts}</select></div>
+        <div class="field"><label class="lab">Length (min)</label><input class="inp" type="number" id="bk-dur" value="30" min="5" step="5"></div>
+      </div>
+      <div class="grid-2">
+        <div class="field"><label class="lab">Property</label><select class="inp" id="bk-prop"><option value="">Choose…</option>${props.map(p=>`<option value="${p.id}">${esc(p.name)}</option>`).join('')}</select></div>
+        <div class="field"><label class="lab">Unit / suite / home <span class="sub">optional</span></label><input class="inp" id="bk-unit" placeholder="e.g. 4B, Suite 210, 118 Sunset Ridge Dr"></div>
+      </div>
+      <div class="field"><label class="lab">Where</label><select class="inp" id="bk-loc">${PM_LOC.map(l=>`<option value="${l[0]}">${esc(l[1])}</option>`).join('')}</select><span id="bk-where-note" class="sub" style="display:block;margin-top:4px;color:var(--muted);font-size:11.5px"></span></div>
+      <div class="grid-2">
+        <div class="field"><label class="lab">Date</label><input class="inp" type="date" id="bk-date"></div>
+        <div class="field"><label class="lab">Time</label><input class="inp" type="time" id="bk-time"></div>
+      </div>
+      <div class="field"><label class="lab">Who it's with</label>
+        <div style="display:flex;border:1px solid var(--line);border-radius:8px;overflow:hidden;width:fit-content">
+          <button type="button" id="bk-mode-new" style="padding:7px 16px;border:none;background:var(--ink);color:#fff;font:inherit;font-size:13px;cursor:pointer">New person</button>
+          <button type="button" id="bk-mode-ex" style="padding:7px 16px;border:none;border-left:1px solid var(--line);background:#fff;color:var(--ink-2);font:inherit;font-size:13px;cursor:pointer">Someone on file</button>
+        </div>
+      </div>
+      <div id="bk-new-block">
+        <div class="grid-2">
+          <div class="field"><label class="lab">Name</label><input class="inp" id="bk-client" placeholder="e.g. Jane Doe (prospect), Lone Star Dental, ABC Plumbing"></div>
+          <div class="field"><label class="lab">Phone <span class="sub">optional</span></label><input class="inp" id="bk-phone" placeholder="optional"></div>
+        </div>
+      </div>
+      <div id="bk-ex-block" style="display:none">
+        <div class="field" id="bk-search-field" style="position:relative"><label class="lab">Search people <span class="sub">by name or phone</span></label><input class="inp" id="bk-search" placeholder="Start typing a name or phone" autocomplete="off"><div id="bk-results" style="position:absolute;z-index:5;left:0;right:0;top:100%;background:#fff;border:1px solid var(--line);border-radius:var(--r-sm);box-shadow:0 8px 24px rgba(16,24,40,.12);display:none;max-height:220px;overflow:auto"></div></div>
+        <div id="bk-selected" style="display:none"></div>
+      </div>
+      <div class="grid-2">
+        <div class="field"><label class="lab">Email <span class="sub">optional — sends a confirmation with the address</span></label><input class="inp" type="email" id="bk-email" placeholder="optional"></div>
+        <div class="field"><label class="lab">Notes <span class="sub">optional</span></label><input class="inp" id="bk-notes" placeholder="e.g. lockbox 2231, dog in yard, bring W-9"></div>
+      </div>
+      <div id="bk-collect" style="font-size:12px;color:var(--muted);margin:-4px 0 8px"></div>
+      <div id="bk-msg" style="font-size:12.5px;color:var(--muted);min-height:16px;margin:4px 0"></div>
+      <div id="bk-wl" style="margin:0 0 6px"></div>
+      <div><button class="btn primary" id="bk-save">Schedule it</button></div>
+    </div>
+  </div>`;
+}
 function renderAppts(){
-  const lede = isManager()
-    ? `Appointments across your salon. Add or move one here and ${esc(aName())} treats it like any booking: it syncs to your connected calendar and the client gets a confirmation and reminder.`
-    : `Your appointments. Add or move one here and it is handled like any booking: it syncs to the connected calendar and the client gets a confirmation and reminder.`;
+  const lede = pmMode()
+    ? `Showings, inspections, walkthroughs, and meetings — each tied to a property and unit so the address goes on the calendar and the confirmation. ${esc(aName())} books these on calls too; whatever she books lands here.`
+    : (isManager()
+      ? `Appointments across your ${salonOn()?'salon':'business'}. Add or move one here and ${esc(aName())} treats it like any booking: it syncs to your connected calendar and the ${salonOn()?'client':'customer'} gets a confirmation and reminder.`
+      : `Your appointments. Add or move one here and it is handled like any booking: it syncs to the connected calendar and the client gets a confirmation and reminder.`);
   $("#page").innerHTML=`
   <div class="page">
-    <div class="page-head"><h1>Appointments</h1><p>${lede} Times shown in ${esc(tzLabel(state.account.timezone))}.</p></div>
-    ${bookingCardHTML()}
+    <div class="page-head"><h1>${pmMode()?'Visits & appointments':'Appointments'}</h1><p>${lede} Times shown in ${esc(tzLabel(state.account.timezone))}.</p></div>
+    ${pmMode()?pmBookingCardHTML():bookingCardHTML()}
     ${calendarCardHTML()}
   </div>`;
   bindBookingForm();
+  if(pmMode()){
+    const ts=$("#bk-type"), loc=$("#bk-loc"), note=$("#bk-where-note"), col=$("#bk-collect");
+    const paintWhere=()=>{ if(!loc||!note) return; const v=loc.value; const pn=$("#bk-prop")&&$("#bk-prop").selectedOptions[0]&&$("#bk-prop").selectedOptions[0].text; note.textContent = v==='office' ? ('At your office'+((state.account.settings||{}).office_address?' — '+(state.account.settings||{}).office_address:' — set the address under Settings → What you manage')) : v==='unit' ? ('At the unit — the property address'+( $("#bk-unit")&&$("#bk-unit").value?' + unit '+$("#bk-unit").value:'')+' goes on the calendar and confirmation'+(pn&&pn!=='Choose…'?' ('+pn+')':'')) : v==='property' ? 'At the property (common area / building)' : v==='virtual' ? 'Video call — a meeting link is created' : 'Phone call — no address'; };
+    if(ts) ts.onchange=()=>{ const o=ts.selectedOptions[0]; if(o&&o.value){ $("#bk-dur").value=o.dataset.dur||30; if(o.dataset.loc&&loc) loc.value=o.dataset.loc; if(col) col.textContent=o.dataset.collect?('Ask for: '+o.dataset.collect):''; } paintWhere(); };
+    if(loc) loc.onchange=paintWhere; const pr=$("#bk-prop"); if(pr) pr.onchange=paintWhere; const un=$("#bk-unit"); if(un) un.oninput=paintWhere;
+    paintWhere();
+  }
   const rf=$("#ap-refresh"); if(rf) rf.onclick=async()=>{ rf.disabled=true; rf.textContent="…"; await loadAppointments(); renderAppts(); };
   const cp=$("#cal-prev"), cn=$("#cal-next");
   if(cp) cp.onclick=()=>{ state._calMonth=new Date(state._calMonth.getFullYear(),state._calMonth.getMonth()-1,1); renderAppts(); };
@@ -1892,10 +1979,12 @@ function apptHTML(a){
     let extra='';
     if(a.mode==='in_person'&&a.location) extra=` · ${esc(a.location)}`;
     else if(a.mode==='virtual'&&a.meetingUrl) extra=` · <a href="${esc(a.meetingUrl)}" target="_blank" rel="noopener">Join link</a>`;
-    detail=`<div class="m-text" style="opacity:.85">${modeLbl}${extra}${who?` · <b>${esc(who)}</b>`:''}</div>`;
+    const where = (pmMode()&&a.locKind) ? pmLocLabel(a.locKind) : modeLbl;
+    const at = (pmMode()&&a.propertyName) ? ` · <b>${esc(a.propertyName)}${a.unit?' · '+esc(a.unit):''}</b>` : '';
+    detail=`<div class="m-text" style="opacity:.85">${where}${at}${(pmMode()&&a.propertyName&&a.mode==='in_person')?'':extra}${who?` · <b>${esc(who)}</b>`:''}</div>${(pmMode()&&a.propertyName&&a.mode==='in_person'&&a.location)?`<div class="m-text" style="opacity:.7">${esc(a.location)}</div>`:''}`;
   } else if(who){ detail=`<div class="m-text" style="opacity:.85"><b>${esc(who)}</b></div>`; }
   return `<div class="m-item ${cancelled?'done':''}">
-    <div class="m-top"><span class="m-who">${esc(a.title||'Consultation')}${langBadge(a.language)}</span><span class="m-when">${esc(fmtAppt(a.start))}${a.end?` – ${esc(fmtAppt(a.end,false))}`:''}</span></div>
+    <div class="m-top"><span class="m-who">${esc(a.title||(pmMode()?'Visit':'Consultation'))}${langBadge(a.language)}</span><span class="m-when">${esc(fmtAppt(a.start))}${a.end?` – ${esc(fmtAppt(a.end,false))}`:''}</span></div>
     ${detail}
     ${(a.clientPhone||a.clientEmail)?`<div class="m-text" style="opacity:.9">${a.clientPhone?`<a href="tel:${esc(a.clientPhone.replace(/[^\d+]/g,''))}" style="color:var(--ink-2)">${esc(a.clientPhone)}</a>`:''}${a.clientPhone&&a.clientEmail?'  ·  ':''}${a.clientEmail?`<a href="mailto:${esc(a.clientEmail)}" style="color:var(--ink-2)">${esc(a.clientEmail)}</a>`:''}</div>`:''}
     ${a.notes?`<div class="m-text">${esc(a.notes)}</div>`:''}
@@ -3444,14 +3533,14 @@ function pageKnowledge(){
   state.kbEdit=null;
   $("#page").innerHTML=`
   <div class="page">
-    <div class="page-head"><h1>Knowledge</h1><p>Teach ${esc(aName())} about your business. She uses this to answer callers' questions about hours, services, pricing, policies, and directions. If she doesn't know something, she takes a message instead of guessing.</p></div>
+    <div class="page-head"><h1>Knowledge</h1><p>${pmMode()?`Teach ${esc(aName())} about your company — office hours, how and where to pay rent or dues, maintenance and after-hours policies, late-fee policy, pet and parking rules, utilities, and directions. Anything specific to one property or community (bylaws, lease rules, amenity hours, gate info) goes on that property's page so it never leaks to another. If she doesn't know something, she takes a message instead of guessing.`:`Teach ${esc(aName())} about your business. She uses this to answer callers' questions about hours, services, pricing, policies, and directions. If she doesn't know something, she takes a message instead of guessing.`}</p></div>
     <div class="card">
       <div class="card-h"><h2 id="kb-form-title">Add knowledge</h2><span class="hint">Donna learns it on save</span></div>
       <div class="grid-2">
-        <div class="field"><label class="lab">Title <span class="sub">optional</span></label><input class="inp" id="kb-title" placeholder="e.g. Business hours"></div>
-        <div class="field"><label class="lab">Category <span class="sub">optional</span></label><input class="inp" id="kb-cat" placeholder="e.g. Hours, Services, Pricing"></div>
+        <div class="field"><label class="lab">Title <span class="sub">optional</span></label><input class="inp" id="kb-title" placeholder="${pmMode()?'e.g. How to pay rent / dues':'e.g. Business hours'}"></div>
+        <div class="field"><label class="lab">Category <span class="sub">optional</span></label><input class="inp" id="kb-cat" placeholder="${pmMode()?'e.g. Payments, Maintenance, Policies, Office':'e.g. Hours, Services, Pricing'}"></div>
       </div>
-      <div class="field"><label class="lab">What should ${esc(aName())} know?</label><textarea class="inp" id="kb-content" rows="4" placeholder="e.g. We're open Monday through Friday, 8am to 5pm, and closed weekends and major holidays."></textarea></div>
+      <div class="field"><label class="lab">What should ${esc(aName())} know?</label><textarea class="inp" id="kb-content" rows="4" placeholder="${pmMode()?'e.g. Rent is due on the 1st and late after the 3rd; pay through the resident portal or by check to the office. Routine maintenance requests are handled within two business days; after-hours emergencies go to the on-call line.':'e.g. We’re open Monday through Friday, 8am to 5pm, and closed weekends and major holidays.'}"></textarea></div>
       <div style="display:flex;align-items:center;gap:12px">
         <button class="btn primary" id="kb-save">Save</button>
         <button class="btn" id="kb-cancel" style="display:none">Cancel</button>
@@ -3464,7 +3553,7 @@ function pageKnowledge(){
     </div>
     <div class="card">
       <div class="card-h"><h2>Import from your website</h2><span class="hint">fastest way to start</span></div>
-      <p style="font-size:12.5px;color:var(--muted);margin-bottom:12px">Got a website? Paste it and ${esc(aName())} reads your main pages (services, about, contact, pricing) and turns them into knowledge for you to review. Skip this if there's no site.</p>
+      <p style="font-size:12.5px;color:var(--muted);margin-bottom:12px">Got a website? Paste it and ${esc(aName())} reads your main pages (${pmMode()?'about, contact, resident/owner info, payments, FAQs':'services, about, contact, pricing'}) and turns them into knowledge for you to review. Skip this if there's no site.</p>
       <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap">
         <input class="inp" id="kb-url" placeholder="yourbusiness.com" style="max-width:280px">
         <button class="btn primary" id="kb-url-go">Import</button>

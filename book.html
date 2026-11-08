@@ -96,7 +96,13 @@
 const API="https://hingbdtmxozbjetzwibj.supabase.co/functions/v1/book-public";
 const qs=new URLSearchParams(location.search);
 const ACCOUNT=qs.get('s')||qs.get('a')||(location.pathname.split('/book/')[1]||'').replace(/\/+$/,'');
-const S={info:null,service:null,stylist:null,slot:null,otpId:null,channel:null,slotStart:null};
+const S={info:null,service:null,stylist:null,slot:null,otpId:null,channel:null,slotStart:null,property:null,unit:'',answers:{}};
+// Property-management accounts: visits happen at a property/unit, so the flow adds a Property step and the visit type's own questions.
+const PM_LOC_LABEL={unit:'At the unit',property:'At the property',office:'At the office',virtual:'Video call',phone:'Phone call'};
+const isPm=()=>!!(S.info&&S.info.pm);
+const needsProp=()=>isPm()&&S.service&&(S.service.loc==='unit'||S.service.loc==='property');
+const unitLabel=()=>{ const t=S.property&&S.property.type; return t==='commercial'?'Suite / bay':(t==='hoa'?'Home address or lot':'Unit'); };
+const whereLine=()=>{ if(!isPm()) return ''; const parts=[]; if(S.property) parts.push(S.property.name+(S.unit?' · '+S.unit:'')); else if(S.service&&S.service.loc==='office') parts.push(S.info.office_address||'Our office'); else if(S.service&&S.service.loc) parts.push(PM_LOC_LABEL[S.service.loc]||''); return parts.filter(Boolean).join(' · '); };
 const $=s=>document.querySelector(s);
 const app=$("#app");
 const esc=s=>String(s==null?'':s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
@@ -106,7 +112,8 @@ function card(inner){ app.innerHTML=`<div class="card">${inner}</div>`; }
 function initials(n){ return (String(n||'?').trim().split(/\s+/).map(w=>w[0]).slice(0,2).join('')||'?').toUpperCase(); }
 function progress(active){
   const team = S.info && S.info.salon_team && !S.preStylist;
-  const steps = team ? ['Service','Stylist','Time','Details'] : ['Service','Time','Details'];
+  const steps = isPm() ? (needsProp() ? ['Visit','Property','Time','Details'] : ['Visit','Time','Details']) : (team ? ['Service','Stylist','Time','Details'] : ['Service','Time','Details']);
+  if(isPm() && active==='Service') active='Visit';
   const i = steps.indexOf(active);
   return `<div class="prog">`+steps.map((s,idx)=>`<div class="seg ${idx<=i?'on':''}"><span>${esc(s)}</span></div>`).join('')+`</div>`;
 }
@@ -132,21 +139,21 @@ async function boot(){
   if(preId && info.salon_team){ S.preStylist=(info.stylists||[]).find(s=>s.id===preId)||null; }
   $("#b-name").textContent=info.business;
   $("#b-dot").textContent=(info.business||'B').trim().charAt(0).toUpperCase();
-  $("#b-sub").textContent= S.preStylist ? ('Book with '+S.preStylist.name) : 'Book an appointment';
-  document.title='Book · '+info.business;
+  $("#b-sub").textContent= S.preStylist ? ('Book with '+S.preStylist.name) : (info.pm ? 'Schedule a visit' : 'Book an appointment');
+  document.title=(info.pm?'Schedule · ':'Book · ')+info.business;
   stepService();
 }
 
 function stepService(){
   const svc=S.info.services||[];
-  if(!svc.length){ card('<div class="center"><h3>Nothing to book yet</h3><p>This business has not added any services.</p></div>'); return; }
+  if(!svc.length){ card(isPm()?'<div class="center"><h3>Nothing to schedule online yet</h3><p>Please call or email the office and we will set a time with you.</p></div>':'<div class="center"><h3>Nothing to book yet</h3><p>This business has not added any services.</p></div>'); return; }
   const cats={};
   svc.forEach(s=>{ const k=s.category||''; (cats[k]=cats[k]||[]).push(s); });
-  let html=progress('Service')+'<div class="step-label">Choose a service</div>';
+  let html=progress('Service')+`<div class="step-label">${isPm()?'What would you like to schedule?':'Choose a service'}</div>`;
   Object.keys(cats).forEach(cat=>{
     if(cat) html+=`<h2>${esc(cat)}</h2>`;
     cats[cat].forEach(s=>{
-      const meta=[s.dur+' min', s.new_only?'New clients':''].filter(Boolean).join('  ·  ');
+      const meta=isPm() ? [s.dur+' min', PM_LOC_LABEL[s.loc]||'', s.notice_hours?('schedule '+s.notice_hours+'h+ ahead'):''].filter(Boolean).join('  ·  ') : [s.dur+' min', s.new_only?'New clients':''].filter(Boolean).join('  ·  ');
       const incl=(s.includes&&s.includes.length)?`<ul class="incl">${s.includes.map(i=>`<li>${esc(i)}</li>`).join('')}</ul>`:'';
       html+=`<div class="opt" data-svc="${s.id}">
         <div><div class="nm">${esc(s.name)}${s.special?'<span class="pill">Special</span>':''}</div>
@@ -157,7 +164,32 @@ function stepService(){
   });
   if(S.preStylist) html=`<div class="summary">Booking with ${esc(S.preStylist.name)}</div>`+html;
   app.innerHTML=`<div class="card">${html}</div>`+otherWays();
-  document.querySelectorAll('[data-svc]').forEach(el=>el.onclick=()=>{ S.service=svc.find(x=>x.id===el.dataset.svc); S.slot=null; S.slotStart=null; if(S.preStylist){ S.stylist=S.preStylist; stepTime(); } else { S.stylist=null; (S.info.salon_team?stepStylist():stepTime()); } });
+  document.querySelectorAll('[data-svc]').forEach(el=>el.onclick=()=>{ S.service=svc.find(x=>x.id===el.dataset.svc); S.slot=null; S.slotStart=null; S.answers={}; if(isPm()){ S.stylist=null; if(needsProp()) stepProperty(); else { S.property=null; S.unit=''; stepTime(); } return; } if(S.preStylist){ S.stylist=S.preStylist; stepTime(); } else { S.stylist=null; (S.info.salon_team?stepStylist():stepTime()); } });
+}
+
+// PM: which property (and unit) is this visit at?
+function stepProperty(){
+  const all=S.info.properties||[];
+  const want=(S.service&&S.service.ptypes)||[];
+  const list=want.length?all.filter(p=>want.includes(p.type)):all;
+  const props=list.length?list:all;
+  if(!props.length){ card(`<button class="back" id="bk">&larr; Back</button>`+progress('Property')+`<div class="step-label">Which property?</div><p style="color:var(--muted)">No properties are set up for online scheduling yet. Please call or email the office.</p>`); $("#bk").onclick=stepService; return; }
+  let html=`<button class="back" id="bk">&larr; Back</button>`+progress('Property')+`<div class="step-label">Which property is this for?</div><div class="summary">${esc(S.service.name)}</div>`;
+  props.forEach(p=>{ html+=`<div class="opt" data-prop="${p.id}"><div><div class="nm">${esc(p.name)}</div>${p.address?`<div class="meta">${esc(p.address)}</div>`:''}</div><span class="go">&rsaquo;</span></div>`; });
+  card(html);
+  $("#bk").onclick=stepService;
+  document.querySelectorAll('[data-prop]').forEach(el=>el.onclick=()=>{ S.property=props.find(x=>x.id===el.dataset.prop); stepUnit(); });
+}
+function stepUnit(){
+  const lbl=unitLabel(); const t=S.property&&S.property.type; const kind=S.service&&S.service.kind;
+  const ph = t==='commercial' ? 'e.g. Suite 210 or Bay 4' : (t==='hoa' ? 'e.g. 118 Sunset Ridge Dr' : 'e.g. 4B');
+  const optional = (kind==='showing'||kind==='space_tour');
+  card(`<button class="back" id="bk">&larr; Properties</button>`+progress('Property')+`<div class="step-label">${esc(S.property.name)}</div>
+    <label class="f">${esc(lbl)}${optional?' <span style="color:var(--muted);font-weight:400">(if you know it)</span>':''}</label><input class="inp" id="u-unit" placeholder="${esc(ph)}" value="${esc(S.unit||'')}">
+    <button class="btn" id="u-go">Continue</button>`);
+  $("#bk").onclick=stepProperty;
+  $("#u-go").onclick=()=>{ S.unit=$("#u-unit").value.trim(); S.slotStart=null; stepTime(); };
+  setTimeout(()=>$("#u-unit").focus(),80);
 }
 
 function stepStylist(){
@@ -172,12 +204,13 @@ function stepStylist(){
 }
 
 async function stepTime(){
-  const who = S.stylist? (' with '+S.stylist.name) : '';
-  const goBack=()=> (S.info.salon_team && !S.preStylist) ? stepStylist() : stepService();
+  const who = S.stylist? (' with '+S.stylist.name) : (isPm()&&whereLine()?(' · '+whereLine()):'');
+  const goBack=()=> isPm() ? (needsProp()?stepUnit():stepService()) : ((S.info.salon_team && !S.preStylist) ? stepStylist() : stepService());
   card(`<button class="back" id="bk">&larr; Back</button>`+progress('Time')+`<div class="step-label">Pick a time</div><div class="summary">${esc(S.service.name)}${esc(who)}</div><div class="spin">Finding open times…</div>`);
   $("#bk").onclick=goBack;
   const r=await api('slots',{service_id:S.service.id, stylist_id:S.stylist?S.stylist.id:null, start_date:S.slotStart||null});
-  const slots=(r&&r.ok&&r.slots)||[];
+  let slots=(r&&r.ok&&r.slots)||[];
+  if(isPm() && S.service && S.service.notice_hours){ const minMs=Date.now()+S.service.notice_hours*3600000; slots=slots.filter(s=>new Date(s.iso).getTime()>=minMs); }
   const nextStart=(r&&r.next_start)||null, prevStart=(r&&r.prev_start)||null;
   let html=`<button class="back" id="bk2">&larr; Back</button>`+progress('Time')+`<div class="step-label">Pick a time</div><div class="summary">${esc(S.service.name)}${esc(who)}</div>`;
   if(!slots.length){ html+=`<p style="color:var(--muted)">No open times in this range.${nextStart?' Try later dates below.':' Please check back or contact us.'}</p>`; }
@@ -195,7 +228,8 @@ async function stepTime(){
       (nextStart?`<button class="btn ghost pg" data-start="${esc(nextStart)}">Later dates &rarr;</button>`:`<span></span>`)+
       `</div>`;
   }
-  html+=`<div class="wl-cta">${slots.length?"Don't see a time that works?":'Want a spot the moment one opens up?'} <button class="linkbtn" id="wl-go">Join the waitlist</button></div>`;
+  if(!isPm()) html+=`<div class="wl-cta">${slots.length?"Don't see a time that works?":'Want a spot the moment one opens up?'} <button class="linkbtn" id="wl-go">Join the waitlist</button></div>`;
+  else if(!slots.length) html+=`<p style="font-size:12.5px;color:var(--muted)">Need something sooner? Call or email the office and we'll find a time.</p>`;
   card(html);
   $("#bk2").onclick=goBack;
   document.querySelectorAll('[data-iso]').forEach(el=>el.onclick=()=>{ S.slot=el.dataset.iso; stepDetails(); });
@@ -205,13 +239,17 @@ async function stepTime(){
 
 function stepDetails(){
   const gate=S.info.sms_gate;
-  const who = S.stylist? (' with '+S.stylist.name) : '';
+  const who = S.stylist? (' with '+S.stylist.name) : (isPm()&&whereLine()?(' · '+whereLine()):'');
   const whenTxt=new Date(S.slot).toLocaleString([], {weekday:'long',month:'long',day:'numeric',hour:'numeric',minute:'2-digit'});
+  // PM visit types carry their own questions (e.g. move-in date, pets, intended use) so the manager arrives prepared.
+  const qs=(isPm()&&S.service&&Array.isArray(S.service.collect))?S.service.collect.filter(Boolean):[];
+  const qHtml=qs.map((q,i)=>`<label class="f">${esc(q)}</label><input class="inp" id="d-q-${i}" placeholder="" value="${esc(S.answers[q]||'')}">`).join('');
   card(`<button class="back" id="bk">&larr; Times</button>`+progress('Details')+`<div class="step-label">Your details</div>
     <div class="summary">${esc(S.service.name)}${esc(who)} · ${esc(whenTxt)}</div>
     <label class="f">Your name</label><input class="inp" id="d-name" autocomplete="name" placeholder="First and last name">
     <label class="f">Mobile number</label><input class="inp" id="d-phone" inputmode="tel" autocomplete="tel" placeholder="(555) 123-4567">
     <label class="f">Email${gate?' <span style="color:var(--muted);font-weight:400">(optional)</span>':''}</label><input class="inp" id="d-email" type="email" autocomplete="email" placeholder="you@email.com">
+    ${qHtml?`<div style="margin:16px 0 4px;font-size:12px;letter-spacing:.04em;text-transform:uppercase;color:var(--muted);font-weight:600">A few quick questions</div>${qHtml}`:''}
     <input class="hp" id="d-hp" tabindex="-1" autocomplete="off" placeholder="Leave this blank">
     <button class="btn" id="d-go">Send me a code</button>
     <div class="msg" id="d-msg"></div>
@@ -230,19 +268,21 @@ async function sendCode(){
   if(!phone){ setErr('Please enter your mobile number.'); return; }
   if(!gate && !email){ setErr('Please enter your email so we can send your code.'); return; }
   btn.disabled=true; const o=btn.textContent; btn.textContent='Sending…'; msg.textContent='';
-  const r=await api('start',{service_id:S.service.id, stylist_id:S.stylist?S.stylist.id:null, start_iso:S.slot, name, phone, email, hp});
+  const extra={service_id:S.service.id, stylist_id:S.stylist?S.stylist.id:null, start_iso:S.slot, name, phone, email, hp};
+  if(isPm()){ const qs=(S.service&&Array.isArray(S.service.collect))?S.service.collect.filter(Boolean):[]; const answers={}; qs.forEach((q,i)=>{ const el=$("#d-q-"+i); if(el&&el.value.trim()) answers[q]=el.value.trim(); }); S.answers=answers; extra.property_id=S.property?S.property.id:null; extra.unit=S.unit||null; extra.answers=answers; }
+  const r=await api('start',extra);
   btn.disabled=false; btn.textContent=o;
   if(r&&r.ok){ S.otpId=r.otp_id; S.channel=r.channel; stepCode(r.hint); return; }
-  const reasons={slot_gone:'Sorry, that time was just taken. Please pick another.',too_many:'Too many attempts. Please try again later.',need_phone:'Please enter your mobile number.',need_contact:'Please add a phone or email.',send_failed:'We could not send your code. Check your details and try again.',spam:'Something went wrong. Please try again.'};
+  const reasons={slot_gone:'Sorry, that time was just taken. Please pick another.',too_many:'Too many attempts. Please try again later.',need_phone:'Please enter your mobile number.',need_contact:'Please add a phone or email.',send_failed:'We could not send your code. Check your details and try again.',spam:'Something went wrong. Please try again.',need_property:'Please pick the property first.',notice:'That time is too soon for this kind of visit'+(r&&r.notice_hours?(' — it needs '+r.notice_hours+' hours’ notice'):'')+'. Please pick a later time.'};
   setErr(reasons[r&&r.reason]||'Something went wrong. Please try again.');
   if(r&&r.reason==='slot_gone'){ setTimeout(stepTime,1200); }
 }
 
 function stepCode(hint){
   card(`<button class="back" id="bk">&larr; Back</button>`+progress('Details')+`<div class="step-label">Enter your code</div>
-    <p class="summary">We sent a 4-digit code to ${esc(hint||'you')}. Enter it to confirm your booking.</p>
+    <p class="summary">We sent a 4-digit code to ${esc(hint||'you')}. Enter it to confirm your ${isPm()?'visit':'booking'}.</p>
     <input class="inp" id="c-code" inputmode="numeric" maxlength="4" placeholder="1234" style="letter-spacing:8px;text-align:center;font-size:22px;font-family:'Fraunces',serif">
-    <button class="btn" id="c-go">Confirm booking</button>
+    <button class="btn" id="c-go">${isPm()?'Confirm visit':'Confirm booking'}</button>
     <button class="btn ghost" id="c-resend" style="margin-top:9px">Resend code</button>
     <div class="msg" id="c-msg"></div>`);
   $("#bk").onclick=()=>stepDetails();
@@ -258,7 +298,7 @@ async function confirmCode(){
   btn.disabled=true; const o=btn.textContent; btn.textContent='Confirming…'; msg.textContent='';
   const r=await api('verify',{otp_id:S.otpId, code});
   btn.disabled=false; btn.textContent=o;
-  if(r&&r.ok){ success(r.when_label); return; }
+  if(r&&r.ok){ success(r.when_label, r.location); return; }
   const reasons={wrong_code:'That code is not right. Try again.',expired:'That code expired. Please resend.',locked:'Too many tries. Please start over.',used:'That code was already used.',slot_gone:'Sorry, that time was just taken. Please pick another.'};
   msg.className='msg err'; msg.textContent=reasons[r&&r.reason]||'Could not confirm. Try again.';
   if(r&&(r.reason==='slot_gone')){ setTimeout(stepTime,1400); }
@@ -300,7 +340,14 @@ function waitlistDone(already){
     <p>${esc(S.service.name)}${esc(who)}<br>We'll text you as soon as a matching spot opens up.</p></div>`);
 }
 
-function success(whenLabel){
+function success(whenLabel, location){
+  if(isPm()){
+    const where = location || whereLine();
+    card(`<div class="center"><div class="big">&#10003;</div><h3>You're scheduled!</h3>
+      <p>${esc(S.service.name)}<br><b style="color:var(--ink)">${esc(whenLabel||'')}</b>${where?`<br><span style="color:var(--ink2)">${esc(where)}</span>`:''}</p>
+      <p style="margin-top:12px">A confirmation with the details is on its way. If anything changes, just reply to it.</p></div>`);
+    return;
+  }
   const who = S.stylist? (' with '+S.stylist.name) : '';
   card(`<div class="center"><div class="big">&#10003;</div><h3>You're booked!</h3>
     <p>${esc(S.service.name)}${esc(who)}<br><b style="color:var(--ink)">${esc(whenLabel||'')}</b></p>
