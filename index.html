@@ -4914,6 +4914,17 @@ const WZ_RENDER={
   },
   3:function(){
     const g=state.wz;
+    // Returning owner (re-running setup): start from the hours already on file instead of the defaults.
+    if(!g._hoursLoaded && state.owner && state.owner.id){
+      g._hoursLoaded=true;
+      db.from('availability_rules').select('rule_type,day_of_week,start_time,end_time').eq('user_id',state.owner.id).then(({data})=>{
+        const rows=(data||[]); const use=rows.filter(r=>r.rule_type==='bookable').length?rows.filter(r=>r.rule_type==='bookable'):rows.filter(r=>r.rule_type==='working');
+        if(!use.length) return;
+        g.days=[false,false,false,false,false,false,false]; use.forEach(r=>{ g.days[Number(r.day_of_week)]=true; });
+        g.hstart=String(use[0].start_time).slice(0,5); g.hend=String(use[0].end_time).slice(0,5);
+        if(state.wizStep===3) WZ_RENDER[3]();
+      }).catch(()=>{});
+    }
     document.getElementById("root").innerHTML=wzShell(`
       <h1>Hours</h1>
       <p class="lede">The days and times you're open. ${esc(DEFAULT_NAME)} answers around the clock, but she only books and transfers within these. You can fine-tune each day later under Schedule.</p>
