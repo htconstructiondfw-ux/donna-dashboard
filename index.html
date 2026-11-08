@@ -2682,10 +2682,86 @@ function pageBookingPage(){
       <label style="display:flex;align-items:flex-start;gap:10px;margin:0;cursor:pointer;font-size:13.5px;color:var(--ink)"><input type="checkbox" id="bp-enabled" style="margin-top:3px" ${bEnabled?'checked':''}><span>${pmMode()?'Let people schedule online':'Let clients book online'}<span style="display:block;font-weight:400;color:var(--muted);font-size:11.5px;margin-top:2px">When off, the link shows a friendly "${pmMode()?'scheduling':'booking'} is not available yet" message.</span></span></label>
       <div id="bp-msg" style="font-size:12.5px;color:var(--muted);margin-top:8px"></div>
     </div>
+    <div id="bp-look"></div>
     <div id="bp-links"><div class="card"><div style="color:var(--muted);font-size:12.5px">Loading your link…</div></div></div>
   </div>`;
   { const s=$("#bp-save"); if(s) s.onclick=saveBookingEnabled; }
+  renderBookingLook();
   renderBookingLinks(team);
+}
+
+/* ---- Look & feel of the public booking page (settings.booking.look) ---- */
+const BOOK_LOOKS=[
+  ['rose','Rose','#a05c6b'],['noir','Noir','#1d1b1e'],['sage','Sage','#5f7d64'],['sand','Sand','#b8864b'],['plum','Plum','#6b4a8c'],
+  ['slate','Slate','#2f4f6f'],['forest','Forest','#2e6b4f'],['navy','Navy','#1f3a8a'],['terracotta','Terracotta','#b85c38'],['ocean','Ocean','#0f7c8c'],
+];
+function bookingUrl(){ const slug=state._bookingSlug; return slug ? `${BOOK_BASE}/book/${slug}` : `${BOOK_BASE}/book.html?a=${state.account.id}`; }
+function renderBookingLook(){
+  const el=$("#bp-look"); if(!el) return;
+  const bk=(state.account.settings&&state.account.settings.booking)||{};
+  const look=bk.look||{};
+  const theme=look.theme||(pmMode()?'slate':'rose');
+  const sw=BOOK_LOOKS.map(([k,n,c])=>`<label class="look-sw ${theme===k?'on':''}" title="${n}"><input type="radio" name="bl-theme" value="${k}" ${theme===k?'checked':''} style="position:absolute;opacity:0"><span class="dot" style="background:${c}"></span><span class="nm">${n}</span></label>`).join('');
+  const addrLabel=pmMode()?'Office address':'Address';
+  const addrVal=pmMode()?(state.account.settings.office_address||''):(state.account.settings.address||bk.address||'');
+  el.innerHTML=`<div class="card"><div class="card-h"><h2>Look &amp; feel</h2><button class="btn sm" id="bl-save">Save</button></div>
+    <p style="font-size:12.5px;color:var(--muted);margin:0 0 12px">What ${pmMode()?'residents and prospects':'clients'} see when they open your link. Pick a look, add your logo and a line about you, and the page dresses itself.</p>
+    <div style="font-size:12px;font-weight:600;color:var(--ink);margin-bottom:6px">Look</div>
+    <div class="look-row">${sw}</div>
+    <div class="grid-2" style="margin-top:14px">
+      <div><label class="lab">Accent color <span style="color:var(--muted);font-weight:400">(optional — overrides the look's color)</span></label><div style="display:flex;gap:8px;align-items:center"><input type="color" id="bl-accent" value="${esc(look.accent||'#a05c6b')}" style="width:44px;height:36px;border:1px solid var(--line);border-radius:8px;padding:2px;background:#fff"><input class="inp" id="bl-accent-hex" placeholder="#a05c6b" value="${esc(look.accent||'')}" style="flex:1"><button class="btn sm" id="bl-accent-clear" type="button">Use look's color</button></div></div>
+      <div><label class="lab">Logo</label><div style="display:flex;gap:10px;align-items:center"><div id="bl-logo-prev" style="width:44px;height:44px;border-radius:12px;border:1px solid var(--line);background:#fff;display:flex;align-items:center;justify-content:center;overflow:hidden;flex:none;font-weight:700;color:var(--muted)">${look.logo_url?`<img src="${esc(look.logo_url)}" style="width:100%;height:100%;object-fit:cover">`:esc((state.account.name||'B').charAt(0))}</div><label class="btn sm" style="cursor:pointer">Upload<input type="file" id="bl-logo" accept="image/png,image/jpeg,image/webp,image/svg+xml" style="display:none"></label>${look.logo_url?'<button class="btn sm" id="bl-logo-rm" type="button">Remove</button>':''}<span id="bl-logo-msg" style="font-size:11.5px;color:var(--muted)">PNG, JPG or SVG · square works best</span></div></div>
+    </div>
+    <label class="lab" style="margin-top:12px">Tagline <span style="color:var(--muted);font-weight:400">(one line under your name)</span></label><input class="inp" id="bl-tagline" maxlength="160" placeholder="${pmMode()?'e.g. Showings, inspections, and a time with your manager — on your schedule.':'e.g. Color, cuts, and blowouts in the heart of downtown.'}" value="${esc(look.tagline||'')}">
+    <div class="grid-2">
+      <div><label class="lab">${addrLabel}</label><input class="inp" id="bl-address" placeholder="Street, city, state" value="${esc(addrVal)}"></div>
+      <div><label class="lab">Hours line <span style="color:var(--muted);font-weight:400">(optional)</span></label><input class="inp" id="bl-hours" maxlength="80" placeholder="e.g. Tue–Sat 9–6" value="${esc(bk.hours_line||'')}"></div>
+    </div>
+    <label class="lab">Cover photo URL <span style="color:var(--muted);font-weight:400">(optional — a wide photo behind the header)</span></label><input class="inp" id="bl-cover" placeholder="https://…/storefront.jpg" value="${esc(look.cover_url||'')}">
+    <div id="bl-msg" style="font-size:12.5px;color:var(--muted);margin-top:6px"></div>
+    <div class="card-h" style="margin-top:16px"><h2 style="font-size:13px">Preview</h2><button class="btn sm" id="bl-refresh" type="button">Refresh preview</button></div>
+    <div style="border:1px solid var(--line);border-radius:12px;overflow:hidden;background:#fff"><iframe id="bl-frame" src="${esc(bookingUrl())}" style="width:100%;height:560px;border:0" title="Booking page preview"></iframe></div>
+  </div>`;
+  if(!document.getElementById('look-css')){ const st=document.createElement('style'); st.id='look-css'; st.textContent=`.look-row{display:flex;flex-wrap:wrap;gap:8px}.look-sw{position:relative;display:flex;align-items:center;gap:7px;padding:6px 10px 6px 7px;border:1.5px solid var(--line);border-radius:999px;cursor:pointer;font-size:12.5px;font-weight:600;color:var(--ink);background:#fff}.look-sw .dot{width:18px;height:18px;border-radius:50%;display:inline-block;box-shadow:inset 0 0 0 2px rgba(255,255,255,.6)}.look-sw.on{border-color:var(--ink);background:var(--bg-2,#f6f6f6)}`; document.head.appendChild(st); }
+  el.querySelectorAll('input[name=bl-theme]').forEach(r=>r.onchange=()=>{ el.querySelectorAll('.look-sw').forEach(x=>x.classList.toggle('on', x.querySelector('input').checked)); });
+  const hex=$("#bl-accent-hex"), col=$("#bl-accent");
+  col.oninput=()=>{ hex.value=col.value; }; hex.oninput=()=>{ if(/^#[0-9a-f]{6}$/i.test(hex.value.trim())) col.value=hex.value.trim(); };
+  $("#bl-accent-clear").onclick=()=>{ hex.value=''; };
+  $("#bl-logo").onchange=uploadBookingLogo;
+  { const rm=$("#bl-logo-rm"); if(rm) rm.onclick=()=>{ state._pendingLogo=''; $("#bl-logo-prev").innerHTML=esc((state.account.name||'B').charAt(0)); rm.remove(); }; }
+  $("#bl-save").onclick=saveBookingLook;
+  $("#bl-refresh").onclick=()=>{ const f=$("#bl-frame"); f.src=bookingUrl()+(bookingUrl().includes('?')?'&':'?')+'v='+Date.now(); };
+}
+async function uploadBookingLogo(e){
+  const file=e.target.files&&e.target.files[0]; if(!file) return;
+  const msg=$("#bl-logo-msg"); msg.textContent='Uploading…';
+  if(file.size>4*1024*1024){ msg.textContent='That file is over 4 MB — please use a smaller image.'; return; }
+  const ext=(file.name.split('.').pop()||'png').toLowerCase().replace(/[^a-z0-9]/g,'')||'png';
+  const path=`${state.account.id}/logo-${Date.now()}.${ext}`;
+  const { error }=await db.storage.from('brand').upload(path, file, { upsert:true, contentType:file.type||undefined });
+  if(error){ msg.textContent='Upload failed: '+(error.message||'try again'); return; }
+  const { data }=db.storage.from('brand').getPublicUrl(path);
+  state._pendingLogo=data.publicUrl;
+  $("#bl-logo-prev").innerHTML=`<img src="${esc(data.publicUrl)}" style="width:100%;height:100%;object-fit:cover">`;
+  msg.textContent='Uploaded — click Save to apply.';
+}
+async function saveBookingLook(){
+  const btn=$("#bl-save"), msg=$("#bl-msg");
+  const cur=(state.account.settings&&state.account.settings.booking)||{};
+  const prev=cur.look||{};
+  const theme=(el=>el?el.value:'')(document.querySelector('input[name=bl-theme]:checked'));
+  const accentRaw=$("#bl-accent-hex").value.trim();
+  if(accentRaw && !/^#[0-9a-f]{6}$/i.test(accentRaw)){ msg.style.color='var(--danger)'; msg.textContent='Accent color should look like #a05c6b.'; return; }
+  const look={ theme, accent:accentRaw, tagline:$("#bl-tagline").value.trim().slice(0,160), logo_url: state._pendingLogo!==undefined ? state._pendingLogo : (prev.logo_url||''), cover_url:$("#bl-cover").value.trim().slice(0,400) };
+  const address=$("#bl-address").value.trim().slice(0,160), hours_line=$("#bl-hours").value.trim().slice(0,80);
+  const booking=Object.assign({},cur,{look, hours_line, address});
+  const settings=Object.assign({},state.account.settings||{},{booking});
+  if(pmMode()) settings.office_address=address; else settings.address=address;
+  const o=btn.textContent; btn.disabled=true; btn.textContent='Saving…';
+  const { error }=await db.from('accounts').update({settings}).eq('id',state.account.id);
+  if(!error){ state.account.settings=settings; state._pendingLogo=undefined; msg.style.color='var(--muted)'; msg.textContent='Saved. Refreshing the preview…'; const f=$("#bl-frame"); if(f) f.src=bookingUrl()+(bookingUrl().includes('?')?'&':'?')+'v='+Date.now(); }
+  else { msg.style.color='var(--danger)'; msg.textContent='Could not save. Try again.'; }
+  btn.disabled=false; btn.textContent=error?'Try again':'Saved ✓'; setTimeout(()=>{ btn.textContent=o; },1300);
 }
 async function renderBookingLinks(team){
   const el=$("#bp-links"); if(!el) return;

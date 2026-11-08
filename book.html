@@ -2,102 +2,244 @@
 <html lang="en">
 <head>
 <meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1">
+<meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Book an appointment</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,400;0,9..144,500;0,9..144,600;1,9..144,500&family=Figtree:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,400;0,9..144,500;0,9..144,600;1,9..144,400&family=Figtree:wght@400;500;600;700&family=Manrope:wght@400;500;600;700;800&display=swap" rel="stylesheet">
 <style>
+  /* ---------- theme tokens (overridden per look by applyLook) ---------- */
   :root{
-    --bg:#f4efe9; --card:#fffdfb; --ink:#2b2228; --ink2:#5c5057; --muted:#978a90;
-    --line:#ece3db; --line2:#f4ede6;
-    --accent:#a05c6b; --accent-deep:#834655; --accent-soft:#f6e9ec;
-    --ok:#4e7a5a; --danger:#b4443a;
-    --shadow:0 12px 42px -14px rgba(74,45,55,.20);
-    --radius:18px;
+    --accent:#a05c6b; --accent-deep:#6e3a47; --accent-ink:#ffffff; --accent-soft:#f6e9ec; --accent-soft-2:#fbf3f5;
+    --bg:#f6f1ec; --bg-2:#efe7e0; --card:#ffffff; --ink:#241c20; --ink2:#5a4f55; --muted:#8e8187; --line:#eadfd8; --line-2:#f3ebe5;
+    --ok:#3f7a57; --danger:#b4443a;
+    --display:'Fraunces',Georgia,serif; --body:'Figtree',-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+    --radius:22px; --radius-s:14px;
+    --shadow:0 18px 50px -22px rgba(40,20,28,.28), 0 2px 6px -2px rgba(40,20,28,.08);
+    --hero-grad:linear-gradient(135deg,var(--accent) 0%,var(--accent-deep) 100%);
   }
   *{box-sizing:border-box}
-  body{margin:0;background:var(--bg);color:var(--ink);font:16px/1.55 'Figtree',-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;-webkit-font-smoothing:antialiased}
-  .wrap{max-width:540px;margin:0 auto;padding:30px 18px 52px}
-  .brand{display:flex;align-items:center;gap:13px;margin:6px 2px 22px}
-  .brand .dot{width:50px;height:50px;border-radius:15px;background:linear-gradient(140deg,var(--accent),var(--accent-deep));color:#fff;display:flex;align-items:center;justify-content:center;font-weight:600;font-size:23px;font-family:'Fraunces',Georgia,serif;box-shadow:0 7px 20px -7px rgba(131,69,86,.55)}
-  .brand b{font-family:'Fraunces',Georgia,serif;font-size:27px;font-weight:600;letter-spacing:-.015em;line-height:1.08;display:block}
-  .brand small{display:block;color:var(--muted);font-size:13px;font-weight:500;margin-top:4px}
-  .card{background:var(--card);border:1px solid var(--line);border-radius:var(--radius);padding:22px;box-shadow:var(--shadow);margin-bottom:14px}
-  h2{font-family:'Fraunces',Georgia,serif;font-size:17px;margin:14px 0 4px;font-weight:500}
-  .step-label{font-size:12px;letter-spacing:.01em;color:var(--accent-deep);font-weight:600;margin:0 0 16px;display:flex;align-items:center;gap:8px}
-  .step-label:before{content:"";width:18px;height:1.5px;background:var(--accent);border-radius:2px}
-  .prog{display:flex;gap:7px;margin:0 0 20px}
-  .prog .seg{flex:1;display:flex;flex-direction:column;gap:7px}
-  .prog .seg:before{content:"";height:3px;border-radius:3px;background:var(--line);transition:.25s}
-  .prog .seg.on:before{background:var(--accent)}
-  .prog .seg span{font-size:10.5px;color:var(--muted);font-weight:600}
-  .prog .seg.on span{color:var(--accent-deep)}
-  .opt{display:flex;justify-content:space-between;align-items:flex-start;gap:14px;padding:16px 2px;cursor:pointer;border-bottom:1px solid var(--line2);transition:padding .14s}
-  .opt:last-of-type{border-bottom:none}
-  .opt:hover{padding-left:7px}
-  .opt.has-av{align-items:center}
-  .opt .nm{font-family:'Fraunces',Georgia,serif;font-weight:500;font-size:18.5px;letter-spacing:-.01em}
-  .opt .meta{color:var(--muted);font-size:13px;margin-top:3px}
-  .opt .desc{color:var(--ink2);font-size:13px;margin-top:6px;line-height:1.45}
-  .opt .price{font-family:'Fraunces',Georgia,serif;font-weight:500;font-size:16.5px;white-space:nowrap}
-  .opt .go{color:#cdbfc4;font-size:22px;line-height:1;align-self:center;transition:.14s}
-  .opt:hover .go{color:var(--accent);transform:translateX(3px)}
-  .pill{display:inline-block;font-size:10px;font-weight:700;letter-spacing:.03em;padding:2px 9px;border-radius:999px;background:var(--accent-soft);color:var(--accent-deep);margin-left:8px;vertical-align:middle}
-  .incl{list-style:none;margin:8px 0 0;padding:0}
-  .incl li{font-size:12.5px;color:var(--ink2);padding-left:18px;position:relative;margin-bottom:2px}
-  .incl li:before{content:"\2726";position:absolute;left:0;color:var(--accent);font-size:11px}
-  .av{width:42px;height:42px;border-radius:50%;background:var(--accent-soft);color:var(--accent-deep);display:flex;align-items:center;justify-content:center;font-weight:600;font-size:15px;flex:none;font-family:'Fraunces',Georgia,serif}
-  .daygroup{margin-bottom:18px}
-  .dayh{font-family:'Fraunces',Georgia,serif;font-size:15.5px;font-weight:500;color:var(--ink);margin:0 0 11px;display:flex;align-items:center;gap:9px}
-  .dayh:before{content:"";width:6px;height:6px;border-radius:50%;background:var(--accent);flex:none}
-  .chips{display:flex;flex-wrap:wrap;gap:9px}
-  .chip{border:1px solid var(--line);border-radius:12px;padding:11px 15px;font-size:14.5px;font-weight:500;cursor:pointer;background:#fff;transition:.14s;color:var(--ink)}
-  .chip:hover{border-color:var(--accent);color:var(--accent-deep)}
-  .chip.sel{background:var(--accent);color:#fff;border-color:var(--accent)}
-  label.f{display:block;font-size:13px;font-weight:600;color:var(--ink);margin:0 0 7px}
-  input.inp{width:100%;border:1px solid var(--line);border-radius:12px;padding:13px 14px;font:inherit;background:#fffefc;margin-bottom:14px;transition:.14s}
-  input.inp:focus{outline:none;border-color:var(--accent);box-shadow:0 0 0 3px var(--accent-soft);background:#fff}
-  .hp{position:absolute;left:-9999px;top:-9999px;height:0;width:0;opacity:0}
-  .btn{width:100%;border:none;border-radius:13px;padding:15px;font:inherit;font-weight:600;font-size:15.5px;background:var(--accent);color:#fff;cursor:pointer;transition:.14s;box-shadow:0 8px 20px -8px rgba(131,69,86,.55)}
-  .btn:hover{background:var(--accent-deep)}
-  .btn:disabled{opacity:.5;cursor:default;box-shadow:none}
-  .btn.ghost{background:#fff;color:var(--ink);border:1px solid var(--line);font-weight:600;box-shadow:none}
-  .btn.ghost:hover{border-color:var(--accent);color:var(--accent-deep)}
-  .pager{display:flex;justify-content:space-between;align-items:center;gap:10px;margin-top:14px}
-  .pg{width:auto!important;padding:11px 16px;font-size:14px}
-  .back{background:none;border:none;color:var(--muted);font:inherit;font-size:13.5px;font-weight:500;cursor:pointer;padding:2px 0;margin-bottom:14px;transition:.14s}
+  html{scroll-behavior:smooth}
+  body{margin:0;background:var(--bg);color:var(--ink);font:16px/1.55 var(--body);-webkit-font-smoothing:antialiased;min-height:100vh}
+  body:before{content:"";position:fixed;inset:0;z-index:-1;background:
+    radial-gradient(900px 500px at 10% -10%, color-mix(in srgb, var(--accent) 14%, transparent), transparent 60%),
+    radial-gradient(700px 420px at 100% 0%, color-mix(in srgb, var(--accent-deep) 10%, transparent), transparent 60%),
+    var(--bg)}
+  button,input{font:inherit}
+  a{color:inherit}
+
+  /* ---------- hero ---------- */
+  .hero{position:relative;color:var(--accent-ink);background:var(--hero-grad);overflow:hidden}
+  .hero.has-cover{background:#222}
+  .hero .cover{position:absolute;inset:0;background-size:cover;background-position:center;opacity:.9}
+  .hero.has-cover:after{content:"";position:absolute;inset:0;background:linear-gradient(180deg,rgba(0,0,0,.15),rgba(0,0,0,.62))}
+  .hero .pattern{position:absolute;inset:0;opacity:.14;background:
+    radial-gradient(circle at 20% 30%, #fff 0 2px, transparent 3px) 0 0/90px 90px,
+    radial-gradient(circle at 70% 70%, #fff 0 1.5px, transparent 2.5px) 0 0/70px 70px}
+  .hero-in{position:relative;z-index:1;max-width:1040px;margin:0 auto;padding:34px 20px 30px;display:flex;align-items:flex-end;gap:20px;flex-wrap:wrap}
+  @media (max-width:600px){ .hero-in{align-items:flex-start;gap:14px;padding:26px 18px 26px;flex-wrap:nowrap} .logo{width:54px;height:54px;border-radius:15px;font-size:22px;margin-top:4px} .hero .tag{font-size:14px} }
+  .logo{width:72px;height:72px;border-radius:20px;background:rgba(255,255,255,.16);border:1px solid rgba(255,255,255,.35);backdrop-filter:blur(6px);display:flex;align-items:center;justify-content:center;font-family:var(--display);font-size:30px;font-weight:600;flex:none;overflow:hidden;box-shadow:0 10px 30px -12px rgba(0,0,0,.5)}
+  .logo img{width:100%;height:100%;object-fit:cover}
+  .hero h1{font-family:var(--display);font-weight:500;font-size:clamp(28px,4.6vw,42px);letter-spacing:-.02em;line-height:1.05;margin:0}
+  .hero .tag{margin:8px 0 0;opacity:.92;font-size:15.5px;max-width:560px;line-height:1.5}
+  .hero .kicker{font-size:11.5px;letter-spacing:.14em;text-transform:uppercase;font-weight:700;opacity:.8;margin:0 0 8px}
+  .chips-row{display:flex;flex-wrap:wrap;gap:8px;margin-top:14px}
+  .hchip{display:inline-flex;align-items:center;gap:7px;padding:7px 12px;border-radius:999px;background:rgba(255,255,255,.14);border:1px solid rgba(255,255,255,.28);font-size:13px;font-weight:500;text-decoration:none;backdrop-filter:blur(4px)}
+  .hchip svg{width:14px;height:14px;opacity:.9}
+  .hchip:hover{background:rgba(255,255,255,.24)}
+
+  /* ---------- layout ---------- */
+  .wrap{max-width:1040px;margin:-18px auto 60px;padding:0 20px;display:grid;grid-template-columns:minmax(0,1fr) 320px;gap:22px;align-items:start}
+  @media (max-width:860px){ .side .card.blank{display:none} .wrap{grid-template-columns:1fr;margin-top:-14px} .side .row.unset,.side .trust{display:none} .side .sum h3{font-size:16px;margin-bottom:6px} .side .card{padding:16px 18px} }
+  #app,.side{min-width:0}
+  .card{background:var(--card);border:1px solid var(--line);border-radius:var(--radius);padding:26px;box-shadow:var(--shadow)}
+  .card{min-width:0;overflow:hidden}
+  @media (max-width:520px){ .card{padding:20px 16px;border-radius:18px} }
+  .side .card{padding:20px}
+  .side{position:sticky;top:16px}
+  @media (max-width:860px){ .side{position:static} }
+
+  /* stepper */
+  .stepper{display:flex;align-items:center;gap:6px;margin:0 0 22px;flex-wrap:wrap}
+  .st{display:flex;align-items:center;gap:8px;font-size:12.5px;font-weight:600;color:var(--muted)}
+  .st i{width:24px;height:24px;border-radius:50%;border:1.5px solid var(--line);display:inline-flex;align-items:center;justify-content:center;font-style:normal;font-size:11.5px;font-weight:700;background:#fff;color:var(--muted)}
+  .st.on{color:var(--ink)} .st.on i{background:var(--accent);border-color:var(--accent);color:var(--accent-ink)}
+  .st.done i{background:var(--accent-soft);border-color:var(--accent-soft);color:var(--accent-deep)}
+  .st .sep{width:18px;height:1.5px;background:var(--line);margin:0 2px}
+  @media (max-width:520px){ .st span{display:none} .st.on span{display:inline} }
+
+  h2.q{font-family:var(--display);font-size:clamp(22px,3vw,27px);font-weight:500;letter-spacing:-.015em;margin:0 0 6px;line-height:1.15}
+  .sub{color:var(--muted);font-size:14px;margin:0 0 18px}
+  .back{background:none;border:none;color:var(--muted);font-size:13.5px;font-weight:600;cursor:pointer;padding:0;margin:0 0 14px;display:inline-flex;align-items:center;gap:6px}
   .back:hover{color:var(--accent-deep)}
-  .wl-cta{margin-top:20px;padding-top:16px;border-top:1px solid var(--line2);font-size:13.5px;color:var(--muted);text-align:center}
-  .linkbtn{background:none;border:none;color:var(--accent-deep);font:inherit;font-weight:600;cursor:pointer;text-decoration:underline;text-underline-offset:2px;padding:0}
-  .linkbtn:hover{color:var(--accent)}
-  .summary{font-family:'Fraunces',Georgia,serif;font-style:italic;font-size:15px;color:var(--ink2);margin-bottom:18px}
-  .msg{font-size:13.5px;margin-top:12px}
+
+  /* category tabs */
+  .tabs{display:flex;gap:8px;overflow-x:auto;padding:2px 2px 10px;margin:0 -2px 6px;scrollbar-width:none}
+  .tabs::-webkit-scrollbar{display:none}
+  .tab{flex:none;border:1px solid var(--line);background:#fff;border-radius:999px;padding:8px 14px;font-size:13px;font-weight:600;color:var(--ink2);cursor:pointer}
+  .tab.on{background:var(--ink);color:#fff;border-color:var(--ink)}
+
+  /* option tiles */
+  .tiles{display:grid;grid-template-columns:1fr;gap:10px}
+  .tile{position:relative;display:flex;gap:14px;align-items:flex-start;padding:16px 16px 16px 18px;border:1.5px solid var(--line);border-radius:var(--radius-s);background:#fff;cursor:pointer;transition:transform .15s,border-color .15s,box-shadow .15s;text-align:left;width:100%}
+  .tile:hover{border-color:var(--accent);transform:translateY(-1px);box-shadow:0 10px 24px -16px color-mix(in srgb,var(--accent) 60%,transparent)}
+  .tile:before{content:"";position:absolute;left:0;top:14px;bottom:14px;width:3px;border-radius:3px;background:var(--accent);opacity:0;transition:.15s}
+  .tile:hover:before{opacity:1}
+  .tile .ic{width:44px;height:44px;border-radius:13px;background:var(--accent-soft);color:var(--accent-deep);display:flex;align-items:center;justify-content:center;flex:none;font-family:var(--display);font-size:18px;font-weight:600}
+  .tile .ic svg{width:20px;height:20px}
+  .tile .body{flex:1;min-width:0}
+  .tile .nm{font-family:var(--display);font-size:18.5px;font-weight:500;letter-spacing:-.01em;line-height:1.2;display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+  .tile .meta{color:var(--muted);font-size:13px;margin-top:4px;display:flex;gap:6px;flex-wrap:wrap;align-items:center}
+  .tile .meta .dot{width:3px;height:3px;border-radius:50%;background:var(--line);display:inline-block}
+  .tile .desc{color:var(--ink2);font-size:13.5px;margin-top:7px;line-height:1.45}
+  .tile .right{display:flex;flex-direction:column;align-items:flex-end;gap:6px;flex:none}
+  .tile .price{font-family:var(--display);font-weight:500;font-size:17px;white-space:nowrap}
+  .tile .go{color:var(--muted);transition:.15s}
+  .tile:hover .go{color:var(--accent);transform:translateX(3px)}
+  .pill{display:inline-block;font-size:10.5px;font-weight:700;letter-spacing:.04em;padding:3px 9px;border-radius:999px;background:var(--accent-soft);color:var(--accent-deep);text-transform:uppercase}
+  .incl{list-style:none;margin:8px 0 0;padding:0;display:flex;flex-wrap:wrap;gap:6px}
+  .incl li{font-size:12px;color:var(--ink2);background:var(--bg);border-radius:999px;padding:3px 10px}
+
+  /* people grid */
+  .people{display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:10px}
+  .person{border:1.5px solid var(--line);border-radius:var(--radius-s);background:#fff;padding:18px 12px 14px;text-align:center;cursor:pointer;transition:.15s}
+  .person:hover{border-color:var(--accent);transform:translateY(-1px)}
+  .person .av{width:58px;height:58px;border-radius:50%;margin:0 auto 10px;background:var(--hero-grad);color:var(--accent-ink);display:flex;align-items:center;justify-content:center;font-family:var(--display);font-weight:600;font-size:20px}
+  .person.any .av{background:var(--accent-soft);color:var(--accent-deep);font-size:22px}
+  .person .nm{font-weight:600;font-size:14.5px}
+  .person .meta{color:var(--muted);font-size:12px;margin-top:2px}
+
+  /* dates + times */
+  .days{display:flex;gap:8px;overflow-x:auto;padding:4px 2px 12px;margin:0 -2px;scrollbar-width:none}
+  .days::-webkit-scrollbar{display:none}
+  .day{flex:none;width:74px;border:1.5px solid var(--line);border-radius:16px;padding:10px 6px 9px;text-align:center;background:#fff;cursor:pointer;transition:.15s}
+  .day:hover{border-color:var(--accent)}
+  .day.on{background:var(--ink);border-color:var(--ink);color:#fff}
+  .day .wd{font-size:11px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;opacity:.75}
+  .day .dn{font-family:var(--display);font-size:24px;font-weight:500;line-height:1.15;margin:2px 0}
+  .day .ct{font-size:10.5px;opacity:.7}
+  .day.off{opacity:.45;cursor:default}
+  .part{margin:14px 0 6px;font-size:11.5px;letter-spacing:.1em;text-transform:uppercase;font-weight:700;color:var(--muted)}
+  .times{display:grid;grid-template-columns:repeat(auto-fill,minmax(92px,1fr));gap:8px}
+  .time{border:1.5px solid var(--line);border-radius:12px;padding:11px 6px;font-size:14px;font-weight:600;background:#fff;cursor:pointer;transition:.15s;text-align:center;color:var(--ink)}
+  .time:hover{border-color:var(--accent);color:var(--accent-deep);background:var(--accent-soft-2)}
+  .time.sel{background:var(--accent);border-color:var(--accent);color:var(--accent-ink)}
+  .pager{display:flex;justify-content:space-between;align-items:center;gap:10px;margin-top:16px}
+  .empty{padding:26px 14px;text-align:center;color:var(--muted);font-size:14px;border:1.5px dashed var(--line);border-radius:var(--radius-s)}
+
+  /* forms */
+  .grid2{display:grid;grid-template-columns:1fr 1fr;gap:0 12px}
+  @media (max-width:520px){ .grid2{grid-template-columns:1fr} }
+  label.f{display:block;font-size:12.5px;font-weight:700;color:var(--ink2);margin:0 0 6px;letter-spacing:.01em}
+  label.f small{font-weight:500;color:var(--muted)}
+  input.inp{width:100%;border:1.5px solid var(--line);border-radius:12px;padding:13px 14px;background:#fff;margin-bottom:14px;transition:.14s;color:var(--ink)}
+  input.inp:focus{outline:none;border-color:var(--accent);box-shadow:0 0 0 4px var(--accent-soft)}
+  .hp{position:absolute;left:-9999px;top:-9999px;height:0;width:0;opacity:0}
+  .btn{width:100%;border:none;border-radius:14px;padding:15px 18px;font-weight:700;font-size:15.5px;background:var(--accent);color:var(--accent-ink);cursor:pointer;transition:.15s;box-shadow:0 12px 26px -12px color-mix(in srgb,var(--accent) 80%,#000 10%);display:inline-flex;align-items:center;justify-content:center;gap:8px}
+  .btn:hover{background:var(--accent-deep);transform:translateY(-1px)}
+  .btn:disabled{opacity:.55;cursor:default;transform:none;box-shadow:none}
+  .btn.ghost{background:#fff;color:var(--ink);border:1.5px solid var(--line);box-shadow:none;font-weight:600}
+  .btn.ghost:hover{border-color:var(--accent);color:var(--accent-deep);background:#fff}
+  .btn.sm{width:auto;padding:10px 14px;font-size:13.5px;border-radius:11px}
+  .msg{font-size:13.5px;margin-top:12px;min-height:1em}
   .msg.err{color:var(--danger)}
-  .center{text-align:center;padding:22px 8px}
-  .center .big{width:68px;height:68px;margin:0 auto 18px;border-radius:50%;background:linear-gradient(140deg,var(--accent),var(--accent-deep));color:#fff;display:flex;align-items:center;justify-content:center;font-size:32px;box-shadow:0 10px 28px -8px rgba(131,69,86,.6)}
-  .center h3{margin:0 0 8px;font-size:24px;font-family:'Fraunces',Georgia,serif;font-weight:500}
-  .center p{color:var(--muted);margin:0;line-height:1.6}
-  .other{text-align:center;font-size:13px;color:var(--muted);line-height:2}
-  .other a{color:var(--ink);font-weight:600;text-decoration:none;border-bottom:1.5px solid var(--accent-soft)}
-  .foot{text-align:center;color:#b3a7ad;font-size:11.5px;margin-top:22px}
-  .foot a{color:#8a7d83}
-  .spin{color:var(--muted);font-size:13.5px;text-align:center;padding:20px}
-  @media (prefers-reduced-motion: reduce){ *{transition:none!important} }
+  .fine{font-size:12px;color:var(--muted);margin:14px 0 0;line-height:1.5}
+  .codebox{display:flex;gap:10px;justify-content:center;margin:10px 0 18px}
+  .codebox input{width:58px;height:66px;text-align:center;font-size:28px;font-family:var(--display);border:1.5px solid var(--line);border-radius:14px;background:#fff}
+  .codebox input:focus{outline:none;border-color:var(--accent);box-shadow:0 0 0 4px var(--accent-soft)}
+  .qa{margin:18px 0 4px;font-size:11.5px;letter-spacing:.1em;text-transform:uppercase;color:var(--muted);font-weight:700;display:flex;align-items:center;gap:10px}
+  .qa:after{content:"";flex:1;height:1px;background:var(--line)}
+  .linkbtn{background:none;border:none;color:var(--accent-deep);font-weight:700;cursor:pointer;text-decoration:underline;text-underline-offset:3px;padding:0}
+  .wl-cta{margin-top:18px;padding-top:16px;border-top:1px solid var(--line-2);font-size:13.5px;color:var(--muted);text-align:center}
+
+  /* summary side card */
+  .sum h3{font-family:var(--display);font-weight:500;font-size:18px;margin:0 0 12px;letter-spacing:-.01em}
+  .sum .row{display:flex;gap:12px;padding:10px 0;border-top:1px solid var(--line-2);font-size:14px}
+  .sum .row:first-of-type{border-top:none}
+  .sum .k{width:22px;height:22px;border-radius:7px;background:var(--accent-soft);color:var(--accent-deep);display:flex;align-items:center;justify-content:center;flex:none;margin-top:1px}
+  .sum .k svg{width:13px;height:13px}
+  .sum .v{min-width:0} .sum .v b{display:block;font-weight:600} .sum .v span{color:var(--muted);font-size:12.5px}
+  .sum .v.unset b{color:var(--muted);font-weight:500}
+  .sum .help{margin-top:14px;padding-top:12px;border-top:1px solid var(--line-2);font-size:12.5px;color:var(--muted);line-height:1.6}
+  .sum .help a{color:var(--ink);font-weight:600;text-decoration:none;border-bottom:1.5px solid var(--accent-soft)}
+  .trust{display:flex;gap:10px;align-items:center;margin-top:14px;font-size:12px;color:var(--muted)}
+  .trust svg{width:16px;height:16px;color:var(--ok);flex:none}
+
+  /* success */
+  .done{text-align:center;padding:14px 4px 6px}
+  .done .big{width:84px;height:84px;margin:0 auto 18px;border-radius:50%;background:var(--hero-grad);color:var(--accent-ink);display:flex;align-items:center;justify-content:center;box-shadow:0 18px 40px -14px color-mix(in srgb,var(--accent) 80%,#000 10%);animation:pop .5s cubic-bezier(.2,.9,.3,1.4)}
+  .done .big svg{width:40px;height:40px}
+  @keyframes pop{from{transform:scale(.5);opacity:0}to{transform:scale(1);opacity:1}}
+  .done h3{margin:0 0 6px;font-size:28px;font-family:var(--display);font-weight:500;letter-spacing:-.015em}
+  .done p{color:var(--muted);margin:0;line-height:1.6}
+  .ticket{margin:20px auto 0;max-width:420px;text-align:left;border:1.5px dashed var(--line);border-radius:16px;padding:16px 18px;background:var(--bg)}
+  .ticket .r{display:flex;justify-content:space-between;gap:12px;font-size:14px;padding:6px 0}
+  .ticket .r span{color:var(--muted)} .ticket .r b{font-weight:600;text-align:right}
+  .acts{display:flex;gap:10px;justify-content:center;flex-wrap:wrap;margin-top:18px}
+  .acts a.btn{text-decoration:none} .acts .btn svg{width:16px;height:16px}
+  .wrap.single{grid-template-columns:1fr;max-width:720px}
+  .foot{text-align:center;color:var(--muted);font-size:11.5px;margin:30px 0 0;grid-column:1/-1}
+  .foot a{color:var(--ink2);font-weight:600;text-decoration:none}
+  .spin{display:flex;align-items:center;justify-content:center;gap:10px;color:var(--muted);font-size:13.5px;padding:34px 10px}
+  .spin:before{content:"";width:18px;height:18px;border-radius:50%;border:2px solid var(--line);border-top-color:var(--accent);animation:sp .8s linear infinite}
+  @keyframes sp{to{transform:rotate(360deg)}}
+  .fade{animation:fade .25s ease}
+  @keyframes fade{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:none}}
+  @media (prefers-reduced-motion: reduce){ *{animation:none!important;transition:none!important} }
 </style>
 </head>
 <body>
-<div class="wrap">
-  <div class="brand"><span class="dot" id="b-dot">·</span><div><b id="b-name">Booking</b><small id="b-sub">Loading…</small></div></div>
-  <div id="app"><div class="card"><div class="spin">Loading…</div></div></div>
-  <div class="foot">Powered by <a href="https://sidekicklogistics.com" target="_blank" rel="noopener" style="color:inherit;text-decoration:none;font-weight:600">Sidekick Logistics</a></div>
-</div>
+<header class="hero" id="hero">
+  <div class="pattern"></div>
+  <div class="hero-in">
+    <div class="logo" id="b-logo">·</div>
+    <div style="flex:1;min-width:220px">
+      <p class="kicker" id="b-kicker">Book online</p>
+      <h1 id="b-name">Loading…</h1>
+      <p class="tag" id="b-tag" hidden></p>
+      <div class="chips-row" id="b-chips"></div>
+    </div>
+  </div>
+</header>
+<main class="wrap">
+  <section id="app"><div class="card"><div class="spin">Loading…</div></div></section>
+  <aside class="side" id="side"></aside>
+  <div class="foot">Powered by <a href="https://sidekicklogistics.com" target="_blank" rel="noopener">Sidekick Logistics</a></div>
+</main>
 <script>
 const API="https://hingbdtmxozbjetzwibj.supabase.co/functions/v1/book-public";
 const qs=new URLSearchParams(location.search);
 const ACCOUNT=qs.get('s')||qs.get('a')||(location.pathname.split('/book/')[1]||'').replace(/\/+$/,'');
-const S={info:null,service:null,stylist:null,slot:null,otpId:null,channel:null,slotStart:null,property:null,unit:'',answers:{}};
-// Property-management accounts: visits happen at a property/unit, so the flow adds a Property step and the visit type's own questions.
+const S={info:null,service:null,stylist:null,slot:null,otpId:null,channel:null,slotStart:null,property:null,unit:'',answers:{},day:null,cat:'',slotsCache:null};
+
+/* ---------- looks: each business picks one in the dashboard (settings.booking.look) ---------- */
+const LOOKS={
+  rose:      {accent:'#a05c6b',deep:'#6e3a47',bg:'#f6f1ec',soft:'#f6e9ec',ink:'#241c20',display:"'Fraunces',Georgia,serif",body:"'Figtree',sans-serif"},
+  noir:      {accent:'#1d1b1e',deep:'#000000',bg:'#f2f0ee',soft:'#ebe8e6',ink:'#161416',display:"'Fraunces',Georgia,serif",body:"'Figtree',sans-serif",accentInk:'#f6e7c9'},
+  sage:      {accent:'#5f7d64',deep:'#3f5a45',bg:'#f1f3ee',soft:'#e6eee6',ink:'#1f261f',display:"'Fraunces',Georgia,serif",body:"'Figtree',sans-serif"},
+  sand:      {accent:'#b8864b',deep:'#8a5f2c',bg:'#f8f3ea',soft:'#f4e9d8',ink:'#2a221a',display:"'Fraunces',Georgia,serif",body:"'Figtree',sans-serif"},
+  plum:      {accent:'#6b4a8c',deep:'#49306a',bg:'#f4f1f7',soft:'#ece4f3',ink:'#211a2a',display:"'Fraunces',Georgia,serif",body:"'Figtree',sans-serif"},
+  slate:     {accent:'#2f4f6f',deep:'#1d3449',bg:'#f1f4f7',soft:'#e4ebf2',ink:'#17212b',display:"'Manrope',sans-serif",body:"'Manrope',sans-serif"},
+  forest:    {accent:'#2e6b4f',deep:'#1d4a36',bg:'#f0f5f1',soft:'#e1eee6',ink:'#15241c',display:"'Manrope',sans-serif",body:"'Manrope',sans-serif"},
+  navy:      {accent:'#1f3a8a',deep:'#15275e',bg:'#f2f4f9',soft:'#e4e9f6',ink:'#141a2b',display:"'Manrope',sans-serif",body:"'Manrope',sans-serif"},
+  terracotta:{accent:'#b85c38',deep:'#8a4125',bg:'#f8f2ee',soft:'#f5e4dc',ink:'#2a1d17',display:"'Manrope',sans-serif",body:"'Manrope',sans-serif"},
+  ocean:     {accent:'#0f7c8c',deep:'#0a5560',bg:'#eff5f6',soft:'#dfeef0',ink:'#13262a',display:"'Manrope',sans-serif",body:"'Manrope',sans-serif"},
+};
+function hexToRgb(h){ const m=String(h||'').replace('#','').match(/^([0-9a-f]{6})$/i); if(!m) return null; const n=parseInt(m[1],16); return [n>>16&255,n>>8&255,n&255]; }
+function darken(h,amt){ const c=hexToRgb(h); if(!c) return h; return '#'+c.map(v=>Math.max(0,Math.round(v*(1-amt))).toString(16).padStart(2,'0')).join(''); }
+function mixWhite(h,amt){ const c=hexToRgb(h); if(!c) return h; return '#'+c.map(v=>Math.round(v+(255-v)*amt).toString(16).padStart(2,'0')).join(''); }
+function applyLook(look, pm){
+  const name=(look&&look.theme)||(pm?'slate':'rose');
+  const base=Object.assign({}, LOOKS[name]||LOOKS[pm?'slate':'rose']);
+  if(look&&look.accent&&hexToRgb(look.accent)){ base.accent=look.accent; base.deep=darken(look.accent,.32); base.soft=mixWhite(look.accent,.86); base.bg=mixWhite(look.accent,.94); }
+  const r=document.documentElement.style;
+  r.setProperty('--accent',base.accent); r.setProperty('--accent-deep',base.deep); r.setProperty('--accent-soft',base.soft); r.setProperty('--accent-soft-2',mixWhite(base.accent,.93));
+  r.setProperty('--bg',base.bg); r.setProperty('--ink',base.ink); r.setProperty('--accent-ink',base.accentInk||'#ffffff');
+  r.setProperty('--line',mixWhite(base.accent,.84)); r.setProperty('--line-2',mixWhite(base.accent,.9));
+  r.setProperty('--display',base.display); r.setProperty('--body',base.body);
+  if(look&&look.cover_url){ const h=document.getElementById('hero'); h.classList.add('has-cover'); const c=document.createElement('div'); c.className='cover'; c.style.backgroundImage=`url("${String(look.cover_url).replace(/"/g,'')}")`; h.insertBefore(c,h.firstChild); }
+}
+
 const PM_LOC_LABEL={unit:'At the unit',property:'At the property',office:'At the office',virtual:'Video call',phone:'Phone call'};
 const isPm=()=>!!(S.info&&S.info.pm);
 const needsProp=()=>isPm()&&S.service&&(S.service.loc==='unit'||S.service.loc==='property');
@@ -107,155 +249,189 @@ const $=s=>document.querySelector(s);
 const app=$("#app");
 const esc=s=>String(s==null?'':s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
 async function api(action,extra){ const r=await fetch(API,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(Object.assign({action,account:ACCOUNT},extra||{}))}); return r.json().catch(()=>({ok:false})); }
-
-function card(inner){ app.innerHTML=`<div class="card">${inner}</div>`; }
-function initials(n){ return (String(n||'?').trim().split(/\s+/).map(w=>w[0]).slice(0,2).join('')||'?').toUpperCase(); }
-function progress(active){
-  const team = S.info && S.info.salon_team && !S.preStylist;
-  const steps = isPm() ? (needsProp() ? ['Visit','Property','Time','Details'] : ['Visit','Time','Details']) : (team ? ['Service','Stylist','Time','Details'] : ['Service','Time','Details']);
-  if(isPm() && active==='Service') active='Visit';
-  const i = steps.indexOf(active);
-  return `<div class="prog">`+steps.map((s,idx)=>`<div class="seg ${idx<=i?'on':''}"><span>${esc(s)}</span></div>`).join('')+`</div>`;
+const I={
+  check:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg>',
+  arrow:'<svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14M13 6l6 6-6 6"/></svg>',
+  phone:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 16.9v3a2 2 0 0 1-2.2 2 19.8 19.8 0 0 1-8.6-3.1 19.5 19.5 0 0 1-6-6A19.8 19.8 0 0 1 2.1 4.2 2 2 0 0 1 4.1 2h3a2 2 0 0 1 2 1.7c.1.9.4 1.8.7 2.6a2 2 0 0 1-.5 2.1L8.1 9.7a16 16 0 0 0 6 6l1.3-1.3a2 2 0 0 1 2.1-.4c.8.3 1.7.6 2.6.7a2 2 0 0 1 1.9 2z"/></svg>',
+  mail:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="5" width="18" height="14" rx="2"/><path d="m3 7 9 6 9-6"/></svg>',
+  pin:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 10c0 6-8 12-8 12s-8-6-8-12a8 8 0 0 1 16 0z"/><circle cx="12" cy="10" r="3"/></svg>',
+  cal:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4M8 2v4M3 10h18"/></svg>',
+  tagic:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20.6 13.4 13.4 20.6a2 2 0 0 1-2.8 0L2 12V2h10l8.6 8.6a2 2 0 0 1 0 2.8z"/><circle cx="7" cy="7" r="1.5"/></svg>',
+  user:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="8" r="4"/><path d="M4 21a8 8 0 0 1 16 0"/></svg>',
+  home:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m3 11 9-8 9 8v10a1 1 0 0 1-1 1h-5v-7h-6v7H4a1 1 0 0 1-1-1z"/></svg>',
+  shield:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/><path d="m9 12 2 2 4-4"/></svg>',
+  clock:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg>',
+};
+function svcIcon(s){
+  const k=String((s.kind||'')+' '+(s.name||'')+' '+(s.category||'')).toLowerCase();
+  if(isPm()){ if(/show|tour/.test(k)) return I.home; if(/inspect|move/.test(k)) return I.shield; if(/meet|call|board|video|phone/.test(k)) return I.phone; return I.cal; }
+  return `<span>${esc((s.name||'?').trim().charAt(0).toUpperCase())}</span>`;
 }
+function initials(n){ return (String(n||'?').trim().split(/\s+/).map(w=>w[0]).slice(0,2).join('')||'?').toUpperCase(); }
 function prettyPhone(p){ return p?String(p).replace(/^\+1(\d{3})(\d{3})(\d{4})$/,'($1) $2-$3'):''; }
-function otherWays(){
-  const p=S.info&&S.info.phone, e=S.info&&S.info.email;
-  if(!p && !e) return '';
-  const parts=[];
-  if(p) parts.push(`Prefer to call? <a href="tel:${esc(String(p).replace(/[^0-9+]/g,''))}">${esc(prettyPhone(p)||p)}</a>`);
-  if(e) parts.push(`Prefer email? <a href="mailto:${esc(e)}">${esc(e)}</a>`);
-  return `<div class="card other">${parts.join('<br>')}</div>`;
+function card(inner){ app.innerHTML=`<div class="card fade">${inner}</div>`; window.scrollTo({top:Math.min(window.scrollY, 140),behavior:'smooth'}); }
+
+/* stepper */
+function steps(){ const team=S.info&&S.info.salon_team&&!S.preStylist; return isPm()?(needsProp()?['Visit','Property','Time','Details']:['Visit','Time','Details']):(team?['Service',S.info.provider_label?cap(S.info.provider_label):'Stylist','Time','Details']:['Service','Time','Details']); }
+function cap(s){ return String(s||'').charAt(0).toUpperCase()+String(s||'').slice(1); }
+function progress(active){
+  const list=steps(); if(isPm()&&active==='Service') active='Visit'; if(active==='Stylist') active=list[1];
+  const i=list.indexOf(active);
+  return `<div class="stepper">`+list.map((s,idx)=>`<div class="st ${idx<i?'done':''} ${idx===i?'on':''}"><i>${idx<i?I.check:idx+1}</i><span>${esc(s)}</span></div>${idx<list.length-1?'<div class="st"><span class="sep"></span></div>':''}`).join('')+`</div>`;
+}
+
+/* side summary */
+function side(){
+  const el=$("#side"); if(!el||!S.info) return;
+  const pm=isPm();
+  const rows=[];
+  const row=(ic,label,val,sub)=>`<div class="row ${val?'':'unset'}"><div class="k">${ic}</div><div class="v ${val?'':'unset'}"><b>${esc(val||label)}</b>${sub?`<span>${esc(sub)}</span>`:''}</div></div>`;
+  rows.push(row(I.tagic, pm?'Choose a visit type':'Choose a service', S.service&&S.service.name, S.service?[S.service.dur+' min', S.service.price].filter(Boolean).join(' · '):''));
+  if(pm && S.service && (S.service.loc==='unit'||S.service.loc==='property')) rows.push(row(I.home,'Which property', S.property&&S.property.name, S.unit||''));
+  if(!pm && S.info.salon_team && !S.preStylist) rows.push(row(I.user,'Choose a '+(S.info.provider_label||'stylist'), S.stylist?S.stylist.name:(S.service?'Any '+(S.info.provider_label||'stylist'):''), ''));
+  if(S.preStylist) rows.push(row(I.user,'With', S.preStylist.name,''));
+  const when=S.slot?new Date(S.slot):null;
+  rows.push(row(I.cal,'Pick a time', when?when.toLocaleDateString([], {weekday:'long',month:'long',day:'numeric'}):'', when?when.toLocaleTimeString([], {hour:'numeric',minute:'2-digit'}):''));
+  const p=S.info.phone, e=S.info.email;
+  const help=(p||e)?`<div class="help">Rather talk to someone?${p?`<br>Call <a href="tel:${esc(String(p).replace(/[^0-9+]/g,''))}">${esc(prettyPhone(p)||p)}</a>`:''}${e?`<br>Email <a href="mailto:${esc(e)}">${esc(e)}</a>`:''}</div>`:'';
+  el.innerHTML=`<div class="card sum ${(S.service||S.slot)?'':'blank'}"><h3>${pm?'Your visit':'Your appointment'}</h3>${rows.join('')}${help}<div class="trust">${I.shield}<span>Confirmed with a one-time code. No account, no password.</span></div></div>`;
 }
 
 async function boot(){
-  if(!ACCOUNT){ card('<div class="center"><h3>Page not found</h3><p>This booking link looks incomplete.</p></div>'); return; }
+  if(!ACCOUNT){ card('<div class="done"><h3>Page not found</h3><p>This booking link looks incomplete.</p></div>'); return; }
   const info=await api('info');
   if(!info||!info.ok){
     const m = info&&info.reason==='not_enabled' ? 'Online booking is not turned on for this business yet.' : 'We could not load this booking page.';
-    card(`<div class="center"><h3>Unavailable</h3><p>${esc(m)}</p></div>`); return;
+    $("#b-name").textContent='Unavailable'; card(`<div class="done"><h3>Unavailable</h3><p>${esc(m)}</p></div>`); return;
   }
   S.info=info;
+  applyLook(info.look||{}, !!info.pm);
   const preId=qs.get('stylist');
   if(preId && info.salon_team){ S.preStylist=(info.stylists||[]).find(s=>s.id===preId)||null; }
   $("#b-name").textContent=info.business;
-  $("#b-dot").textContent=(info.business||'B').trim().charAt(0).toUpperCase();
-  $("#b-sub").textContent= S.preStylist ? ('Book with '+S.preStylist.name) : (info.pm ? 'Schedule a visit' : 'Book an appointment');
+  const logo=$("#b-logo"); if(info.look&&info.look.logo_url){ logo.innerHTML=`<img src="${esc(info.look.logo_url)}" alt="">`; } else logo.textContent=(info.business||'B').trim().charAt(0).toUpperCase();
+  $("#b-kicker").textContent= S.preStylist ? ('Book with '+S.preStylist.name) : (info.pm ? 'Schedule a visit' : 'Book online');
+  const tag=$("#b-tag"); const tl=(info.look&&info.look.tagline)||''; if(tl){ tag.textContent=tl; tag.hidden=false; }
+  const chips=[]; if(info.phone) chips.push(`<a class="hchip" href="tel:${esc(String(info.phone).replace(/[^0-9+]/g,''))}">${I.phone}${esc(prettyPhone(info.phone)||info.phone)}</a>`);
+  if(info.address) chips.push(`<a class="hchip" target="_blank" rel="noopener" href="https://maps.google.com/?q=${encodeURIComponent(info.address)}">${I.pin}${esc(info.address)}</a>`);
+  if(info.hours) chips.push(`<span class="hchip">${I.clock}${esc(info.hours)}</span>`);
+  $("#b-chips").innerHTML=chips.join('');
   document.title=(info.pm?'Schedule · ':'Book · ')+info.business;
-  stepService();
+  side(); stepService();
 }
 
 function stepService(){
   const svc=S.info.services||[];
-  if(!svc.length){ card(isPm()?'<div class="center"><h3>Nothing to schedule online yet</h3><p>Please call or email the office and we will set a time with you.</p></div>':'<div class="center"><h3>Nothing to book yet</h3><p>This business has not added any services.</p></div>'); return; }
-  const cats={};
-  svc.forEach(s=>{ const k=s.category||''; (cats[k]=cats[k]||[]).push(s); });
-  let html=progress('Service')+`<div class="step-label">${isPm()?'What would you like to schedule?':'Choose a service'}</div>`;
-  Object.keys(cats).forEach(cat=>{
-    if(cat) html+=`<h2>${esc(cat)}</h2>`;
-    cats[cat].forEach(s=>{
-      const meta=isPm() ? [s.dur+' min', PM_LOC_LABEL[s.loc]||'', s.notice_hours?('schedule '+s.notice_hours+'h+ ahead'):''].filter(Boolean).join('  ·  ') : [s.dur+' min', s.new_only?'New clients':''].filter(Boolean).join('  ·  ');
+  if(!svc.length){ card(isPm()?'<div class="done"><h3>Nothing to schedule online yet</h3><p>Please call or email the office and we will set a time with you.</p></div>':'<div class="done"><h3>Nothing to book yet</h3><p>This business has not added any services.</p></div>'); return; }
+  const cats=[]; const byCat={};
+  svc.forEach(s=>{ const k=s.category||''; if(!byCat[k]){ byCat[k]=[]; cats.push(k); } byCat[k].push(s); });
+  const multi=cats.filter(Boolean).length>1 || (cats.length>1);
+  if(multi && !cats.includes(S.cat)) S.cat='';
+  const showCats = multi ? (S.cat ? [S.cat] : cats) : cats;
+  let html=progress('Service')+`<h2 class="q">${isPm()?'What would you like to schedule?':'What are we doing today?'}</h2><p class="sub">${isPm()?'Pick a visit type and we’ll find a time that works.':'Pick a service to see open times.'}</p>`;
+  if(multi) html+=`<div class="tabs"><button class="tab ${S.cat===''?'on':''}" data-cat="">All</button>${cats.filter(Boolean).map(c=>`<button class="tab ${S.cat===c?'on':''}" data-cat="${esc(c)}">${esc(c)}</button>`).join('')}</div>`;
+  html+=`<div class="tiles">`;
+  showCats.forEach(cat=>{
+    byCat[cat].forEach(s=>{
+      const meta=isPm() ? [s.dur+' min', PM_LOC_LABEL[s.loc]||'', s.notice_hours?('book '+s.notice_hours+'h+ ahead'):''].filter(Boolean) : [s.dur+' min', s.new_only?'New clients':'', (multi&&!S.cat&&cat)?cat:''].filter(Boolean);
       const incl=(s.includes&&s.includes.length)?`<ul class="incl">${s.includes.map(i=>`<li>${esc(i)}</li>`).join('')}</ul>`:'';
-      html+=`<div class="opt" data-svc="${s.id}">
-        <div><div class="nm">${esc(s.name)}${s.special?'<span class="pill">Special</span>':''}</div>
-        <div class="meta">${esc(meta)}</div>
-        ${s.description?`<div class="desc">${esc(s.description)}</div>`:''}${incl}</div>
-        <div style="display:flex;align-items:center;gap:12px;flex:none">${s.price?`<div class="price">${esc(s.price)}</div>`:''}<span class="go">&rsaquo;</span></div></div>`;
+      html+=`<button class="tile" data-svc="${s.id}"><div class="ic">${svcIcon(s)}</div><div class="body"><div class="nm">${esc(s.name)}${s.special?'<span class="pill">Special</span>':''}</div><div class="meta">${meta.map(m=>esc(m)).join('<span class="dot"></span>')}</div>${s.description?`<div class="desc">${esc(s.description)}</div>`:''}${incl}</div><div class="right">${s.price?`<div class="price">${esc(s.price)}</div>`:''}<span class="go">${I.arrow}</span></div></button>`;
     });
   });
-  if(S.preStylist) html=`<div class="summary">Booking with ${esc(S.preStylist.name)}</div>`+html;
-  app.innerHTML=`<div class="card">${html}</div>`+otherWays();
-  document.querySelectorAll('[data-svc]').forEach(el=>el.onclick=()=>{ S.service=svc.find(x=>x.id===el.dataset.svc); S.slot=null; S.slotStart=null; S.answers={}; if(isPm()){ S.stylist=null; if(needsProp()) stepProperty(); else { S.property=null; S.unit=''; stepTime(); } return; } if(S.preStylist){ S.stylist=S.preStylist; stepTime(); } else { S.stylist=null; (S.info.salon_team?stepStylist():stepTime()); } });
+  html+=`</div>`;
+  card(html);
+  document.querySelectorAll('[data-cat]').forEach(el=>el.onclick=()=>{ S.cat=el.dataset.cat; stepService(); });
+  document.querySelectorAll('[data-svc]').forEach(el=>el.onclick=()=>{ S.service=svc.find(x=>x.id===el.dataset.svc); S.slot=null; S.slotStart=null; S.answers={}; S.day=null; S.slotsCache=null; side(); if(isPm()){ S.stylist=null; if(needsProp()) stepProperty(); else { S.property=null; S.unit=''; stepTime(); } return; } if(S.preStylist){ S.stylist=S.preStylist; stepTime(); } else { S.stylist=null; (S.info.salon_team?stepStylist():stepTime()); } });
 }
 
-// PM: which property (and unit) is this visit at?
+/* PM: which property (and unit)? */
 function stepProperty(){
   const all=S.info.properties||[];
   const want=(S.service&&S.service.ptypes)||[];
   const list=want.length?all.filter(p=>want.includes(p.type)):all;
   const props=list.length?list:all;
-  if(!props.length){ card(`<button class="back" id="bk">&larr; Back</button>`+progress('Property')+`<div class="step-label">Which property?</div><p style="color:var(--muted)">No properties are set up for online scheduling yet. Please call or email the office.</p>`); $("#bk").onclick=stepService; return; }
-  let html=`<button class="back" id="bk">&larr; Back</button>`+progress('Property')+`<div class="step-label">Which property is this for?</div><div class="summary">${esc(S.service.name)}</div>`;
-  props.forEach(p=>{ html+=`<div class="opt" data-prop="${p.id}"><div><div class="nm">${esc(p.name)}</div>${p.address?`<div class="meta">${esc(p.address)}</div>`:''}</div><span class="go">&rsaquo;</span></div>`; });
-  card(html);
+  if(!props.length){ card(`<button class="back" id="bk">&larr; Back</button>`+progress('Property')+`<h2 class="q">Which property?</h2><div class="empty">No properties are set up for online scheduling yet. Please call or email the office.</div>`); $("#bk").onclick=stepService; return; }
+  const TYPE={residential:'Residential',commercial:'Commercial',hoa:'Community'};
+  let html=`<button class="back" id="bk">&larr; Back</button>`+progress('Property')+`<h2 class="q">Which property is this for?</h2><p class="sub">${esc(S.service.name)}</p><div class="tiles">`;
+  props.forEach(p=>{ html+=`<button class="tile" data-prop="${p.id}"><div class="ic">${I.home}</div><div class="body"><div class="nm">${esc(p.name)}</div><div class="meta">${[TYPE[p.type]||'',p.address||''].filter(Boolean).map(esc).join('<span class="dot"></span>')}</div></div><div class="right"><span class="go">${I.arrow}</span></div></button>`; });
+  card(html+`</div>`);
   $("#bk").onclick=stepService;
-  document.querySelectorAll('[data-prop]').forEach(el=>el.onclick=()=>{ S.property=props.find(x=>x.id===el.dataset.prop); stepUnit(); });
+  document.querySelectorAll('[data-prop]').forEach(el=>el.onclick=()=>{ S.property=props.find(x=>x.id===el.dataset.prop); side(); stepUnit(); });
 }
 function stepUnit(){
   const lbl=unitLabel(); const t=S.property&&S.property.type; const kind=S.service&&S.service.kind;
   const ph = t==='commercial' ? 'e.g. Suite 210 or Bay 4' : (t==='hoa' ? 'e.g. 118 Sunset Ridge Dr' : 'e.g. 4B');
   const optional = (kind==='showing'||kind==='space_tour');
-  card(`<button class="back" id="bk">&larr; Properties</button>`+progress('Property')+`<div class="step-label">${esc(S.property.name)}</div>
-    <label class="f">${esc(lbl)}${optional?' <span style="color:var(--muted);font-weight:400">(if you know it)</span>':''}</label><input class="inp" id="u-unit" placeholder="${esc(ph)}" value="${esc(S.unit||'')}">
-    <button class="btn" id="u-go">Continue</button>`);
+  card(`<button class="back" id="bk">&larr; Properties</button>`+progress('Property')+`<h2 class="q">${esc(S.property.name)}</h2><p class="sub">${esc(S.property.address||'')}</p>
+    <label class="f">${esc(lbl)}${optional?' <small>(if you know it)</small>':''}</label><input class="inp" id="u-unit" placeholder="${esc(ph)}" value="${esc(S.unit||'')}">
+    <button class="btn" id="u-go">Continue ${I.arrow}</button>`);
   $("#bk").onclick=stepProperty;
-  $("#u-go").onclick=()=>{ S.unit=$("#u-unit").value.trim(); S.slotStart=null; stepTime(); };
+  $("#u-go").onclick=()=>{ S.unit=$("#u-unit").value.trim(); S.slotStart=null; S.slotsCache=null; side(); stepTime(); };
+  $("#u-unit").addEventListener('keydown',e=>{ if(e.key==='Enter') $("#u-go").click(); });
   setTimeout(()=>$("#u-unit").focus(),80);
 }
 
 function stepStylist(){
   const pl=S.info.provider_label||'stylist';
   const list=S.info.stylists||[];
-  let html=`<button class="back" id="bk">&larr; Services</button>`+progress('Stylist')+`<div class="step-label">Choose a ${esc(pl)}</div>`;
-  html+=`<div class="opt has-av" data-sty="any"><div class="av">✦</div><div style="flex:1"><div class="nm">Any ${esc(pl)}</div><div class="meta">First available</div></div><span class="go">&rsaquo;</span></div>`;
-  list.forEach(s=>{ html+=`<div class="opt has-av" data-sty="${s.id}"><div class="av">${esc(initials(s.name))}</div><div style="flex:1"><div class="nm">${esc(s.name)}</div></div><span class="go">&rsaquo;</span></div>`; });
-  card(html);
+  let html=`<button class="back" id="bk">&larr; Services</button>`+progress('Stylist')+`<h2 class="q">Who would you like?</h2><p class="sub">${esc(S.service.name)} · ${S.service.dur} min</p><div class="people">`;
+  html+=`<button class="person any" data-sty="any"><div class="av">✦</div><div class="nm">Any ${esc(pl)}</div><div class="meta">First available</div></button>`;
+  list.forEach(s=>{ html+=`<button class="person" data-sty="${s.id}"><div class="av">${esc(initials(s.name))}</div><div class="nm">${esc(s.name)}</div><div class="meta">${esc(cap(pl))}</div></button>`; });
+  card(html+`</div>`);
   $("#bk").onclick=stepService;
-  document.querySelectorAll('[data-sty]').forEach(el=>el.onclick=()=>{ S.stylist = el.dataset.sty==='any'?null:list.find(x=>x.id===el.dataset.sty); S.slotStart=null; stepTime(); });
+  document.querySelectorAll('[data-sty]').forEach(el=>el.onclick=()=>{ S.stylist = el.dataset.sty==='any'?null:list.find(x=>x.id===el.dataset.sty); S.slotStart=null; S.slotsCache=null; S.day=null; side(); stepTime(); });
 }
 
+function partOf(iso){ const h=new Date(iso).getHours(); return h<12?'Morning':(h<17?'Afternoon':'Evening'); }
 async function stepTime(){
-  const who = S.stylist? (' with '+S.stylist.name) : (isPm()&&whereLine()?(' · '+whereLine()):'');
   const goBack=()=> isPm() ? (needsProp()?stepUnit():stepService()) : ((S.info.salon_team && !S.preStylist) ? stepStylist() : stepService());
-  card(`<button class="back" id="bk">&larr; Back</button>`+progress('Time')+`<div class="step-label">Pick a time</div><div class="summary">${esc(S.service.name)}${esc(who)}</div><div class="spin">Finding open times…</div>`);
-  $("#bk").onclick=goBack;
-  const r=await api('slots',{service_id:S.service.id, stylist_id:S.stylist?S.stylist.id:null, start_date:S.slotStart||null});
-  let slots=(r&&r.ok&&r.slots)||[];
-  if(isPm() && S.service && S.service.notice_hours){ const minMs=Date.now()+S.service.notice_hours*3600000; slots=slots.filter(s=>new Date(s.iso).getTime()>=minMs); }
-  const nextStart=(r&&r.next_start)||null, prevStart=(r&&r.prev_start)||null;
-  let html=`<button class="back" id="bk2">&larr; Back</button>`+progress('Time')+`<div class="step-label">Pick a time</div><div class="summary">${esc(S.service.name)}${esc(who)}</div>`;
-  if(!slots.length){ html+=`<p style="color:var(--muted)">No open times in this range.${nextStart?' Try later dates below.':' Please check back or contact us.'}</p>`; }
+  const head=`<button class="back" id="bk">&larr; Back</button>`+progress('Time')+`<h2 class="q">Pick a time</h2><p class="sub">${esc(S.service.name)}${S.stylist?' with '+esc(S.stylist.name):''}${isPm()&&whereLine()?' · '+esc(whereLine()):''}</p>`;
+  if(!S.slotsCache){ card(head+`<div class="spin">Finding open times…</div>`); $("#bk").onclick=goBack;
+    const r=await api('slots',{service_id:S.service.id, stylist_id:S.stylist?S.stylist.id:null, start_date:S.slotStart||null});
+    let slots=(r&&r.ok&&r.slots)||[];
+    if(isPm() && S.service && S.service.notice_hours){ const minMs=Date.now()+S.service.notice_hours*3600000; slots=slots.filter(s=>new Date(s.iso).getTime()>=minMs); }
+    S.slotsCache={slots, next:(r&&r.next_start)||null, prev:(r&&r.prev_start)||null};
+  }
+  const {slots,next,prev}=S.slotsCache;
+  const days=[]; const byDay={};
+  slots.forEach(s=>{ if(!byDay[s.day]){ byDay[s.day]=[]; days.push(s.day); } byDay[s.day].push(s); });
+  if(!S.day||!byDay[S.day]) S.day=days[0]||null;
+  let html=head;
+  if(!slots.length){ html+=`<div class="empty">No open times in this week.${next?' Try the next week below.':' Please check back or contact us.'}</div>`; }
   else{
-    const days={}; slots.forEach(s=>{ (days[s.day]=days[s.day]||[]).push(s); });
-    Object.keys(days).forEach(day=>{
-      html+=`<div class="daygroup"><div class="dayh">${esc(day)}</div><div class="chips">`;
-      days[day].forEach(s=>{ html+=`<button class="chip" data-iso="${esc(s.iso)}">${esc(s.label)}</button>`; });
-      html+='</div></div>';
-    });
+    html+=`<div class="days">`+days.map(d=>{ const dt=new Date(byDay[d][0].iso); const n=byDay[d].length; return `<button class="day ${d===S.day?'on':''}" data-day="${esc(d)}"><div class="wd">${esc(dt.toLocaleDateString([], {weekday:'short'}))}</div><div class="dn">${dt.getDate()}</div><div class="ct">${n} open</div></button>`; }).join('')+`</div>`;
+    const parts={}; (byDay[S.day]||[]).forEach(s=>{ const p=partOf(s.iso); (parts[p]=parts[p]||[]).push(s); });
+    ['Morning','Afternoon','Evening'].forEach(p=>{ if(!parts[p]) return; html+=`<div class="part">${p}</div><div class="times">`+parts[p].map(s=>`<button class="time ${S.slot===s.iso?'sel':''}" data-iso="${esc(s.iso)}">${esc(s.label)}</button>`).join('')+`</div>`; });
   }
-  if(prevStart||nextStart){
-    html+=`<div class="pager">`+
-      (prevStart?`<button class="btn ghost pg" data-start="${esc(prevStart)}">&larr; Earlier</button>`:`<span></span>`)+
-      (nextStart?`<button class="btn ghost pg" data-start="${esc(nextStart)}">Later dates &rarr;</button>`:`<span></span>`)+
-      `</div>`;
-  }
+  if(prev||next){ html+=`<div class="pager">`+(prev?`<button class="btn ghost sm" data-start="${esc(prev)}">&larr; Earlier</button>`:`<span></span>`)+(next?`<button class="btn ghost sm" data-start="${esc(next)}">Next week &rarr;</button>`:`<span></span>`)+`</div>`; }
   if(!isPm()) html+=`<div class="wl-cta">${slots.length?"Don't see a time that works?":'Want a spot the moment one opens up?'} <button class="linkbtn" id="wl-go">Join the waitlist</button></div>`;
-  else if(!slots.length) html+=`<p style="font-size:12.5px;color:var(--muted)">Need something sooner? Call or email the office and we'll find a time.</p>`;
+  else if(!slots.length) html+=`<p class="fine">Need something sooner? Call or email the office and we'll find a time.</p>`;
   card(html);
-  $("#bk2").onclick=goBack;
-  document.querySelectorAll('[data-iso]').forEach(el=>el.onclick=()=>{ S.slot=el.dataset.iso; stepDetails(); });
-  document.querySelectorAll('.pg').forEach(el=>el.onclick=()=>{ S.slotStart=el.dataset.start; stepTime(); });
+  $("#bk").onclick=goBack;
+  document.querySelectorAll('[data-day]').forEach(el=>el.onclick=()=>{ S.day=el.dataset.day; stepTime(); });
+  document.querySelectorAll('[data-iso]').forEach(el=>el.onclick=()=>{ S.slot=el.dataset.iso; side(); stepDetails(); });
+  document.querySelectorAll('[data-start]').forEach(el=>el.onclick=()=>{ S.slotStart=el.dataset.start; S.slotsCache=null; S.day=null; stepTime(); });
   { const w=$("#wl-go"); if(w) w.onclick=stepWaitlist; }
 }
 
 function stepDetails(){
   const gate=S.info.sms_gate;
-  const who = S.stylist? (' with '+S.stylist.name) : (isPm()&&whereLine()?(' · '+whereLine()):'');
-  const whenTxt=new Date(S.slot).toLocaleString([], {weekday:'long',month:'long',day:'numeric',hour:'numeric',minute:'2-digit'});
-  // PM visit types carry their own questions (e.g. move-in date, pets, intended use) so the manager arrives prepared.
-  const qs=(isPm()&&S.service&&Array.isArray(S.service.collect))?S.service.collect.filter(Boolean):[];
-  const qHtml=qs.map((q,i)=>`<label class="f">${esc(q)}</label><input class="inp" id="d-q-${i}" placeholder="" value="${esc(S.answers[q]||'')}">`).join('');
-  card(`<button class="back" id="bk">&larr; Times</button>`+progress('Details')+`<div class="step-label">Your details</div>
-    <div class="summary">${esc(S.service.name)}${esc(who)} · ${esc(whenTxt)}</div>
+  const when=new Date(S.slot);
+  const whenTxt=when.toLocaleDateString([], {weekday:'long',month:'long',day:'numeric'})+' at '+when.toLocaleTimeString([], {hour:'numeric',minute:'2-digit'});
+  const qsl=(isPm()&&S.service&&Array.isArray(S.service.collect))?S.service.collect.filter(Boolean):[];
+  const qHtml=qsl.map((q,i)=>`<label class="f">${esc(q)}</label><input class="inp" id="d-q-${i}" value="${esc(S.answers[q]||'')}">`).join('');
+  card(`<button class="back" id="bk">&larr; Times</button>`+progress('Details')+`<h2 class="q">Almost there</h2><p class="sub">${esc(whenTxt)} · ${esc(S.service.name)}${S.stylist?' with '+esc(S.stylist.name):''}</p>
     <label class="f">Your name</label><input class="inp" id="d-name" autocomplete="name" placeholder="First and last name">
-    <label class="f">Mobile number</label><input class="inp" id="d-phone" inputmode="tel" autocomplete="tel" placeholder="(555) 123-4567">
-    <label class="f">Email${gate?' <span style="color:var(--muted);font-weight:400">(optional)</span>':''}</label><input class="inp" id="d-email" type="email" autocomplete="email" placeholder="you@email.com">
-    ${qHtml?`<div style="margin:16px 0 4px;font-size:12px;letter-spacing:.04em;text-transform:uppercase;color:var(--muted);font-weight:600">A few quick questions</div>${qHtml}`:''}
+    <div class="grid2"><div><label class="f">Mobile number</label><input class="inp" id="d-phone" inputmode="tel" autocomplete="tel" placeholder="(555) 123-4567"></div>
+    <div><label class="f">Email${gate?' <small>(optional)</small>':''}</label><input class="inp" id="d-email" type="email" autocomplete="email" placeholder="you@email.com"></div></div>
+    ${qHtml?`<div class="qa">A few quick questions</div>${qHtml}`:''}
     <input class="hp" id="d-hp" tabindex="-1" autocomplete="off" placeholder="Leave this blank">
-    <button class="btn" id="d-go">Send me a code</button>
+    <button class="btn" id="d-go">Send me a code ${I.arrow}</button>
     <div class="msg" id="d-msg"></div>
-    <p style="font-size:11.5px;color:var(--muted);margin:14px 0 0">We'll ${gate?'text':'email'} you a quick code to confirm it's really you. No account needed.</p>`);
+    <p class="fine">We'll ${gate?'text':'email'} you a 4-digit code to confirm it's really you. No account needed, and we never share your number.</p>`);
   $("#bk").onclick=stepTime;
   $("#d-go").onclick=sendCode;
+  setTimeout(()=>$("#d-name").focus(),80);
 }
 
 async function sendCode(){
@@ -267,59 +443,58 @@ async function sendCode(){
   const gate=S.info.sms_gate;
   if(!phone){ setErr('Please enter your mobile number.'); return; }
   if(!gate && !email){ setErr('Please enter your email so we can send your code.'); return; }
-  btn.disabled=true; const o=btn.textContent; btn.textContent='Sending…'; msg.textContent='';
+  btn.disabled=true; const o=btn.innerHTML; btn.textContent='Sending…'; msg.textContent='';
   const extra={service_id:S.service.id, stylist_id:S.stylist?S.stylist.id:null, start_iso:S.slot, name, phone, email, hp};
-  if(isPm()){ const qs=(S.service&&Array.isArray(S.service.collect))?S.service.collect.filter(Boolean):[]; const answers={}; qs.forEach((q,i)=>{ const el=$("#d-q-"+i); if(el&&el.value.trim()) answers[q]=el.value.trim(); }); S.answers=answers; extra.property_id=S.property?S.property.id:null; extra.unit=S.unit||null; extra.answers=answers; }
+  if(isPm()){ const qsl=(S.service&&Array.isArray(S.service.collect))?S.service.collect.filter(Boolean):[]; const answers={}; qsl.forEach((q,i)=>{ const el=$("#d-q-"+i); if(el&&el.value.trim()) answers[q]=el.value.trim(); }); S.answers=answers; extra.property_id=S.property?S.property.id:null; extra.unit=S.unit||null; extra.answers=answers; }
   const r=await api('start',extra);
-  btn.disabled=false; btn.textContent=o;
-  if(r&&r.ok){ S.otpId=r.otp_id; S.channel=r.channel; stepCode(r.hint); return; }
+  btn.disabled=false; btn.innerHTML=o;
+  if(r&&r.ok){ S.otpId=r.otp_id; S.channel=r.channel; S.who={name,phone,email}; stepCode(r.hint); return; }
   const reasons={slot_gone:'Sorry, that time was just taken. Please pick another.',too_many:'Too many attempts. Please try again later.',need_phone:'Please enter your mobile number.',need_contact:'Please add a phone or email.',send_failed:'We could not send your code. Check your details and try again.',spam:'Something went wrong. Please try again.',need_property:'Please pick the property first.',notice:'That time is too soon for this kind of visit'+(r&&r.notice_hours?(' — it needs '+r.notice_hours+' hours’ notice'):'')+'. Please pick a later time.'};
   setErr(reasons[r&&r.reason]||'Something went wrong. Please try again.');
-  if(r&&r.reason==='slot_gone'){ setTimeout(stepTime,1200); }
+  if(r&&r.reason==='slot_gone'){ S.slotsCache=null; setTimeout(stepTime,1200); }
 }
 
 function stepCode(hint){
-  card(`<button class="back" id="bk">&larr; Back</button>`+progress('Details')+`<div class="step-label">Enter your code</div>
-    <p class="summary">We sent a 4-digit code to ${esc(hint||'you')}. Enter it to confirm your ${isPm()?'visit':'booking'}.</p>
-    <input class="inp" id="c-code" inputmode="numeric" maxlength="4" placeholder="1234" style="letter-spacing:8px;text-align:center;font-size:22px;font-family:'Fraunces',serif">
-    <button class="btn" id="c-go">${isPm()?'Confirm visit':'Confirm booking'}</button>
-    <button class="btn ghost" id="c-resend" style="margin-top:9px">Resend code</button>
+  card(`<button class="back" id="bk">&larr; Back</button>`+progress('Details')+`<h2 class="q">Enter your code</h2><p class="sub">We sent a 4-digit code to ${esc(hint||'you')}.</p>
+    <div class="codebox">${[0,1,2,3].map(i=>`<input inputmode="numeric" maxlength="1" data-c="${i}" aria-label="digit ${i+1}">`).join('')}</div>
+    <button class="btn" id="c-go">${isPm()?'Confirm visit':'Confirm booking'} ${I.check}</button>
+    <button class="btn ghost" id="c-resend" style="margin-top:10px">Didn't get it? Resend</button>
     <div class="msg" id="c-msg"></div>`);
   $("#bk").onclick=()=>stepDetails();
   $("#c-go").onclick=confirmCode;
   $("#c-resend").onclick=()=>stepDetails();
-  setTimeout(()=>$("#c-code").focus(),100);
+  const boxes=[...document.querySelectorAll('[data-c]')];
+  boxes.forEach((b,i)=>{ b.addEventListener('input',()=>{ b.value=b.value.replace(/\D/g,'').slice(-1); if(b.value&&boxes[i+1]) boxes[i+1].focus(); if(boxes.every(x=>x.value)) confirmCode(); });
+    b.addEventListener('keydown',e=>{ if(e.key==='Backspace'&&!b.value&&boxes[i-1]) boxes[i-1].focus(); });
+    b.addEventListener('paste',e=>{ const t=(e.clipboardData.getData('text')||'').replace(/\D/g,'').slice(0,4); if(t.length===4){ e.preventDefault(); boxes.forEach((x,j)=>x.value=t[j]||''); confirmCode(); } }); });
+  setTimeout(()=>boxes[0].focus(),100);
 }
 
 async function confirmCode(){
-  const btn=$("#c-go"), msg=$("#c-msg");
-  const code=$("#c-code").value.trim();
+  const btn=$("#c-go"), msg=$("#c-msg"); if(!btn||btn.disabled) return;
+  const code=[...document.querySelectorAll('[data-c]')].map(b=>b.value).join('');
   if(code.length<4){ msg.className='msg err'; msg.textContent='Enter the 4-digit code.'; return; }
-  btn.disabled=true; const o=btn.textContent; btn.textContent='Confirming…'; msg.textContent='';
+  btn.disabled=true; const o=btn.innerHTML; btn.textContent='Confirming…'; msg.textContent='';
   const r=await api('verify',{otp_id:S.otpId, code});
-  btn.disabled=false; btn.textContent=o;
+  btn.disabled=false; btn.innerHTML=o;
   if(r&&r.ok){ success(r.when_label, r.location); return; }
   const reasons={wrong_code:'That code is not right. Try again.',expired:'That code expired. Please resend.',locked:'Too many tries. Please start over.',used:'That code was already used.',slot_gone:'Sorry, that time was just taken. Please pick another.'};
   msg.className='msg err'; msg.textContent=reasons[r&&r.reason]||'Could not confirm. Try again.';
-  if(r&&(r.reason==='slot_gone')){ setTimeout(stepTime,1400); }
+  if(r&&(r.reason==='slot_gone')){ S.slotsCache=null; setTimeout(stepTime,1400); }
 }
 
 function stepWaitlist(){
-  const who = S.stylist? (' with '+S.stylist.name) : '';
-  card(`<button class="back" id="bk">&larr; Times</button><div class="step-label">Join the waitlist</div>
-    <div class="summary">${esc(S.service.name)}${esc(who)}</div>
-    <p style="font-size:13px;color:var(--ink2);margin:-8px 0 16px;line-height:1.5">We'll text you the moment a matching spot opens up, so you can grab it first.</p>
+  card(`<button class="back" id="bk">&larr; Times</button><h2 class="q">Join the waitlist</h2><p class="sub">${esc(S.service.name)}${S.stylist?' with '+esc(S.stylist.name):''} — we'll text you the moment a matching spot opens up, so you can grab it first.</p>
     <label class="f">Your name</label><input class="inp" id="w-name" autocomplete="name" placeholder="First and last name">
-    <label class="f">Mobile number</label><input class="inp" id="w-phone" inputmode="tel" autocomplete="tel" placeholder="(555) 123-4567">
-    <label class="f">Email <span style="color:var(--muted);font-weight:400">(optional)</span></label><input class="inp" id="w-email" type="email" autocomplete="email" placeholder="you@email.com">
-    <label class="f">Anything we should know? <span style="color:var(--muted);font-weight:400">(optional)</span></label><input class="inp" id="w-note" placeholder="e.g. mornings work best">
+    <div class="grid2"><div><label class="f">Mobile number</label><input class="inp" id="w-phone" inputmode="tel" autocomplete="tel" placeholder="(555) 123-4567"></div>
+    <div><label class="f">Email <small>(optional)</small></label><input class="inp" id="w-email" type="email" autocomplete="email" placeholder="you@email.com"></div></div>
+    <label class="f">Anything we should know? <small>(optional)</small></label><input class="inp" id="w-note" placeholder="e.g. mornings work best">
     <input class="hp" id="w-hp" tabindex="-1" autocomplete="off" placeholder="Leave this blank">
     <button class="btn" id="w-go">Join the waitlist</button>
     <div class="msg" id="w-msg"></div>`);
   $("#bk").onclick=stepTime;
   $("#w-go").onclick=joinWaitlist;
 }
-
 async function joinWaitlist(){
   const btn=$("#w-go"), msg=$("#w-msg");
   const name=$("#w-name").value.trim(), phone=$("#w-phone").value.trim(), email=$("#w-email").value.trim(), note=$("#w-note").value.trim();
@@ -333,25 +508,25 @@ async function joinWaitlist(){
   const reasons={need_phone:'Please enter your mobile number.',missing:'Please enter your name.',spam:'Something went wrong. Please try again.',failed:'We could not add you right now. Please try again.'};
   setErr(reasons[r&&r.reason]||'Something went wrong. Please try again.');
 }
-
 function waitlistDone(already){
-  const who = S.stylist? (' with '+S.stylist.name) : '';
-  card(`<div class="center"><div class="big">&#10003;</div><h3>${already?"You're already on the list":"You're on the waitlist!"}</h3>
-    <p>${esc(S.service.name)}${esc(who)}<br>We'll text you as soon as a matching spot opens up.</p></div>`);
+  card(`<div class="done"><div class="big">${I.check}</div><h3>${already?"You're already on the list":"You're on the waitlist"}</h3><p>${esc(S.service.name)}${S.stylist?' with '+esc(S.stylist.name):''}<br>We'll text you as soon as a matching spot opens up.</p></div>`);
 }
 
+function icsLink(title, startIso, durMin, where){
+  const fmt=d=>new Date(d).toISOString().replace(/[-:]/g,'').replace(/\.\d{3}/,'');
+  const end=new Date(new Date(startIso).getTime()+(durMin||45)*60000);
+  const ics=['BEGIN:VCALENDAR','VERSION:2.0','PRODID:-//Donna//booking//EN','BEGIN:VEVENT',`UID:${Date.now()}@donna`,`DTSTAMP:${fmt(new Date())}`,`DTSTART:${fmt(startIso)}`,`DTEND:${fmt(end)}`,`SUMMARY:${String(title).replace(/[,;]/g,' ')}`,where?`LOCATION:${String(where).replace(/[,;]/g,' ')}`:'',`DESCRIPTION:Booked online with ${String(S.info.business).replace(/[,;]/g,' ')}`,'END:VEVENT','END:VCALENDAR'].filter(Boolean).join('\r\n');
+  return 'data:text/calendar;charset=utf-8,'+encodeURIComponent(ics);
+}
 function success(whenLabel, location){
-  if(isPm()){
-    const where = location || whereLine();
-    card(`<div class="center"><div class="big">&#10003;</div><h3>You're scheduled!</h3>
-      <p>${esc(S.service.name)}<br><b style="color:var(--ink)">${esc(whenLabel||'')}</b>${where?`<br><span style="color:var(--ink2)">${esc(where)}</span>`:''}</p>
-      <p style="margin-top:12px">A confirmation with the details is on its way. If anything changes, just reply to it.</p></div>`);
-    return;
-  }
-  const who = S.stylist? (' with '+S.stylist.name) : '';
-  card(`<div class="center"><div class="big">&#10003;</div><h3>You're booked!</h3>
-    <p>${esc(S.service.name)}${esc(who)}<br><b style="color:var(--ink)">${esc(whenLabel||'')}</b></p>
-    <p style="margin-top:12px">A confirmation is on its way. See you then!</p></div>`);
+  const pm=isPm(); const where = pm ? (location || whereLine()) : (S.info.address||'');
+  const title=`${S.service.name}${S.stylist?' with '+S.stylist.name:''} — ${S.info.business}`;
+  const rows=[['When', whenLabel||''],[pm?'Visit':'Service', S.service.name],[S.stylist?cap(S.info.provider_label||'stylist'):'', S.stylist?S.stylist.name:''],[where?'Where':'', where],[S.who&&S.who.name?'Name':'', S.who?S.who.name:'']].filter(r=>r[0]&&r[1]);
+  card(`<div class="done"><div class="big">${I.check}</div><h3>${pm?"You're scheduled":"You're booked"}</h3><p>${pm?'A confirmation with the details is on its way. If anything changes, just reply to it.':'A confirmation is on its way. We can’t wait to see you.'}</p>
+    <div class="ticket">${rows.map(r=>`<div class="r"><span>${esc(r[0])}</span><b>${esc(r[1])}</b></div>`).join('')}</div>
+    <div class="acts"><a class="btn ghost sm" download="appointment.ics" href="${icsLink(title,S.slot,S.service.dur,where)}">${I.cal} Add to calendar</a><button class="btn ghost sm" id="again">${pm?'Schedule another':'Book another'}</button></div></div>`);
+  $("#side").innerHTML=''; document.querySelector('.wrap').classList.add('single');
+  $("#again").onclick=()=>{ document.querySelector('.wrap').classList.remove('single'); S.service=null; S.stylist=null; S.slot=null; S.property=null; S.unit=''; S.answers={}; S.slotsCache=null; S.day=null; side(); stepService(); };
 }
 
 boot();
