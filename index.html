@@ -443,7 +443,7 @@ function renderApp(){
     navConfig.push(["knowledge","Knowledge",I.book],["booking","Booking page",I.link],["intake","Intake forms",I.clip],["promotions","Promotions",I.promo],["notifications","Notifications",I.bell],["settings","Settings",I.gear]);
     navActivity=[["calls","Calls",I.phone],["appointments","Appointments",I.appt],["messages","Phone messages",I.msg],["contacts",salonOn()?"Clients":"Contacts",I.users],["gaps","Questions",I.book],["conversations","Email inbox",I.mail]];
     if(salonOn()) navActivity.splice(2,0,["waitlist","Waitlist",I.clock]);
-    if(propertyOn()){ navConfig.splice(1,0,["properties","Properties",I.building]); navActivity.splice(0,0,["requests","Service requests",I.wrench]); }
+    if(propertyOn()){ navConfig.splice(1,0,["properties","Properties",I.building]); navConfig.splice(2,0,["contractors","Contractors",I.users]); navActivity.splice(0,0,["requests","Service requests",I.wrench]); }
     soon=[["billing","Billing",I.card]];
   } else {
     // Stylist: focused view — their own bookings, messages, clients, and their own availability.
@@ -470,7 +470,7 @@ function renderApp(){
     </aside>
     <main class="main">
       <div class="topbar">
-        <div class="crumbs">${['settings','notifications'].includes(state.view)?'Account':(['messages','appointments','waitlist','calls','contacts','clients','gaps','conversations','requests'].includes(state.view)?'Activity':'Configure')} · <b>${esc(({assistant:"Assistant",schedule:"Schedule",types:"Appointment types",staff:"Staff",messages:"Phone messages",appointments:"Appointments",settings:"Settings",notifications:"Notifications",calls:"Calls",knowledge:"Knowledge",contacts:(salonOn()?"Clients":"Contacts"),clients:"Clients",gaps:"Open questions",conversations:"Email inbox",waitlist:"Waitlist",promotions:"Promotions",booking:"Booking page",mylink:"My booking link",intake:"Intake forms",properties:"Properties",requests:"Service requests"})[state.view])}</b></div>
+        <div class="crumbs">${['settings','notifications'].includes(state.view)?'Account':(['messages','appointments','waitlist','calls','contacts','clients','gaps','conversations','requests'].includes(state.view)?'Activity':'Configure')} · <b>${esc(({assistant:"Assistant",schedule:"Schedule",types:"Appointment types",staff:"Staff",messages:"Phone messages",appointments:"Appointments",settings:"Settings",notifications:"Notifications",calls:"Calls",knowledge:"Knowledge",contacts:(salonOn()?"Clients":"Contacts"),clients:"Clients",gaps:"Open questions",conversations:"Email inbox",waitlist:"Waitlist",promotions:"Promotions",booking:"Booking page",mylink:"My booking link",intake:"Intake forms",properties:"Properties",contractors:"Contractors",requests:"Service requests"})[state.view])}</b></div>
         <div class="acct-chip"><span class="av">${initials}</span><div class="who"><b>${esc(state.account.company)}</b><span>${esc((state.account.status||'trial'))} · ${esc(state.account.plan||'starter')}</span></div></div>
       </div>
       <div id="approve-banner"></div>
@@ -487,8 +487,8 @@ function renderPage(){
   if('speechSynthesis' in window) window.speechSynthesis.cancel();
   teardownRealtime();
   document.querySelectorAll(".nav-item[data-v]").forEach(b=>b.classList.toggle("active",b.dataset.v===state.view));
-  $(".crumbs").innerHTML=`${['settings','notifications'].includes(state.view)?'Account':(['messages','appointments','waitlist','calls','contacts','clients','gaps','conversations','requests'].includes(state.view)?'Activity':'Configure')} · <b>${esc(({assistant:"Assistant",schedule:"Schedule",types:"Appointment types",staff:"Staff",messages:"Phone messages",appointments:"Appointments",settings:"Settings",notifications:"Notifications",calls:"Calls",knowledge:"Knowledge",contacts:(salonOn()?"Clients":"Contacts"),clients:"Clients",gaps:"Open questions",conversations:"Email inbox",waitlist:"Waitlist",promotions:"Promotions",booking:"Booking page",mylink:"My booking link",intake:"Intake forms",properties:"Properties",requests:"Service requests"})[state.view])}</b>`;
-  const PAGES={assistant:pageAssistant, schedule:pageSchedule, types:pageTypes, staff:pageStaff, messages:pageMessages, appointments:renderAppts, settings:pageSettings, notifications:pageNotifications, calls:pageCalls, knowledge:pageKnowledge, contacts:pageContacts, clients:pageClients, gaps:pageGaps, conversations:pageConversations, waitlist:pageWaitlist, promotions:pagePromotions, booking:pageBookingPage, mylink:pageMyLink, intake:pageIntakeForms, properties:pageProperties, requests:pageServiceRequests};
+  $(".crumbs").innerHTML=`${['settings','notifications'].includes(state.view)?'Account':(['messages','appointments','waitlist','calls','contacts','clients','gaps','conversations','requests'].includes(state.view)?'Activity':'Configure')} · <b>${esc(({assistant:"Assistant",schedule:"Schedule",types:"Appointment types",staff:"Staff",messages:"Phone messages",appointments:"Appointments",settings:"Settings",notifications:"Notifications",calls:"Calls",knowledge:"Knowledge",contacts:(salonOn()?"Clients":"Contacts"),clients:"Clients",gaps:"Open questions",conversations:"Email inbox",waitlist:"Waitlist",promotions:"Promotions",booking:"Booking page",mylink:"My booking link",intake:"Intake forms",properties:"Properties",contractors:"Contractors",requests:"Service requests"})[state.view])}</b>`;
+  const PAGES={assistant:pageAssistant, schedule:pageSchedule, types:pageTypes, staff:pageStaff, messages:pageMessages, appointments:renderAppts, settings:pageSettings, notifications:pageNotifications, calls:pageCalls, knowledge:pageKnowledge, contacts:pageContacts, clients:pageClients, gaps:pageGaps, conversations:pageConversations, waitlist:pageWaitlist, promotions:pagePromotions, booking:pageBookingPage, mylink:pageMyLink, intake:pageIntakeForms, properties:pageProperties, contractors:pageContractors, requests:pageServiceRequests};
   const LOADERS={appointments:loadAppointments, messages:loadMessages, calls:loadCalls, contacts:loadContacts, clients:loadContacts, gaps:loadGaps, conversations:loadConversations, staff:loadStaff, waitlist:loadWaitlist};
   const v=state.view;
   (PAGES[v]||(()=>{}))();
@@ -2980,6 +2980,8 @@ async function loadServiceRequests(){
   state.sr=state.sr||{filter:'open'};
   let q=db.from('service_requests').select('*, properties(name,property_type)').eq('account_id',state.account.id).order('created_at',{ascending:false}).limit(300);
   const { data }=await q; state.sr.list=data||[];
+  const { data:cons }=await db.from('contractors').select('id,name,company,trades,is_active').eq('account_id',state.account.id).eq('is_active',true).order('name');
+  state.contractors=cons||[];
 }
 function pageServiceRequests(){
   state.sr=state.sr||{filter:'open'};
@@ -3010,12 +3012,162 @@ function paintSrList(){
   el.querySelectorAll('[data-srstatus]').forEach(sel=>sel.onchange=async()=>{ const patch={status:sel.value}; if(['resolved','closed'].includes(sel.value))patch.resolved_at=new Date().toISOString(); if(sel.value==='acknowledged'&&!rows.find(x=>x.id===sel.dataset.srstatus)?.acknowledged_at)patch.acknowledged_at=new Date().toISOString(); await db.from('service_requests').update(patch).eq('id',sel.dataset.srstatus); await loadServiceRequests(); paintSrList(); });
   el.querySelectorAll('[data-srassign]').forEach(b=>b.onclick=async()=>{ const v=document.getElementById('sra-'+b.dataset.srassign).value.trim(); await db.from('service_requests').update({assigned_to:v||null}).eq('id',b.dataset.srassign); await loadServiceRequests(); paintSrList(); });
   el.querySelectorAll('[data-srnote]').forEach(b=>b.onclick=async()=>{ const v=document.getElementById('srn-'+b.dataset.srnote).value.trim(); await db.from('service_requests').update({resolved_note:v||null}).eq('id',b.dataset.srnote); await loadServiceRequests(); paintSrList(); });
+  el.querySelectorAll('[data-srdispatch]').forEach(b=>b.onclick=async()=>{ const id=b.dataset.srdispatch; const sel=document.getElementById('srd-'+id); const cid=sel.value; const msg=document.getElementById('srdmsg-'+id); if(!cid){ if(msg) msg.textContent='Pick a contractor first.'; return; } if(msg) msg.textContent='Dispatching…'; b.disabled=true; let r=null; try{ r=(await db.functions.invoke('pm-dispatch',{body:{action:'dispatch',service_request_id:id,contractor_id:cid}})).data; }catch(_e){} b.disabled=false; if(r&&r.ok){ if(msg) msg.textContent='Dispatched'+(r.sent&&r.sent.length?' by '+r.sent.join(' & '):''); await loadServiceRequests(); paintSrList(); } else if(msg){ msg.textContent=(r&&r.error)||'Could not dispatch — check the contractor has an email or phone.'; } });
+}
+function dispatchBlock(r,fmt){
+  const resolved=['resolved','closed','cancelled'].includes(r.status);
+  const cons=(state.contractors||[]);
+  const ds=r.dispatch_state||{};
+  const who=ds.contractor||r.assigned_to||'';
+  let status='';
+  if(r.dispatched_at){
+    const chips=[];
+    chips.push(`Sent ${fmt(r.dispatched_at)}${ds.via&&ds.via.length?' ('+esc(ds.via.join(', '))+')':''}`);
+    chips.push(r.accepted_at?`<span style="color:var(--ok)">✓ accepted ${fmt(r.accepted_at)}</span>`:'awaiting contractor');
+    if(r.completed_at) chips.push(`<span style="color:var(--ok)">✓ completed ${fmt(r.completed_at)}</span>`);
+    status=`<div style="font-size:12px;margin-top:12px;padding:10px 12px;background:var(--surface);border-radius:var(--r-sm)"><div style="font-weight:600;margin-bottom:3px">Dispatched${who?' · '+esc(who):''}</div><div style="color:var(--muted)">${chips.join(' · ')}</div></div>`;
+  }
+  let ctl='';
+  if(!resolved){
+    if(cons.length){
+      ctl=`<div style="display:flex;gap:10px;flex-wrap:wrap;align-items:center;margin-top:10px">
+        <select class="inp" style="max-width:240px" id="srd-${r.id}"><option value="">${r.dispatched_at?'Re-dispatch to…':'Dispatch to a contractor…'}</option>${cons.map(c=>`<option value="${c.id}">${esc(c.company||c.name)}${c.trades&&c.trades.length?' — '+esc(c.trades.join(', ')):''}</option>`).join('')}</select>
+        <button class="btn sm" data-srdispatch="${r.id}">Dispatch</button>
+        <span id="srdmsg-${r.id}" style="font-size:12px;color:var(--muted)"></span>
+      </div>`;
+    } else {
+      ctl=`<div style="font-size:12px;color:var(--muted);margin-top:10px">Add contractors on the Contractors page to dispatch work with one tap.</div>`;
+    }
+  }
+  return status+ctl;
+}
+
+/* ===================== CONTRACTORS PAGE ===================== */
+async function loadContractors(){
+  const { data:cons }=await db.from('contractors').select('*').eq('account_id',state.account.id).order('name');
+  state.con=state.con||{}; state.con.list=cons||[];
+  const { data:rules }=await db.from('dispatch_rules').select('*').eq('account_id',state.account.id);
+  state.con.rules=rules||[];
+}
+function pageContractors(){
+  state.con=state.con||{edit:null};
+  $("#page").innerHTML=`
+  <div class="page">
+    <div class="page-head"><h1>Contractors</h1><p>Your go-to vendors — plumbers, electricians, HVAC, and the rest. ${esc(aName())} dispatches work to them with a tap, and can do it automatically for the trades you choose. Add each one once; they're available across every property.</p></div>
+    <div class="card">
+      <div class="card-h"><h2 id="con-form-title">Add a contractor</h2><span class="hint">reusable everywhere</span></div>
+      <div class="grid-2">
+        <div class="field"><label class="lab">Name</label><input class="inp" id="con-name" placeholder="e.g. Mike Torres"></div>
+        <div class="field"><label class="lab">Company <span class="sub">optional</span></label><input class="inp" id="con-company" placeholder="e.g. Torres Plumbing"></div>
+      </div>
+      <div class="field"><label class="lab">Trades</label><input class="inp" id="con-trades" placeholder="plumbing, drains (comma-separated)"><span class="sub" style="display:block;margin-top:4px;color:var(--muted);font-size:11.5px">These are the categories ${esc(aName())} matches against when dispatching — e.g. plumbing, electrical, hvac, locksmith, landscaping, appliance, general.</span></div>
+      <div class="grid-2">
+        <div class="field"><label class="lab">Phone <span class="sub">for text work orders</span></label><input class="inp" id="con-phone" placeholder="+1 817 555 0100"></div>
+        <div class="field"><label class="lab">Email <span class="sub">for emailed work orders</span></label><input class="inp" id="con-email" placeholder="mike@torresplumbing.com"></div>
+      </div>
+      <div class="field"><label class="lab">Notes <span class="sub">optional</span></label><input class="inp" id="con-notes" placeholder="e.g. after-hours OK, licensed #12345"></div>
+      <div style="display:flex;align-items:center;gap:12px">
+        <button class="btn primary" id="con-save">Save contractor</button>
+        <button class="btn" id="con-cancel" style="display:none">Cancel</button>
+        <span id="con-msg" style="font-size:12.5px;color:var(--muted)"></span>
+      </div>
+    </div>
+    <div class="card">
+      <div class="card-h"><h2>Your contractors</h2><button class="btn sm" id="con-refresh">Refresh</button></div>
+      <div id="con-list"><div class="empty">Loading…</div></div>
+    </div>
+    <div class="card">
+      <div class="card-h"><h2>Auto-dispatch</h2><span class="hint">optional, opt-in</span></div>
+      <p style="font-size:12.5px;color:var(--muted);margin-bottom:14px">Pick the trades ${esc(aName())} should dispatch automatically when a routine request comes in — no waiting on you. Everything else she logs and leaves for you to dispatch by hand. Emergencies always go straight to your on-call contacts regardless. You can set a rule for all properties, or override it for one.</p>
+      <div class="grid-2">
+        <div class="field"><label class="lab">Trade</label><input class="inp" id="rule-trade" placeholder="e.g. plumbing"></div>
+        <div class="field"><label class="lab">Contractor</label><select class="inp" id="rule-con"></select></div>
+      </div>
+      <div class="grid-2">
+        <div class="field"><label class="lab">Applies to</label><select class="inp" id="rule-prop"><option value="">All properties</option></select></div>
+        <div class="field" style="display:flex;align-items:flex-end"><label style="display:flex;align-items:center;gap:8px;font-size:13px;cursor:pointer"><input type="checkbox" id="rule-auto" checked> Dispatch automatically</label></div>
+      </div>
+      <div style="display:flex;align-items:center;gap:12px"><button class="btn primary" id="rule-save">Add rule</button><span id="rule-msg" style="font-size:12.5px;color:var(--muted)"></span></div>
+      <div id="rule-list" style="margin-top:16px"></div>
+    </div>
+  </div>`;
+  $("#con-refresh").onclick=()=>pageContractors();
+  $("#con-save").onclick=saveContractor;
+  $("#con-cancel").onclick=()=>{ state.con.edit=null; pageContractors(); };
+  $("#rule-save").onclick=saveRule;
+  loadContractors().then(()=>{ paintContractorList(); paintRuleControls(); if(state.con.edit) fillContractorForm(state.con.edit); });
+}
+function fillContractorForm(c){
+  $("#con-form-title").textContent='Edit contractor';
+  $("#con-name").value=c.name||''; $("#con-company").value=c.company||''; $("#con-trades").value=(c.trades||[]).join(', ');
+  $("#con-phone").value=c.phone||''; $("#con-email").value=c.email||''; $("#con-notes").value=c.notes||'';
+  $("#con-cancel").style.display='';
+}
+function paintContractorList(){
+  const el=$("#con-list"); if(!el) return;
+  const list=state.con.list||[];
+  if(!list.length){ el.innerHTML=`<div class="empty">${I.users}<div>No contractors yet. Add your first above.</div></div>`; return; }
+  el.innerHTML=list.map(c=>`<div class="block-item" style="align-items:flex-start;gap:10px${c.is_active?'':';opacity:.55'}">
+    <div style="flex:1;min-width:0">
+      <div style="font-weight:600;font-size:13.5px">${esc(c.company||c.name)}${c.company&&c.name?` <span style="color:var(--muted);font-weight:400">· ${esc(c.name)}</span>`:''}${c.is_active?'':' <span style="font-size:11px;color:var(--muted)">(inactive)</span>'}</div>
+      <div style="font-size:12px;color:var(--muted)">${[(c.trades||[]).join(', '),c.phone,c.email,c.notes].filter(Boolean).map(esc).join(' · ')||'No details'}</div>
+    </div>
+    <button class="btn sm" data-conedit="${c.id}">Edit</button>
+    <button class="btn sm" data-contoggle="${c.id}">${c.is_active?'Deactivate':'Reactivate'}</button>
+  </div>`).join('');
+  el.querySelectorAll('[data-conedit]').forEach(b=>b.onclick=()=>{ state.con.edit=state.con.list.find(x=>x.id===b.dataset.conedit); fillContractorForm(state.con.edit); window.scrollTo({top:0,behavior:'smooth'}); });
+  el.querySelectorAll('[data-contoggle]').forEach(b=>b.onclick=async()=>{ const c=state.con.list.find(x=>x.id===b.dataset.contoggle); await db.from('contractors').update({is_active:!c.is_active}).eq('id',c.id); await loadContractors(); paintContractorList(); paintRuleControls(); });
+}
+async function saveContractor(){
+  const msg=$("#con-msg"); const name=$("#con-name").value.trim(); const company=$("#con-company").value.trim();
+  if(!name && !company){ msg.textContent='Give at least a name or company.'; return; }
+  const trades=$("#con-trades").value.split(',').map(s=>s.trim().toLowerCase()).filter(Boolean);
+  const row={ account_id:state.account.id, name:name||company, company:company||null, trades, phone:$("#con-phone").value.trim()||null, email:$("#con-email").value.trim()||null, notes:$("#con-notes").value.trim()||null };
+  msg.textContent='Saving…';
+  let err=null;
+  if(state.con.edit){ const r=await db.from('contractors').update(row).eq('id',state.con.edit.id); err=r.error; } else { const r=await db.from('contractors').insert(row); err=r.error; }
+  if(err){ msg.textContent='Could not save.'; return; }
+  state.con.edit=null; await loadContractors(); pageContractors();
+}
+function paintRuleControls(){
+  const cons=(state.con.list||[]).filter(c=>c.is_active);
+  const rc=$("#rule-con"); if(rc) rc.innerHTML=`<option value="">Pick a contractor…</option>`+cons.map(c=>`<option value="${c.id}">${esc(c.company||c.name)}</option>`).join('');
+  const rp=$("#rule-prop"); const props=(state.pm&&state.pm.props)||[];
+  if(rp) rp.innerHTML=`<option value="">All properties</option>`+props.map(p=>`<option value="${p.id}">${esc(p.name)}</option>`).join('');
+  if(rp && !props.length){ loadProperties().then(()=>{ const pr=(state.pm&&state.pm.props)||[]; if($("#rule-prop")) $("#rule-prop").innerHTML=`<option value="">All properties</option>`+pr.map(p=>`<option value="${p.id}">${esc(p.name)}</option>`).join(''); }); }
+  paintRuleList();
+}
+function paintRuleList(){
+  const el=$("#rule-list"); if(!el) return;
+  const rules=state.con.rules||[]; const cons=state.con.list||[]; const props=(state.pm&&state.pm.props)||[];
+  const conName=id=>{ const c=cons.find(x=>x.id===id); return c?(c.company||c.name):'(removed contractor)'; };
+  const propName=id=>{ if(!id) return 'All properties'; const p=props.find(x=>x.id===id); return p?p.name:'a property'; };
+  if(!rules.length){ el.innerHTML=`<div style="font-size:12.5px;color:var(--muted)">No auto-dispatch rules yet. ${esc(aName())} will log routine requests for you to dispatch by hand.</div>`; return; }
+  el.innerHTML=`<div style="font-weight:600;font-size:13px;margin-bottom:8px">Rules</div>`+rules.map(r=>`<div class="block-item" style="gap:10px">
+    <div style="flex:1;min-width:0"><div style="font-weight:600;font-size:13px;text-transform:capitalize">${esc(r.trade)} → ${esc(conName(r.contractor_id))}</div>
+    <div style="font-size:12px;color:var(--muted)">${esc(propName(r.property_id))} · ${r.auto?'<span style="color:var(--ok)">auto-dispatch on</span>':'manual (suggestion only)'}</div></div>
+    <button class="btn sm" data-ruletoggle="${r.id}">${r.auto?'Turn off auto':'Turn on auto'}</button>
+    <button class="btn sm" data-ruledel="${r.id}">Remove</button>
+  </div>`).join('');
+  el.querySelectorAll('[data-ruletoggle]').forEach(b=>b.onclick=async()=>{ const r=state.con.rules.find(x=>x.id===b.dataset.ruletoggle); await db.from('dispatch_rules').update({auto:!r.auto}).eq('id',r.id); await loadContractors(); paintRuleList(); });
+  el.querySelectorAll('[data-ruledel]').forEach(b=>b.onclick=async()=>{ await db.from('dispatch_rules').delete().eq('id',b.dataset.ruledel); await loadContractors(); paintRuleList(); });
+}
+async function saveRule(){
+  const msg=$("#rule-msg"); const trade=$("#rule-trade").value.trim().toLowerCase(); const cid=$("#rule-con").value; const pid=$("#rule-prop").value||null; const auto=$("#rule-auto").checked;
+  if(!trade){ msg.textContent='Enter a trade.'; return; }
+  if(!cid){ msg.textContent='Pick a contractor.'; return; }
+  msg.textContent='Saving…';
+  const r=await db.from('dispatch_rules').insert({ account_id:state.account.id, trade, contractor_id:cid, property_id:pid, auto });
+  if(r.error){ msg.textContent='Could not save (a rule for that trade/property may already exist).'; return; }
+  $("#rule-trade").value=''; msg.textContent='';
+  await loadContractors(); paintRuleControls();
 }
 function srRow(r){
   const open=state.sr.open===r.id;
   const emg=r.priority==='emergency'||r.request_type==='emergency';
   const when=new Date(r.created_at).toLocaleString('en-US',{month:'short',day:'numeric',hour:'numeric',minute:'2-digit'});
   const prop=r.properties?r.properties.name:'(unassigned)';
+  const fmt=t=>new Date(t).toLocaleString('en-US',{month:'short',day:'numeric',hour:'numeric',minute:'2-digit'});
   const head=`<div class="block-item" style="align-items:flex-start;gap:10px;cursor:pointer;${emg?'border-left:3px solid var(--danger)':''}" data-sropen="${r.id}">
     <div style="flex:1;min-width:0">
       <div style="font-weight:600;font-size:13.5px">${esc(r.title||r.request_type)} ${pmPill(SR_STATUS,r.status)}${emg?` <span style="display:inline-block;font-size:11px;font-weight:700;padding:2px 9px;border-radius:999px;background:#fbe6e4;color:#b4443a">EMERGENCY</span>`:''}</div>
@@ -3034,6 +3186,7 @@ function srRow(r){
       <select class="inp" style="max-width:170px" data-srstatus="${r.id}">${pmOpts(Object.keys(SR_STATUS).map(k=>[k,SR_STATUS[k][0]]),r.status)}</select>
       <input class="inp" style="max-width:200px" id="sra-${r.id}" placeholder="Assign to…" value="${esc(r.assigned_to||'')}"><button class="btn sm" data-srassign="${r.id}">Assign</button>
     </div>
+    ${dispatchBlock(r,fmt)}
     <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:center;margin-top:10px">
       <input class="inp" style="flex:1;min-width:200px" id="srn-${r.id}" placeholder="Resolution note…" value="${esc(r.resolved_note||'')}"><button class="btn sm" data-srnote="${r.id}">Save note</button>
     </div>
