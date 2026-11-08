@@ -440,9 +440,12 @@ function renderApp(){
   if(mgr && new URLSearchParams(location.search).get('calendar')) state.view='settings';
   let navConfig, navActivity, soon=[];
   if(mgr){
-    navConfig=[["assistant","Assistant",I.bot],["schedule","Schedule",I.cal],["types","Appointment types",I.tag]];
+    const pm=pmMode();
+    navConfig=[["assistant","Assistant",I.bot],["schedule","Schedule",I.cal],["types",pm?"Visit types":"Appointment types",I.tag]];
     if(showStaff()) navConfig.push(["staff","Staff",I.users]);
-    navConfig.push(["knowledge","Knowledge",I.book],["booking","Booking page",I.link],["intake","Intake forms",I.clip],["promotions","Promotions",I.promo],["notifications","Notifications",I.bell],["settings","Settings",I.gear]);
+    navConfig.push(["knowledge","Knowledge",I.book],["booking",pm?"Self-scheduling":"Booking page",I.link]);
+    if(!pm) navConfig.push(["intake","Intake forms",I.clip],["promotions","Promotions",I.promo]);
+    navConfig.push(["notifications","Notifications",I.bell],["settings","Settings",I.gear]);
     navActivity=[["calls","Calls",I.phone],["appointments","Appointments",I.appt],["messages","Phone messages",I.msg],["contacts",salonOn()?"Clients":"Contacts",I.users],["gaps","Questions",I.book],["conversations","Email inbox",I.mail]];
     if(salonOn()) navActivity.splice(2,0,["waitlist","Waitlist",I.clock]);
     if(propertyOn()){ navConfig.splice(1,0,["properties","Properties",I.building]); navConfig.splice(2,0,["contractors","Contractors",I.users]); navActivity.splice(0,0,["requests","Service requests",I.wrench]); }
@@ -472,7 +475,7 @@ function renderApp(){
     </aside>
     <main class="main">
       <div class="topbar">
-        <div class="crumbs">${['settings','notifications'].includes(state.view)?'Account':(['messages','appointments','waitlist','calls','contacts','clients','gaps','conversations','requests'].includes(state.view)?'Activity':'Configure')} · <b>${esc(({assistant:"Assistant",schedule:"Schedule",types:"Appointment types",staff:"Staff",messages:"Phone messages",appointments:"Appointments",settings:"Settings",notifications:"Notifications",calls:"Calls",knowledge:"Knowledge",contacts:(salonOn()?"Clients":"Contacts"),clients:"Clients",gaps:"Open questions",conversations:"Email inbox",waitlist:"Waitlist",promotions:"Promotions",booking:"Booking page",mylink:"My booking link",intake:"Intake forms",properties:"Properties",contractors:"Contractors",requests:"Service requests"})[state.view])}</b></div>
+        <div class="crumbs">${['settings','notifications'].includes(state.view)?'Account':(['messages','appointments','waitlist','calls','contacts','clients','gaps','conversations','requests'].includes(state.view)?'Activity':'Configure')} · <b>${esc(({assistant:"Assistant",schedule:"Schedule",types:(pmMode()?"Visit types":"Appointment types"),staff:"Staff",messages:"Phone messages",appointments:"Appointments",settings:"Settings",notifications:"Notifications",calls:"Calls",knowledge:"Knowledge",contacts:(salonOn()?"Clients":"Contacts"),clients:"Clients",gaps:"Open questions",conversations:"Email inbox",waitlist:"Waitlist",promotions:"Promotions",booking:(pmMode()?"Self-scheduling":"Booking page"),mylink:"My booking link",intake:"Intake forms",properties:"Properties",contractors:"Contractors",requests:"Service requests"})[state.view])}</b></div>
         <div class="acct-chip"><span class="av">${initials}</span><div class="who"><b>${esc(state.account.company)}</b><span>${esc((state.account.status||'trial'))} · ${esc(state.account.plan||'starter')}</span></div></div>
       </div>
       <div id="approve-banner"></div>
@@ -489,7 +492,7 @@ function renderPage(){
   if('speechSynthesis' in window) window.speechSynthesis.cancel();
   teardownRealtime();
   document.querySelectorAll(".nav-item[data-v]").forEach(b=>b.classList.toggle("active",b.dataset.v===state.view));
-  $(".crumbs").innerHTML=`${['settings','notifications'].includes(state.view)?'Account':(['messages','appointments','waitlist','calls','contacts','clients','gaps','conversations','requests'].includes(state.view)?'Activity':'Configure')} · <b>${esc(({assistant:"Assistant",schedule:"Schedule",types:"Appointment types",staff:"Staff",messages:"Phone messages",appointments:"Appointments",settings:"Settings",notifications:"Notifications",calls:"Calls",knowledge:"Knowledge",contacts:(salonOn()?"Clients":"Contacts"),clients:"Clients",gaps:"Open questions",conversations:"Email inbox",waitlist:"Waitlist",promotions:"Promotions",booking:"Booking page",mylink:"My booking link",intake:"Intake forms",properties:"Properties",contractors:"Contractors",requests:"Service requests"})[state.view])}</b>`;
+  $(".crumbs").innerHTML=`${['settings','notifications'].includes(state.view)?'Account':(['messages','appointments','waitlist','calls','contacts','clients','gaps','conversations','requests'].includes(state.view)?'Activity':'Configure')} · <b>${esc(({assistant:"Assistant",schedule:"Schedule",types:(pmMode()?"Visit types":"Appointment types"),staff:"Staff",messages:"Phone messages",appointments:"Appointments",settings:"Settings",notifications:"Notifications",calls:"Calls",knowledge:"Knowledge",contacts:(salonOn()?"Clients":"Contacts"),clients:"Clients",gaps:"Open questions",conversations:"Email inbox",waitlist:"Waitlist",promotions:"Promotions",booking:(pmMode()?"Self-scheduling":"Booking page"),mylink:"My booking link",intake:"Intake forms",properties:"Properties",contractors:"Contractors",requests:"Service requests"})[state.view])}</b>`;
   const PAGES={assistant:pageAssistant, schedule:pageSchedule, types:pageTypes, staff:pageStaff, messages:pageMessages, appointments:renderAppts, settings:pageSettings, notifications:pageNotifications, calls:pageCalls, knowledge:pageKnowledge, contacts:pageContacts, clients:pageClients, gaps:pageGaps, conversations:pageConversations, waitlist:pageWaitlist, promotions:pagePromotions, booking:pageBookingPage, mylink:pageMyLink, intake:pageIntakeForms, properties:pageProperties, contractors:pageContractors, requests:pageServiceRequests};
   const LOADERS={appointments:loadAppointments, messages:loadMessages, calls:loadCalls, contacts:loadContacts, clients:loadContacts, gaps:loadGaps, conversations:loadConversations, staff:loadStaff, waitlist:loadWaitlist};
   const v=state.view;
@@ -685,8 +688,44 @@ async function removeBlock(id,idx){
 }
 
 /* ===================== APPOINTMENT TYPES PAGE ===================== */
-function typeFromRow(t){ return { id:t.id, name:t.name, mode:t.mode, dur:t.default_duration_min, before:t.buffer_before_min, after:t.buffer_after_min, travel:t.requires_travel, overlap:t.overlap_minutes||0, recall:t.rebook_after_days||0, desc:t.description||'', price:t.price||'', category:t.category||'', includes:(t.includes||[]), special:!!t.is_special, sstart:t.special_starts||'', send:t.special_ends||'', newonly:!!t.new_clients_only }; }
+function typeFromRow(t){ return { id:t.id, name:t.name, mode:t.mode, dur:t.default_duration_min, before:t.buffer_before_min, after:t.buffer_after_min, travel:t.requires_travel, overlap:t.overlap_minutes||0, recall:t.rebook_after_days||0, desc:t.description||'', price:t.price||'', category:t.category||'', includes:(t.includes||[]), special:!!t.is_special, sstart:t.special_starts||'', send:t.special_ends||'', newonly:!!t.new_clients_only, loc:t.location_kind||null, kind:t.kind||null, attendee:t.attendee_role||'', notice:t.notice_hours||0, collect:(Array.isArray(t.collect)?t.collect:[]), ptypes:(t.property_types||[]), pub:t.is_public!==false }; }
+// PM accounts (property management without salon) get the Visit-types experience instead of the salon/service form.
+function pmMode(){ return propertyOn() && !salonOn(); }
+function acctPmTypes(){ const s=(state.account&&state.account.settings)||{}; let t=Array.isArray(s.property_types)?s.property_types.filter(x=>['residential','commercial','hoa'].includes(x)):[]; if(!t.length && state.pm&&state.pm.props&&state.pm.props.length){ t=[...new Set(state.pm.props.map(p=>p.property_type).filter(Boolean))]; } return t.length?t:['residential','commercial','hoa']; }
+const PM_VISIT_KINDS=[["showing","Showing / tour"],["space_tour","Space tour"],["inspection_move_in","Move-in inspection"],["inspection_move_out","Move-out inspection"],["inspection_periodic","Periodic inspection"],["walkthrough","Walkthrough"],["vendor_access","Vendor access / site visit"],["meeting","Meeting"],["hearing","Hearing"],["site_visit","ARC site visit"],["other","Other"]];
+const PM_LOC=[["unit","At the unit / suite / home"],["property","At the property (common area)"],["office","At our office"],["virtual","Video call"],["phone","Phone call"]];
+const PM_TYPE_LABEL={residential:"Residential",commercial:"Commercial / flex",hoa:"Community"};
+const pmKindLabel=k=>(PM_VISIT_KINDS.find(x=>x[0]===k)||[k,k||'Visit'])[1];
+const pmLocLabel=l=>(PM_LOC.find(x=>x[0]===l)||[l,l||''])[1];
+const pmLocToMode=l=>l==='virtual'?'virtual':(l==='phone'?'phone':'in_person');
+// Standard visit types per property type — seeded once so a PM never starts from a blank salon form.
+const PM_SEED_TYPES={
+  residential:[
+    {name:"Showing",kind:"showing",loc:"unit",dur:30,travel:true,attendee:"Leasing agent",notice:2,pub:true,collect:["Desired move-in date","Bedrooms needed","Monthly budget","Pets (type/size)","Number of occupants"],desc:"A walk-through of the available unit with a leasing agent."},
+    {name:"Virtual tour",kind:"showing",loc:"virtual",dur:20,travel:false,attendee:"Leasing agent",notice:2,pub:true,collect:["Desired move-in date","Bedrooms needed","Monthly budget","Pets (type/size)"],desc:"A live video tour of the unit for out-of-town prospects."},
+    {name:"Move-in inspection",kind:"inspection_move_in",loc:"unit",dur:60,travel:true,attendee:"Manager + tenant",notice:24,pub:false,collect:["Lease start date","Tenant will be present (yes/no)"],desc:"Walk-through to document the unit's condition before move-in; the tenant signs the checklist."},
+    {name:"Move-out inspection",kind:"inspection_move_out",loc:"unit",dur:60,travel:true,attendee:"Manager (+ tenant)",notice:24,pub:false,collect:["Lease end date","Keys/remotes to return","Forwarding address"],desc:"Walk-through at move-out to document condition for the deposit."},
+    {name:"Periodic inspection",kind:"inspection_periodic",loc:"unit",dur:45,travel:true,attendee:"Manager",notice:48,pub:false,collect:["Purpose of visit","Tenant present (optional)"],desc:"Routine mid-tenancy inspection with proper notice to the tenant."},
+    {name:"Vendor access window",kind:"vendor_access",loc:"unit",dur:120,travel:false,attendee:"Vendor",notice:24,pub:false,collect:["Work order reference","Access instructions / permission to enter","Pets on premises"],desc:"A window for a contractor to access the unit for a work order."},
+    {name:"Owner call",kind:"meeting",loc:"phone",dur:30,travel:false,attendee:"Manager",notice:4,pub:true,collect:["Property","Topic"],desc:"A call with the property manager about your rental."}
+  ],
+  commercial:[
+    {name:"Space tour",kind:"space_tour",loc:"unit",dur:45,travel:true,attendee:"Property manager / broker",notice:4,pub:true,collect:["Intended use","Square footage needed","Dock doors / power / clear height needs","Target move-in","Broker (if any)"],desc:"A tour of the available suite or flex bay."},
+    {name:"Tenant move-in / move-out walkthrough",kind:"walkthrough",loc:"unit",dur:60,travel:true,attendee:"Manager + tenant contact",notice:24,pub:false,collect:["Lease start/end date","Authorized tenant contact","Keys / access cards"],desc:"Condition walkthrough of the suite at move-in or move-out."},
+    {name:"Vendor / contractor site visit",kind:"vendor_access",loc:"property",dur:120,travel:false,attendee:"Vendor (+ engineer)",notice:24,pub:false,collect:["Work order reference","COI on file (yes/no)","Dock / service elevator needed"],desc:"Scheduled access for a vendor working on the building."},
+    {name:"Tenant meeting",kind:"meeting",loc:"office",dur:30,travel:false,attendee:"Property manager",notice:4,pub:true,collect:["Tenant company","Topic"],desc:"A meeting with the property manager."},
+    {name:"Owner / asset-manager review",kind:"meeting",loc:"virtual",dur:45,travel:false,attendee:"Property manager",notice:24,pub:false,collect:["Topic / reporting period"],desc:"Review call with the building owner or asset manager."}
+  ],
+  hoa:[
+    {name:"Meeting with the community manager",kind:"meeting",loc:"phone",dur:20,travel:false,attendee:"Community manager",notice:4,pub:true,collect:["Community","Property address","Topic (ARC, account, violation, other)"],desc:"A call with your community manager."},
+    {name:"ARC site visit",kind:"site_visit",loc:"unit",dur:30,travel:true,attendee:"Manager / committee",notice:48,pub:false,collect:["ARC request reference","What's being reviewed"],desc:"An exterior visit to review an architectural request."},
+    {name:"Violation hearing",kind:"hearing",loc:"office",dur:30,travel:false,attendee:"Board + owner",notice:240,pub:false,collect:["Violation notice reference","Owner name and address"],desc:"Hearing before the board on a violation notice (owner may request within 30 days of the notice; 10 days' notice of the hearing)."},
+    {name:"Vendor walkthrough",kind:"vendor_access",loc:"property",dur:60,travel:false,attendee:"Vendor (+ manager)",notice:24,pub:false,collect:["Work order reference","Area (pool, clubhouse, gate, landscaping)","COI on file (yes/no)"],desc:"Scheduled walkthrough with a common-area vendor."}
+  ]
+};
 function pageTypes(){
+  if(pmMode()) return pagePmVisitTypes();
+  const salon=salonOn();
   $("#page").innerHTML=`
   <div class="page">
     <div class="page-head"><h1>Appointment types</h1><p>The services customers can book, each with its own length and buffer time. In-person types reserve travel time automatically when ${esc(aName())} books them.</p></div>
@@ -702,14 +741,14 @@ function pageTypes(){
         <div class="field"><label class="lab">Buffer after (min)</label><input class="inp" type="number" id="t-after" value="0" min="0" step="5"></div>
       </div>
       <div class="field"><label class="switch"><input type="checkbox" id="t-travel"><span class="track"></span><span class="txt">Reserve travel time<small>Auto-on for in-person — drive time is checked before booking.</small></span></label></div>
-      <div class="field"><label class="switch"><input type="checkbox" id="t-overlap-on"><span class="track"></span><span class="txt">Allow overlap during processing<small>For services with wait time, like color developing. Only the hands-on part blocks the ${providerLabel()}; they can start another client during the overlap.</small></span></label></div>
+      ${salon?`<div class="field"><label class="switch"><input type="checkbox" id="t-overlap-on"><span class="track"></span><span class="txt">Allow overlap during processing<small>For services with wait time, like color developing. Only the hands-on part blocks the ${providerLabel()}; they can start another client during the overlap.</small></span></label></div>
       <div class="field" id="t-overlap-row" style="display:none"><label class="lab">Overlap minutes <span class="sub">the processing tail that can overlap another booking</span></label><input class="inp" type="number" id="t-overlap" value="60" min="0" step="5"></div>
-      <div class="field"><label class="lab">Remind to rebook after <span class="sub">days — ${esc(aName())} nudges a client to come back for this service that many days after their last one, if they have nothing booked. Leave blank for off.</span></label><input class="inp" type="number" id="t-recall" placeholder="e.g. 14" min="0" step="1" style="max-width:200px"></div>
-      <div class="field"><label class="lab">Description <span class="sub">what it is / what's included — ${esc(aName())} shares this when asked, and it shows on your booking page</span></label><textarea class="inp" id="t-desc" rows="2" placeholder="e.g. A 60-minute massage, express facial, and foot scrub"></textarea></div>
-      <div class="field"><label class="lab">What's included <span class="sub">optional, one per line — shows as a checklist on your booking page</span></label><textarea class="inp" id="t-includes" rows="2" placeholder="60-min massage&#10;Express facial&#10;Foot scrub"></textarea></div>
+      <div class="field"><label class="lab">Remind to rebook after <span class="sub">days — ${esc(aName())} nudges a client to come back for this service that many days after their last one, if they have nothing booked. Leave blank for off.</span></label><input class="inp" type="number" id="t-recall" placeholder="e.g. 14" min="0" step="1" style="max-width:200px"></div>`:''}
+      <div class="field"><label class="lab">Description <span class="sub">what it is / what's included — ${esc(aName())} shares this when asked, and it shows on your booking page</span></label><textarea class="inp" id="t-desc" rows="2" placeholder="${salon?'e.g. A 60-minute massage, express facial, and foot scrub':'e.g. A 30-minute on-site visit to scope the work and give you a quote'}"></textarea></div>
+      <div class="field"><label class="lab">What's included <span class="sub">optional, one per line — shows as a checklist on your booking page</span></label><textarea class="inp" id="t-includes" rows="2" placeholder="${salon?'60-min massage&#10;Express facial&#10;Foot scrub':'Walk the site&#10;Written estimate within 24 hours'}"></textarea></div>
       <div class="grid-2">
         <div class="field"><label class="lab">Price <span class="sub">optional, e.g. $120 or from $90</span></label><input class="inp" id="t-price" placeholder="optional"></div>
-        <div class="field"><label class="lab">Category <span class="sub">optional group, e.g. Color, Packages, Specials</span></label><input class="inp" id="t-category" placeholder="optional"></div>
+        <div class="field"><label class="lab">Category <span class="sub">optional group, e.g. ${salon?'Color, Packages, Specials':'Estimates, Consultations, Repairs'}</span></label><input class="inp" id="t-category" placeholder="optional"></div>
       </div>
       <div class="field"><label class="switch"><input type="checkbox" id="t-special"><span class="track"></span><span class="txt">Special offer<small>Feature it as a deal. Optionally set dates and limit to new clients.</small></span></label></div>
       <div id="t-special-row" style="display:none;padding-left:4px">
@@ -790,9 +829,9 @@ function typeHTML(t){
         <div class="field"><label class="lab">Buffer after (min)</label><input class="inp" type="number" id="te-after-${id}" value="${t.after||0}" min="0" step="5"></div>
       </div>
       <div class="field"><label class="switch"><input type="checkbox" id="te-travel-${id}"${t.travel?' checked':''}><span class="track"></span><span class="txt">Reserve travel time</span></label></div>
-      <div class="field"><label class="switch"><input type="checkbox" id="te-ov-${id}"${t.overlap?' checked':''}><span class="track"></span><span class="txt">Allow overlap during processing</span></label></div>
+      ${salonOn()?`<div class="field"><label class="switch"><input type="checkbox" id="te-ov-${id}"${t.overlap?' checked':''}><span class="track"></span><span class="txt">Allow overlap during processing</span></label></div>
       <div class="field" id="te-ovrow-${id}" style="display:${t.overlap?'block':'none'}"><label class="lab">Overlap minutes <span class="sub">processing tail that can overlap another booking</span></label><input class="inp" type="number" id="te-ovmin-${id}" value="${t.overlap||60}" min="0" step="5"></div>
-      <div class="field"><label class="lab">Remind to rebook after <span class="sub">days — nudge past clients back for this service; blank for off</span></label><input class="inp" type="number" id="te-recall-${id}" value="${t.recall||''}" placeholder="off" min="0" step="1" style="max-width:180px"></div>
+      <div class="field"><label class="lab">Remind to rebook after <span class="sub">days — nudge past clients back for this service; blank for off</span></label><input class="inp" type="number" id="te-recall-${id}" value="${t.recall||''}" placeholder="off" min="0" step="1" style="max-width:180px"></div>`:''}
       <div class="field"><label class="lab">Description</label><textarea class="inp" id="te-desc-${id}" rows="2">${esc(t.desc||'')}</textarea></div>
       <div class="field"><label class="lab">What's included <span class="sub">one per line</span></label><textarea class="inp" id="te-includes-${id}" rows="2">${esc((t.includes||[]).join('\n'))}</textarea></div>
       <div class="grid-2">
@@ -826,8 +865,8 @@ async function saveTypeEdit(id){
   const mode=g('mode').value;
   if(mode==='virtual'){ let vp=state.videoProvider; if(!vp){ try{ const r=await db.functions.invoke('donna-video',{body:{action:'status'}}); if(r.data&&r.data.ok) vp=r.data.video_provider; }catch(_e){} state.videoProvider=vp; } if(!vp){ set('Verify a video provider before using Virtual.','var(--danger)'); return; } }
   const dur=+g('dur').value||30;
-  const ovOn=g('ov').checked; let overlap=ovOn?(+g('ovmin').value||0):0; if(overlap>dur) overlap=dur; if(overlap<0) overlap=0;
-  const recall=(+g('recall').value||0);
+  const ovOn=!!(g('ov')&&g('ov').checked); let overlap=ovOn?(+(g('ovmin')&&g('ovmin').value)||0):0; if(overlap>dur) overlap=dur; if(overlap<0) overlap=0;
+  const recall=(+((g('recall')&&g('recall').value)||0)||0);
   const incl=((g('includes')&&g('includes').value)||'').split('\n').map(s=>s.trim()).filter(Boolean);
   const special=!!(g('special')&&g('special').checked);
   const patch={ name, mode, default_duration_min:dur, buffer_after_min:+g('after').value||0, requires_travel:g('travel').checked, overlap_minutes:overlap, rebook_after_days: recall>0?recall:null,
@@ -849,9 +888,9 @@ async function addType(){
     if(!vp){ const b=$("#t-add"); const o=b.textContent; b.textContent="Verify a video provider first"; setTimeout(()=>b.textContent=o,1600); const m=$("#vid-msg"); if(m){ m.style.color="var(--danger)"; m.textContent="Verify Google Meet or Microsoft Teams below before adding a virtual type."; } return; }
   }
   const dur=+$("#t-dur").value||30;
-  const ovOn=$("#t-overlap-on")&&$("#t-overlap-on").checked;
-  let overlap=ovOn?(+$("#t-overlap").value||0):0; if(overlap>dur) overlap=dur; if(overlap<0) overlap=0;
-  const recall=(+$("#t-recall").value||0);
+  const ovOn=!!($("#t-overlap-on")&&$("#t-overlap-on").checked);
+  let overlap=ovOn?(+(($("#t-overlap")&&$("#t-overlap").value)||0)||0):0; if(overlap>dur) overlap=dur; if(overlap<0) overlap=0;
+  const recall=(+(($("#t-recall")&&$("#t-recall").value)||0)||0);
   const incl=(($("#t-includes")&&$("#t-includes").value)||'').split('\n').map(s=>s.trim()).filter(Boolean);
   const special=!!($("#t-special")&&$("#t-special").checked);
   const row={ account_id:state.account.id, name, mode, default_duration_min:dur, buffer_before_min:0, buffer_after_min:+$("#t-after").value||0, requires_travel:$("#t-travel").checked, overlap_minutes:overlap, rebook_after_days: recall>0?recall:null,
@@ -861,6 +900,104 @@ async function addType(){
   if(!error && data){ state.types.push(typeFromRow(data)); pageTypes(); }
 }
 async function removeType(id){ if(id){ await db.from('appointment_types').delete().eq('id',id); } state.types=state.types.filter(t=>t.id!==id); pageTypes(); }
+
+/* ===================== PM VISIT TYPES (property management) ===================== */
+function pmTypeChips(prefix, selected){ const mine=acctPmTypes(); return `<div style="display:flex;gap:8px;flex-wrap:wrap">${mine.map(t=>`<label style="display:flex;align-items:center;gap:6px;font-size:13px;border:1px solid var(--line);border-radius:999px;padding:6px 12px;cursor:pointer"><input type="checkbox" data-ptype="${t}" id="${prefix}-pt-${t}" ${(!selected||!selected.length||selected.includes(t))?'checked':''} style="width:auto;margin:0">${PM_TYPE_LABEL[t]}</label>`).join('')}</div>`; }
+function pmReadChips(prefix){ return acctPmTypes().filter(t=>{ const c=document.getElementById(prefix+'-pt-'+t); return c&&c.checked; }); }
+function pmVisitFormFields(p, t){
+  t=t||{}; const mine=acctPmTypes();
+  return `
+    <div class="grid-2">
+      <div class="field"><label class="lab">Name</label><input class="inp" id="${p}-name" value="${esc(t.name||'')}" placeholder="e.g. Showing, Move-in inspection, Vendor walkthrough"></div>
+      <div class="field"><label class="lab">Kind of visit</label><select class="inp" id="${p}-kind">${PM_VISIT_KINDS.map(k=>`<option value="${k[0]}"${(t.kind||'showing')===k[0]?' selected':''}>${esc(k[1])}</option>`).join('')}</select></div>
+    </div>
+    <div class="grid-2">
+      <div class="field"><label class="lab">Where it happens</label><select class="inp" id="${p}-loc">${PM_LOC.map(l=>`<option value="${l[0]}"${(t.loc||'unit')===l[0]?' selected':''}>${esc(l[1])}</option>`).join('')}</select><span class="sub" style="display:block;margin-top:4px;color:var(--muted);font-size:11.5px">At a unit or property, ${esc(aName())} asks which one and reserves drive time from the previous stop.</span></div>
+      <div class="field"><label class="lab">Who attends</label><input class="inp" id="${p}-att" value="${esc(t.attendee||'')}" placeholder="e.g. Leasing agent, Manager + tenant, Vendor"></div>
+    </div>
+    ${mine.length>1?`<div class="field"><label class="lab">Applies to</label>${pmTypeChips(p, t.ptypes)}</div>`:''}
+    <div class="grid-2">
+      <div class="field"><label class="lab">Length (min)</label><input class="inp" type="number" id="${p}-dur" value="${t.dur||30}" min="5" step="5"></div>
+      <div class="field"><label class="lab">Notice required <span class="sub">hours — ${esc(aName())} won't book sooner than this</span></label><input class="inp" type="number" id="${p}-notice" value="${t.notice||0}" min="0" step="1"></div>
+    </div>
+    <div class="grid-2">
+      <div class="field"><label class="lab">Buffer after (min)</label><input class="inp" type="number" id="${p}-after" value="${t.after||0}" min="0" step="5"></div>
+      <div class="field" style="display:flex;flex-direction:column;gap:8px;justify-content:flex-end">
+        <label class="switch"><input type="checkbox" id="${p}-travel" ${t.travel?'checked':''}><span class="track"></span><span class="txt">Reserve drive time<small>Auto-on when it happens at a unit or property.</small></span></label>
+        <label class="switch"><input type="checkbox" id="${p}-pub" ${t.pub!==false?'checked':''}><span class="track"></span><span class="txt">Callers can schedule it<small>Off = only you book it (inspections, hearings, vendor windows).</small></span></label>
+      </div>
+    </div>
+    <div class="field"><label class="lab">What ${esc(aName())} collects before booking <span class="sub">one per line</span></label><textarea class="inp" id="${p}-collect" rows="3" placeholder="Desired move-in date&#10;Bedrooms needed&#10;Pets">${esc((t.collect||[]).join('\n'))}</textarea></div>
+    <div class="field"><label class="lab">How ${esc(aName())} describes it <span class="sub">optional</span></label><textarea class="inp" id="${p}-desc" rows="2" placeholder="e.g. A walk-through of the available unit with a leasing agent.">${esc(t.desc||'')}</textarea></div>`;
+}
+function pmVisitRead(p){
+  const loc=$("#"+p+"-loc").value; const collect=($("#"+p+"-collect").value||'').split('\n').map(s=>s.trim()).filter(Boolean);
+  const mine=acctPmTypes(); const ptypes=mine.length>1?pmReadChips(p):mine;
+  return { name:$("#"+p+"-name").value.trim(), kind:$("#"+p+"-kind").value, location_kind:loc, mode:pmLocToMode(loc), attendee_role:$("#"+p+"-att").value.trim()||null, default_duration_min:+$("#"+p+"-dur").value||30, buffer_before_min:0, buffer_after_min:+$("#"+p+"-after").value||0, notice_hours:+$("#"+p+"-notice").value||0, requires_travel:$("#"+p+"-travel").checked, is_public:$("#"+p+"-pub").checked, collect, property_types:ptypes, description:$("#"+p+"-desc").value.trim()||null, overlap_minutes:0, rebook_after_days:null, is_special:false, new_clients_only:false, includes:null, price:null, category:null };
+}
+function pmBindLocTravel(p){ const l=$("#"+p+"-loc"), tr=$("#"+p+"-travel"); if(l&&tr) l.onchange=()=>{ tr.checked=(l.value==='unit'||l.value==='property'); }; }
+function pagePmVisitTypes(){
+  const mine=acctPmTypes();
+  const list=(state.types||[]);
+  $("#page").innerHTML=`
+  <div class="page">
+    <div class="page-head"><h1>Visit types</h1><p>The visits ${esc(aName())} can put on your calendar — showings, inspections, walkthroughs, meetings. Each one says where it happens (at a unit, at the property, at your office, by video, or by phone), who attends, how much notice you need, and what ${esc(aName())} collects before she books it.</p></div>
+    ${list.length?'':`<div class="card"><div class="card-h"><h2>Start with the standard set</h2><span class="hint">edit anything after</span></div><p style="font-size:13px;color:var(--muted);margin-bottom:12px">Add the visit types property managers use for ${mine.map(t=>PM_TYPE_LABEL[t].toLowerCase()).join(', ')} — you can rename, retime, or remove any of them.</p><button class="btn primary" id="pmvt-seed">Add the standard visit types</button><span id="pmvt-seed-msg" style="font-size:12.5px;color:var(--muted);margin-left:10px"></span></div>`}
+    <div class="card"><div class="card-h"><h2>Your visit types</h2></div><div id="types">${list.map(pmTypeHTML).join('')||`<div class="empty">${I.tag}<div>No visit types yet.</div></div>`}</div></div>
+    <div class="card">
+      <div class="card-h"><h2>Add a visit type</h2></div>
+      ${pmVisitFormFields('pv', {loc:'unit',kind:'showing',dur:30,travel:true,pub:true,notice:2})}
+      <div style="margin-top:8px"><button class="btn primary" id="pv-add">+ Add visit type</button><span id="pv-msg" style="font-size:12.5px;color:var(--muted);margin-left:10px"></span></div>
+    </div>
+    <div class="card">
+      <div class="card-h"><h2>Video meetings</h2><span class="hint">for video-call visits</span></div>
+      <div id="video-card-body"></div>
+    </div>
+  </div>`;
+  pmBindLocTravel('pv');
+  const seed=$("#pmvt-seed"); if(seed) seed.onclick=seedPmVisitTypes;
+  $("#pv-add").onclick=async()=>{ const row=pmVisitRead('pv'); const msg=$("#pv-msg"); if(!row.name){ msg.textContent='Give it a name.'; return; } if(row.mode==='virtual' && !(await ensureVideoProvider())){ msg.textContent='Verify a video provider below first.'; return; } row.account_id=state.account.id; msg.textContent='Saving…'; const { data, error }=await db.from('appointment_types').insert(row).select().single(); if(error||!data){ msg.textContent='Could not save.'; return; } state.types.push(typeFromRow(data)); pageTypes(); };
+  document.querySelectorAll("#types .rm").forEach(b=>b.onclick=()=>removeType(b.dataset.id));
+  document.querySelectorAll("#types [data-edit]").forEach(b=>b.onclick=()=>{ const p=document.getElementById('te-'+b.dataset.edit); if(p){ p.style.display=p.style.display==='none'?'block':'none'; pmBindLocTravel('pe'+b.dataset.edit); } });
+  document.querySelectorAll("#types [data-cancel-type]").forEach(b=>b.onclick=()=>{ const p=document.getElementById('te-'+b.dataset.cancelType); if(p) p.style.display='none'; });
+  document.querySelectorAll("#types [data-save-type]").forEach(b=>b.onclick=()=>savePmVisitEdit(b.dataset.saveType));
+  paintVideoCard();
+}
+async function ensureVideoProvider(){ let vp=state.videoProvider; if(!vp){ try{ const r=await db.functions.invoke('donna-video',{body:{action:'status'}}); if(r.data&&r.data.ok) vp=r.data.video_provider; }catch(_e){} state.videoProvider=vp; } return !!vp; }
+function pmTypeHTML(t){
+  const id=t.id||''; const icon={phone:I.phone,virtual:I.vid,in_person:I.pin}[t.mode]||I.pin;
+  const mine=acctPmTypes(); const applies=(mine.length>1&&t.ptypes&&t.ptypes.length&&t.ptypes.length<mine.length)?` · ${t.ptypes.map(x=>PM_TYPE_LABEL[x]||x).join(', ')}`:'';
+  return `<div class="type-wrap">
+    <div class="type-item"><span class="ic ${t.mode}">${icon}</span><span class="nm">${esc(t.name)}${t.pub===false?` <span style="display:inline-block;font-size:9.5px;font-weight:700;letter-spacing:.03em;text-transform:uppercase;padding:1px 6px;border-radius:999px;background:#eef2f6;color:#48566a;vertical-align:middle">Staff only</span>`:''}<small>${esc(pmKindLabel(t.kind))} · ${esc(pmLocLabel(t.loc||(t.mode==='virtual'?'virtual':t.mode==='phone'?'phone':'unit')))} · ${t.dur} min${t.notice?` · ${t.notice}h notice`:''}${t.attendee?` · ${esc(t.attendee)}`:''}${t.travel?' · drive time reserved':''}${applies}</small></span>
+      <button class="btn sm" data-edit="${id}" style="margin-left:12px">Edit</button>
+      <button class="rm" data-id="${id}" title="Remove" style="margin-left:8px;background:none;border:none;color:var(--muted-2);font-size:13px">✕</button></div>
+    <div class="type-edit" id="te-${id}" style="display:none;border:1px solid var(--line);border-top:none;border-radius:0 0 var(--r-sm) var(--r-sm);padding:12px 14px;margin:-7px 0 9px;background:#fbfcfe">
+      ${pmVisitFormFields('pe'+id, t)}
+      <div id="te-msg-${id}" style="font-size:12px;color:var(--muted);min-height:14px"></div>
+      <div style="display:flex;gap:8px"><button class="btn sm primary" data-save-type="${id}">Save changes</button><button class="btn sm" data-cancel-type="${id}">Cancel</button></div>
+    </div>
+  </div>`;
+}
+async function savePmVisitEdit(id){
+  const msg=document.getElementById('te-msg-'+id); const set=(t,c)=>{ if(msg){ msg.style.color=c||'var(--muted)'; msg.textContent=t; } };
+  const patch=pmVisitRead('pe'+id); if(!patch.name){ set('Give it a name.','var(--danger)'); return; }
+  if(patch.mode==='virtual' && !(await ensureVideoProvider())){ set('Verify a video provider below first.','var(--danger)'); return; }
+  set('Saving…');
+  const { data, error }=await db.from('appointment_types').update(patch).eq('id',id).select().single();
+  if(error||!data){ set('Could not save.','var(--danger)'); return; }
+  const i=state.types.findIndex(x=>x.id===id); if(i>=0) state.types[i]=typeFromRow(data);
+  pageTypes();
+}
+async function seedPmVisitTypes(){
+  const btn=$("#pmvt-seed"), msg=$("#pmvt-seed-msg"); if(btn) btn.disabled=true; if(msg) msg.textContent='Adding…';
+  const mine=acctPmTypes(); const rows=[];
+  mine.forEach(pt=>(PM_SEED_TYPES[pt]||[]).forEach(s=>rows.push({ account_id:state.account.id, name:s.name, kind:s.kind, location_kind:s.loc, mode:pmLocToMode(s.loc), default_duration_min:s.dur, buffer_before_min:0, buffer_after_min:0, requires_travel:!!s.travel, attendee_role:s.attendee||null, notice_hours:s.notice||0, is_public:s.pub!==false, collect:s.collect||[], property_types:[pt], description:s.desc||null, overlap_minutes:0, is_special:false, new_clients_only:false })));
+  // Skip video-call seeds if no video provider is verified yet — they can add them after verifying.
+  const hasVideo=await ensureVideoProvider(); const final=rows.filter(r=>r.mode!=='virtual'||hasVideo);
+  const { data, error }=await db.from('appointment_types').insert(final).select();
+  if(error||!data){ if(msg) msg.textContent='Could not add them.'; if(btn) btn.disabled=false; return; }
+  state.types=(state.types||[]).concat(data.map(typeFromRow)); pageTypes();
+}
 
 /* ===================== STAFF PAGE (salon) ===================== */
 async function loadStaff(){
@@ -2020,8 +2157,8 @@ function pageNotifications(){
     </div>
 
     <div class="card"><div class="card-h"><h2>Text message notifications</h2><button class="btn sm" id="sms-save">Save</button></div>
-      <p style="font-size:13px;color:var(--muted);margin-bottom:12px">Have ${esc(aName())} text clients their reminders and confirmations, not just email. Texts send from the shared Sidekick Logistics number, and a reply like "C to confirm" comes back to ${esc(aName())}. Your calls and your local number are not affected.</p>
-      <label style="display:flex;align-items:flex-start;gap:10px;margin:0 0 12px;cursor:pointer;font-size:13.5px;color:var(--ink)"><input type="checkbox" id="sms-enabled" style="margin-top:3px" ${sms.enabled?'checked':''}><span>Send reminders and confirmations by text<span style="display:block;font-weight:400;color:var(--muted);font-size:11.5px;margin-top:2px">Clients still get email too. Texting activates once your account's text number is verified.</span></span></label>
+      <p style="font-size:13px;color:var(--muted);margin-bottom:12px">Have ${esc(aName())} text ${pmMode()?'residents, prospects, and vendors':'clients'} their reminders and confirmations, not just email. Texts send from the shared Sidekick Logistics number, and a reply like "C to confirm" comes back to ${esc(aName())}. Your calls and your local number are not affected.</p>
+      <label style="display:flex;align-items:flex-start;gap:10px;margin:0 0 12px;cursor:pointer;font-size:13.5px;color:var(--ink)"><input type="checkbox" id="sms-enabled" style="margin-top:3px" ${sms.enabled?'checked':''}><span>Send reminders and confirmations by text<span style="display:block;font-weight:400;color:var(--muted);font-size:11.5px;margin-top:2px">${pmMode()?'They':'Clients'} still get email too. Texting activates once your account's text number is verified.</span></span></label>
       <div id="sms-sub" style="padding-left:28px${sms.enabled?'':';opacity:.45'}">
         <label style="display:flex;align-items:flex-start;gap:10px;margin:0 0 10px;cursor:pointer;font-size:13.5px;color:var(--ink)"><input type="checkbox" id="sms-reminders" style="margin-top:3px" ${sms.reminders!==false?'checked':''} ${sms.enabled?'':'disabled'}><span>Appointment reminders by text</span></label>
         <label style="display:flex;align-items:flex-start;gap:10px;margin:0;cursor:pointer;font-size:13.5px;color:var(--ink)"><input type="checkbox" id="sms-confirmations" style="margin-top:3px" ${sms.confirmations!==false?'checked':''} ${sms.enabled?'':'disabled'}><span>Booking confirmations by text</span></label>
@@ -2030,7 +2167,7 @@ function pageNotifications(){
     </div>
 
     <div class="card"><div class="card-h"><h2>Two-way texting on your own number</h2><button class="btn sm" id="sms2-save">Save</button></div>
-      <p style="font-size:13px;color:var(--muted);margin-bottom:12px">Upgrade to a dedicated text number so clients can start a text conversation with your business and ${esc(aName())} texts back, the same way she handles calls and email. On the shared number she can send reminders and read replies to them, but she cannot pick up a brand-new text a client starts.</p>
+      <p style="font-size:13px;color:var(--muted);margin-bottom:12px">Upgrade to a dedicated text number so ${pmMode()?'residents, owners, and vendors':'clients'} can start a text conversation with your business and ${esc(aName())} texts back, the same way she handles calls and email. On the shared number she can send reminders and read replies to them, but she cannot pick up a brand-new text ${pmMode()?'someone':'a client'} starts.</p>
       <label style="display:flex;align-items:flex-start;gap:10px;margin:0;cursor:pointer;font-size:13.5px;color:var(--ink)"><input type="checkbox" id="sms-twoway" style="margin-top:3px" ${sms.two_way?'checked':''}><span>Turn on two-way texting with my own number<span style="display:block;font-weight:400;color:var(--muted);font-size:11.5px;margin-top:2px">We set up a dedicated number for your account. ${esc(aName())} answers inbound texts and can book, reschedule, or take a message, just like on the phone. Pairs best with your local number once texting is enabled on it.</span></span></label>
       <div id="sms2-status" style="font-size:12px;color:var(--muted-2);margin-top:10px">Your text number: <b>${esc(sms.number||'not set up yet')}</b></div>
       <div id="sms2-msg" style="font-size:12.5px;color:var(--muted);margin-top:6px"></div>
@@ -2045,7 +2182,7 @@ function pageNotifications(){
       <div id="ncopy-msg" style="font-size:12.5px;color:var(--muted);margin-top:8px"></div>
     </div>
 
-    <div class="card"><div class="card-h"><h2>Bring clients back</h2><button class="btn sm" id="wb-save">Save</button></div>
+    ${pmMode()?'':`<div class="card"><div class="card-h"><h2>Bring clients back</h2><button class="btn sm" id="wb-save">Save</button></div>
       <p style="font-size:13px;color:var(--muted);margin-bottom:12px">When a client has not booked in a while, ${esc(aName())} sends a friendly note inviting them back. She reaches out to each person at most once every 90 days, and never to anyone who already has an upcoming appointment.</p>
       <label style="display:flex;align-items:flex-start;gap:10px;margin:0 0 12px;cursor:pointer;font-size:13.5px;color:var(--ink)"><input type="checkbox" id="wb-enabled" style="margin-top:3px" ${wb.enabled===true?'checked':''}><span>Reach out to clients who have not been back<span style="display:block;font-weight:400;color:var(--muted);font-size:11.5px;margin-top:2px">Off by default. If text notifications are on, clients with a phone number also get a text; everyone else gets an email.</span></span></label>
       <div id="wb-sub" style="padding-left:28px${wb.enabled===true?'':';opacity:.45'}">
@@ -2061,10 +2198,10 @@ function pageNotifications(){
         <div class="field" style="max-width:420px;margin:0"><label class="lab">Your review link</label><input class="inp" id="rv-url" type="url" placeholder="https://g.page/r/your-business/review" value="${esc(rv.url||rv.google_url||'')}" ${rv.enabled===true?'':'disabled'}><span style="display:block;color:var(--muted);font-size:11.5px;margin-top:4px">Paste your Google review link, or any page where clients can leave a review. Nothing sends until this is filled in.</span></div>
       </div>
       <div id="rv-msg" style="font-size:12.5px;color:var(--muted);margin-top:8px"></div>
-    </div>
+    </div>`}
 
     <div class="card"><div class="card-h"><h2>Your weekly recap</h2><button class="btn sm" id="rc-save">Save</button></div>
-      <p style="font-size:13px;color:var(--muted);margin-bottom:12px">A short Monday email summing up everything ${esc(aName())} handled for you the week before: calls answered, appointments booked, emails and messages taken. A quick look at the work you did not have to stop and do yourself.</p>
+      <p style="font-size:13px;color:var(--muted);margin-bottom:12px">${pmMode()?`A short Monday email summing up everything ${esc(aName())} handled the week before: calls answered, service requests logged, emergencies escalated and confirmed, visits scheduled, emails and messages taken — per property. A quick look at the work you did not have to stop and do yourself.`:`A short Monday email summing up everything ${esc(aName())} handled for you the week before: calls answered, appointments booked, emails and messages taken. A quick look at the work you did not have to stop and do yourself.`}</p>
       <label style="display:flex;align-items:flex-start;gap:10px;margin:0;cursor:pointer;font-size:13.5px;color:var(--ink)"><input type="checkbox" id="rc-enabled" style="margin-top:3px" ${rc.enabled===true?'checked':''}><span>Email me a weekly recap<span style="display:block;font-weight:400;color:var(--muted);font-size:11.5px;margin-top:2px">Sent Monday mornings to your general inbox email above, only in weeks when there was activity.</span></span></label>
       <div id="rc-msg" style="font-size:12.5px;color:var(--muted);margin-top:8px"></div>
     </div>
@@ -2450,9 +2587,10 @@ function pageBookingPage(){
   const bEnabled=!!(state.account.settings&&state.account.settings.booking&&state.account.settings.booking.enabled===true);
   $("#page").innerHTML=`
   <div class="page">
-    <div class="page-head"><h1>Booking page</h1><p>A page your clients use to book themselves, any time. Share the link on Instagram, Facebook, your Google listing, or in a text, or embed it on your website. Every booking runs through ${esc(aName())} just like a call, with a quick code to confirm the person is real.</p></div>
-    <div class="card"><div class="card-h"><h2>Online booking</h2><button class="btn sm" id="bp-save">Save</button></div>
-      <label style="display:flex;align-items:flex-start;gap:10px;margin:0;cursor:pointer;font-size:13.5px;color:var(--ink)"><input type="checkbox" id="bp-enabled" style="margin-top:3px" ${bEnabled?'checked':''}><span>Let clients book online<span style="display:block;font-weight:400;color:var(--muted);font-size:11.5px;margin-top:2px">When off, the link shows a friendly "booking is not available yet" message.</span></span></label>
+    ${pmMode()?`<div class="page-head"><h1>Self-scheduling</h1><p>A page prospects, residents, and owners use to schedule with you on their own — showings and space tours at the unit, a call with the manager, or an amenity reservation. Only visit types marked "callers can schedule it" appear. Put the link in your listings, on your website, in your email signature, or let ${esc(aName())} text it during a call. Every booking is verified with a quick code so no one can book under someone else's name.</p></div>`
+    :`<div class="page-head"><h1>Booking page</h1><p>A page your clients use to book themselves, any time. Share the link on Instagram, Facebook, your Google listing, or in a text, or embed it on your website. Every booking runs through ${esc(aName())} just like a call, with a quick code to confirm the person is real.</p></div>`}
+    <div class="card"><div class="card-h"><h2>${pmMode()?'Online scheduling':'Online booking'}</h2><button class="btn sm" id="bp-save">Save</button></div>
+      <label style="display:flex;align-items:flex-start;gap:10px;margin:0;cursor:pointer;font-size:13.5px;color:var(--ink)"><input type="checkbox" id="bp-enabled" style="margin-top:3px" ${bEnabled?'checked':''}><span>${pmMode()?'Let people schedule online':'Let clients book online'}<span style="display:block;font-weight:400;color:var(--muted);font-size:11.5px;margin-top:2px">When off, the link shows a friendly "${pmMode()?'scheduling':'booking'} is not available yet" message.</span></span></label>
       <div id="bp-msg" style="font-size:12.5px;color:var(--muted);margin-top:8px"></div>
     </div>
     <div id="bp-links"><div class="card"><div style="color:var(--muted);font-size:12.5px">Loading your link…</div></div></div>
@@ -2593,6 +2731,14 @@ function pageSettings(){
       </div>
     </div>`:''}
 
+    ${(propertyOn()&&isManager())?`
+    <div class="card"><div class="card-h"><h2>What you manage</h2><button class="btn sm primary" id="pmt-save">Save</button></div>
+      <p style="font-size:13px;color:var(--muted);margin-bottom:12px">Residential rentals, commercial & flex buildings, and communities each work differently — who calls, what counts as an emergency, who may ask for what, and how insurance works. Pick everything your company manages; each property you add is then tagged with one of these and ${esc(aName())} follows that property's playbook.</p>
+      <div style="display:flex;gap:8px;flex-wrap:wrap" id="pmt-chips">${WZ_PM_TYPES.map(x=>`<label style="display:flex;align-items:flex-start;gap:8px;border:1px solid var(--line);border-radius:12px;padding:10px 12px;cursor:pointer;max-width:260px"><input type="checkbox" data-pmt="${x[0]}" ${(((ac.settings||{}).property_types)||[]).includes(x[0])?'checked':''} style="width:auto;margin-top:3px"><span><b style="display:block;font-size:13px">${esc(x[1])}</b><span style="font-size:12px;color:var(--muted)">${esc(x[2])}</span></span></label>`).join('')}</div>
+      <div class="field" style="margin-top:14px;max-width:480px"><label class="lab">Office address <span class="sub">where office meetings happen; used for drive time</span></label><input class="inp" id="pmt-office" value="${esc((ac.settings||{}).office_address||'')}" placeholder="123 Main St, Suite 200, Arlington, TX 76010"></div>
+      <span id="pmt-msg" style="font-size:12px;color:var(--muted)"></span>
+    </div>`:''}
+
     <div class="card"><div class="card-h"><h2>Time zone</h2><button class="btn sm" id="tz-save">Save</button></div>
       <p style="font-size:13px;color:var(--muted);margin-bottom:12px">${esc(aName())} books appointments and tells callers times in this zone. Set it to where your business operates.</p>
       <select class="inp" id="tz-select" style="max-width:340px">${TZS.map(t=>`<option value="${t[0]}" ${ac.timezone===t[0]?'selected':''}>${t[1]}</option>`).join("")}</select>
@@ -2676,6 +2822,7 @@ function pageSettings(){
     </div>
   </div>`;
   $("#set-biz-save").onclick=saveBusiness;
+  { const b=$("#pmt-save"); if(b) b.onclick=async()=>{ const msg=$("#pmt-msg"); const types=[...document.querySelectorAll('#pmt-chips [data-pmt]')].filter(c=>c.checked).map(c=>c.dataset.pmt); if(!types.length){ msg.textContent='Pick at least one.'; return; } const settings=Object.assign({}, state.account.settings||{}, { property_types:types, office_address:($("#pmt-office").value.trim()||null) }); msg.textContent='Saving…'; const { error }=await db.from('accounts').update({ settings }).eq('id',state.account.id); if(error){ msg.textContent='Could not save.'; return; } state.account.settings=settings; msg.textContent='Saved.'; setTimeout(()=>{ if(msg) msg.textContent=''; },1500); }; }
   { const pl=$("#prov-label-save"); if(pl) pl.onclick=saveProviderLabel; }
   $("#tz-save").onclick=saveTimezone;
   { const ae=$("#alert-save"); if(ae) ae.onclick=saveAlertEmail; }
@@ -2739,6 +2886,72 @@ const PM_EMTYPES=[["default","Any emergency (default)"],["flood","Flood / water 
 const COI_STATUS={none:["Not on file","#8a8f98","#eef0f2"],submitted:["Under review","#8a6d00","#fdf3d6"],verified:["Verified","#1f7a4d","#e7f5ee"],expired:["Expired","#b4443a","#fbe6e4"],waived:["Waived","#8a8f98","#eef0f2"]};
 const SR_STATUS={new:["New","#1f5fa8","#e8f0fa"],acknowledged:["Acknowledged","#8a6d00","#fdf3d6"],in_progress:["In progress","#8a6d00","#fdf3d6"],escalated:["Escalated","#b4443a","#fbe6e4"],resolved:["Resolved","#1f7a4d","#e7f5ee"],closed:["Closed","#8a8f98","#eef0f2"],cancelled:["Cancelled","#8a8f98","#eef0f2"]};
 const pmTypeLabel=t=>(PM_TYPES.find(x=>x[0]===t)||[t,t])[1];
+function pmTypesForAccount(){ const mine=acctPmTypes(); const f=PM_TYPES.filter(t=>mine.includes(t[0])); return f.length?f:PM_TYPES; }
+const PM_STRUCT=[["detached","Detached homes — the association maintains common areas only"],["attached","Attached (townhomes / condos) — the association also maintains the building shell"],["mixed","Mixed — some detached, some attached"]];
+const PM_LEASE=[["full_service","Full-service / gross — landlord handles most maintenance"],["modified_gross","Modified gross — split per lease"],["nnn","NNN — tenant handles most inside the suite"]];
+// Type-specific fields for a property. `pre` is the id prefix (np = add form, pd = detail); p is the property (or {} for new).
+function pmTypeFields(pre, type, p){
+  p=p||{}; const props=(state.pm&&state.pm.props)||[];
+  const communities=props.filter(x=>x.property_type==='hoa' && x.id!==p.id);
+  const parentSel=(type!=='hoa' && communities.length)?`<div class="field"><label class="lab">Part of a community you manage? <span class="sub">optional</span></label><select class="inp" id="${pre}-parent"><option value="">No</option>${communities.map(c=>`<option value="${c.id}"${p.parent_property_id===c.id?' selected':''}>${esc(c.name)}</option>`).join('')}</select><span class="sub" style="display:block;margin-top:4px;color:var(--muted);font-size:11.5px">If this ${type==='commercial'?'building':'rental'} sits inside an HOA you also manage, ${esc(aName())} handles in-${type==='commercial'?'suite':'home'} issues here and community matters (gate, pool, ARC, dues) under the community.</span></div>`:'';
+  if(type==='hoa'){
+    return `${parentSel}
+    <div class="field"><label class="lab">Community structure</label><select class="inp" id="${pre}-struct">${pmOpts(PM_STRUCT, p.community_structure||'detached')}</select><span class="sub" style="display:block;margin-top:4px;color:var(--muted);font-size:11.5px">This decides what ${esc(aName())} treats as the association's responsibility vs. the owner's. In-home problems are never logged as association work orders.</span></div>
+    <div class="grid-2">
+      <div class="field"><label class="lab">Board approval needed above <span class="sub">$ — optional</span></label><input class="inp" id="${pre}-thresh" inputmode="numeric" value="${p.board_approval_threshold||''}" placeholder="e.g. 2500"><span class="sub" style="display:block;margin-top:4px;color:var(--muted);font-size:11.5px">Auto-dispatch stays below this; anything larger waits for the board.</span></div>
+      <div class="field"><label class="lab">Gate / access info <span class="sub">verified residents only</span></label><input class="inp" id="${pre}-gate" value="${esc(p.gate_access||'')}" placeholder="e.g. Resident gate code 4471#; vendor gate 8am–6pm"></div>
+    </div>
+    <div class="field" style="display:flex;align-items:center;gap:10px"><input type="checkbox" id="${pre}-vcoi" ${p.vendor_coi_required?'checked':''} style="width:auto"><label class="lab" for="${pre}-vcoi" style="margin:0">Vendors must have a certificate of insurance on file before working common areas</label></div>`;
+  }
+  if(type==='commercial'){
+    const hv=p.after_hours_hvac||{};
+    return `${parentSel}
+    <div class="field"><label class="lab">Default lease type</label><select class="inp" id="${pre}-lease">${pmOpts(PM_LEASE, p.lease_type_default||'full_service')}</select><span class="sub" style="display:block;margin-top:4px;color:var(--muted);font-size:11.5px">Base-building items (roof, structure, rooftop HVAC, elevators, lobby, parking) always come to you. This decides who handles problems inside a suite; you can override it per tenant.</span></div>
+    <div class="grid-2">
+      <div class="field" style="display:flex;align-items:center;gap:10px"><input type="checkbox" id="${pre}-hvac" ${hv.enabled!==false?'checked':''} style="width:auto"><label class="lab" for="${pre}-hvac" style="margin:0">Tenants can request after-hours HVAC (billable)</label></div>
+      <div class="field"><label class="lab">Lead time <span class="sub">hours</span></label><input class="inp" id="${pre}-hvlead" inputmode="numeric" value="${hv.lead_hours||48}"></div>
+    </div>
+    <div class="field"><label class="lab">After-hours HVAC rate / note <span class="sub">what ${esc(aName())} tells tenants</span></label><input class="inp" id="${pre}-hvnote" value="${esc(hv.rate_note||'')}" placeholder="e.g. $75/hour per zone, billed on next invoice per lease"></div>
+    <div class="field" style="display:flex;align-items:center;gap:10px"><input type="checkbox" id="${pre}-vcoi" ${p.vendor_coi_required!==false?'checked':''} style="width:auto"><label class="lab" for="${pre}-vcoi" style="margin:0">Vendors must have a certificate of insurance on file (dock / building access)</label></div>
+    <div class="field" style="display:flex;align-items:center;gap:10px"><input type="checkbox" id="${pre}-ins" ${p.require_tenant_insurance!==false?'checked':''} style="width:auto"><label class="lab" for="${pre}-ins" style="margin:0">Tenants must keep a certificate of insurance on file (naming you additional insured)</label></div>
+    <div class="grid-2" id="${pre}-insbox" style="${p.require_tenant_insurance!==false?'':'display:none'}">
+      <div class="field"><label class="lab">Minimum coverage <span class="sub">optional</span></label><input class="inp" id="${pre}-mincov" inputmode="numeric" value="${p.insurance_min_coverage||''}" placeholder="e.g. 1000000"></div>
+      <div class="field" style="display:flex;align-items:flex-end;gap:10px;padding-bottom:10px"><input type="checkbox" id="${pre}-ai" ${p.insurance_requires_additional_insured!==false?'checked':''} style="width:auto"><label class="lab" for="${pre}-ai" style="margin:0">Must list us as additional insured</label></div>
+    </div>`;
+  }
+  // residential
+  return `${parentSel}
+    <div class="field" style="display:flex;align-items:center;gap:10px"><input type="checkbox" id="${pre}-ins" ${p.require_tenant_insurance!==false?'checked':''} style="width:auto"><label class="lab" for="${pre}-ins" style="margin:0">Tenants must keep renters insurance on file</label></div>
+    <div class="grid-2" id="${pre}-insbox" style="${p.require_tenant_insurance!==false?'':'display:none'}">
+      <div class="field"><label class="lab">Minimum liability coverage <span class="sub">optional</span></label><input class="inp" id="${pre}-mincov" inputmode="numeric" value="${p.insurance_min_coverage||''}" placeholder="e.g. 100000"></div>
+      <div class="field" style="display:flex;align-items:flex-end;gap:10px;padding-bottom:10px"><input type="checkbox" id="${pre}-ai" ${p.insurance_requires_additional_insured!==false?'checked':''} style="width:auto"><label class="lab" for="${pre}-ai" style="margin:0">Must list us as interested party</label></div>
+    </div>`;
+}
+function pmBindTypeFields(pre){ const i=$("#"+pre+"-ins"), b=$("#"+pre+"-insbox"); if(i&&b) i.onchange=()=>{ b.style.display=i.checked?'':'none'; }; }
+// Read the type-specific fields back into a patch. Insurance is per type: residential/commercial verify tenants; communities never do.
+function pmReadTypeFields(pre, type){
+  const g=id=>$("#"+pre+"-"+id); const patch={};
+  patch.parent_property_id = g('parent')? (g('parent').value||null) : null;
+  if(type==='hoa'){
+    patch.community_structure=g('struct')?g('struct').value:'detached';
+    patch.board_approval_threshold=pmNum(g('thresh')&&g('thresh').value);
+    patch.gate_access=(g('gate')&&g('gate').value.trim())||null;
+    patch.vendor_coi_required=!!(g('vcoi')&&g('vcoi').checked);
+    patch.require_tenant_insurance=false; patch.lease_type_default=null; patch.after_hours_hvac={};
+  } else if(type==='commercial'){
+    patch.lease_type_default=g('lease')?g('lease').value:'full_service';
+    patch.after_hours_hvac={ enabled:!!(g('hvac')&&g('hvac').checked), lead_hours:+((g('hvlead')&&g('hvlead').value)||48)||48, rate_note:(g('hvnote')&&g('hvnote').value.trim())||null };
+    patch.vendor_coi_required=!!(g('vcoi')&&g('vcoi').checked);
+    patch.require_tenant_insurance=!!(g('ins')&&g('ins').checked);
+    patch.insurance_min_coverage=pmNum(g('mincov')&&g('mincov').value); patch.insurance_requires_additional_insured=g('ai')?g('ai').checked:true;
+    patch.community_structure=null;
+  } else {
+    patch.require_tenant_insurance=!!(g('ins')&&g('ins').checked);
+    patch.insurance_min_coverage=pmNum(g('mincov')&&g('mincov').value); patch.insurance_requires_additional_insured=g('ai')?g('ai').checked:true;
+    patch.community_structure=null; patch.lease_type_default=null; patch.after_hours_hvac={}; patch.vendor_coi_required=false;
+  }
+  return patch;
+}
 const pmRoleLabel=r=>(PM_ROLES.find(x=>x[0]===r)||[r,r])[1];
 const pmEmLabel=e=>(PM_EMTYPES.find(x=>x[0]===e)||[e,e])[1];
 const pmNum=v=>{ const n=Number(String(v==null?'':v).replace(/[^0-9.]/g,'')); return isFinite(n)&&n>0?n:null; };
@@ -2759,14 +2972,14 @@ function pageProperties(){
     <div class="card">
       <div class="card-h"><h2>Add a property</h2></div>
       <div class="grid-2">
-        <div class="field"><label class="lab">Name</label><input class="inp" id="np-name" placeholder="e.g. Oakwood Apartments / 1200 Main St / Sunset HOA"></div>
-        <div class="field"><label class="lab">Type</label><select class="inp" id="np-type">${pmOpts(PM_TYPES,'residential')}</select></div>
+        <div class="field"><label class="lab">Name</label><input class="inp" id="np-name" placeholder="e.g. Oakwood Apartments / 1200 Main St / Sunset Ridge HOA"></div>
+        <div class="field"><label class="lab">Type</label><select class="inp" id="np-type">${pmOpts(pmTypesForAccount(), acctPmTypes()[0])}</select></div>
       </div>
       <div class="grid-2">
-        <div class="field"><label class="lab">Address <span class="sub">optional</span></label><input class="inp" id="np-addr"></div>
-        <div class="field"><label class="lab">Units / doors <span class="sub">optional</span></label><input class="inp" id="np-units" inputmode="numeric"></div>
+        <div class="field"><label class="lab">Address <span class="sub">used for drive time</span></label><input class="inp" id="np-addr"></div>
+        <div class="field"><label class="lab">Units / doors / homes <span class="sub">optional</span></label><input class="inp" id="np-units" inputmode="numeric"></div>
       </div>
-      <div class="field" style="display:flex;align-items:center;gap:10px"><input type="checkbox" id="np-ins" style="width:auto"><label class="lab" for="np-ins" style="margin:0">Require tenants to keep insurance on file (certificate of insurance)</label></div>
+      <div id="np-typefields"></div>
       <div style="display:flex;align-items:center;gap:12px"><button class="btn primary" id="np-save">Add property</button><span id="np-msg" style="font-size:12.5px;color:var(--muted)"></span></div>
     </div>
     <div class="card">
@@ -2777,7 +2990,9 @@ function pageProperties(){
   </div>`;
   $("#np-save").onclick=addProperty;
   $("#pm-refresh").onclick=()=>pageProperties();
-  loadProperties().then(()=>{ paintPropList(); if(state.pm.sel) openProperty(state.pm.sel); });
+  const paintNpType=()=>{ const t=$("#np-type").value; $("#np-typefields").innerHTML=pmTypeFields('np', t, {}); pmBindTypeFields('np'); };
+  $("#np-type").onchange=paintNpType;
+  loadProperties().then(()=>{ paintPropList(); paintNpType(); if(state.pm.sel) openProperty(state.pm.sel); });
 }
 function paintPropList(){
   const el=$("#pm-list"); if(!el) return;
@@ -2795,12 +3010,13 @@ function paintPropList(){
 async function addProperty(){
   const name=$("#np-name").value.trim(), msg=$("#np-msg");
   if(!name){ msg.style.color='var(--danger)'; msg.textContent='Give it a name.'; return; }
-  const row={ account_id:state.account.id, name, property_type:$("#np-type").value, address:$("#np-addr").value.trim()||null, units_count:pmNum($("#np-units").value), require_tenant_insurance:$("#np-ins").checked, timezone:state.account.timezone };
+  const type=$("#np-type").value;
+  const row=Object.assign({ account_id:state.account.id, name, property_type:type, address:$("#np-addr").value.trim()||null, units_count:pmNum($("#np-units").value), timezone:state.account.timezone }, pmReadTypeFields('np', type));
   const btn=$("#np-save"); btn.disabled=true; const o=btn.textContent; btn.textContent='Adding…';
   const { data, error }=await db.from('properties').insert(row).select().maybeSingle();
   btn.disabled=false; btn.textContent=o;
   if(error){ msg.style.color='var(--danger)'; msg.textContent=error.message; return; }
-  $("#np-name").value='';$("#np-addr").value='';$("#np-units").value='';$("#np-ins").checked=false;
+  $("#np-name").value='';$("#np-addr").value='';$("#np-units").value='';
   msg.style.color='var(--ok)'; msg.textContent='Added.'; setTimeout(()=>{if($("#np-msg"))$("#np-msg").textContent='';},1500);
   await loadProperties(); paintPropList(); if(data) openProperty(data.id);
 }
@@ -2816,40 +3032,62 @@ async function openProperty(id){
   ]);
   const p=pr.data; if(!p){ if(box) box.innerHTML=''; return; }
   const people=pe.data||[], escal=ec.data||[], coi=ci.data||[], kn2=kn.data||[];
-  const isHoa=p.property_type==='hoa';
+  const isHoa=p.property_type==='hoa', isCom=p.property_type==='commercial';
+  const children=((state.pm&&state.pm.props)||[]).filter(x=>x.parent_property_id===p.id);
+  const ains=p.association_insurance||{};
   box.innerHTML=`
   <div class="card">
     <div class="card-h"><h2>${esc(p.name)} — details</h2><button class="btn sm" data-pdel="${p.id}">Delete</button></div>
     <div class="grid-2">
       <div class="field"><label class="lab">Name</label><input class="inp" id="pd-name" value="${esc(p.name)}"></div>
-      <div class="field"><label class="lab">Type</label><select class="inp" id="pd-type">${pmOpts(PM_TYPES,p.property_type)}</select></div>
+      <div class="field"><label class="lab">Type</label><select class="inp" id="pd-type">${pmOpts(pmTypesForAccount(),p.property_type)}</select></div>
     </div>
     <div class="grid-2">
-      <div class="field"><label class="lab">Address</label><input class="inp" id="pd-addr" value="${esc(p.address||'')}"></div>
-      <div class="field"><label class="lab">Units / doors</label><input class="inp" id="pd-units" inputmode="numeric" value="${p.units_count||''}"></div>
+      <div class="field"><label class="lab">Address <span class="sub">used for drive time</span></label><input class="inp" id="pd-addr" value="${esc(p.address||'')}"></div>
+      <div class="field"><label class="lab">${isHoa?'Homes / units':'Units / doors'}</label><input class="inp" id="pd-units" inputmode="numeric" value="${p.units_count||''}"></div>
     </div>
-    <div class="field"><label class="lab">Emergency instructions <span class="sub">what ${esc(aName())} should do / say for emergencies here</span></label><textarea class="inp" id="pd-eins" rows="2">${esc(p.emergency_instructions||'')}</textarea></div>
-    <div class="field" style="display:flex;align-items:center;gap:10px"><input type="checkbox" id="pd-ins" ${p.require_tenant_insurance?'checked':''} style="width:auto"><label class="lab" for="pd-ins" style="margin:0">Require tenant insurance on file</label></div>
-    <div class="grid-2" id="pd-insbox" style="${p.require_tenant_insurance?'':'display:none'}">
-      <div class="field"><label class="lab">Minimum coverage <span class="sub">optional</span></label><input class="inp" id="pd-mincov" inputmode="numeric" value="${p.insurance_min_coverage||''}"></div>
-      <div class="field" style="display:flex;align-items:flex-end;gap:10px;padding-bottom:10px"><input type="checkbox" id="pd-ai" ${p.insurance_requires_additional_insured!==false?'checked':''} style="width:auto"><label class="lab" for="pd-ai" style="margin:0">Must list us as additional insured</label></div>
-    </div>
+    ${p.parent_property_id?`<div style="font-size:12.5px;color:var(--muted);margin:-4px 0 10px">Part of <b>${esc(((state.pm.props||[]).find(x=>x.id===p.parent_property_id)||{}).name||'a community')}</b> — community matters route there.</div>`:''}
+    ${isHoa&&children.length?`<div style="font-size:12.5px;color:var(--muted);margin:-4px 0 10px">Managed homes/suites inside this community: ${children.map(c=>`<b>${esc(c.name)}</b>`).join(', ')}.</div>`:''}
+    <div class="field"><label class="lab">Emergency instructions <span class="sub">what ${esc(aName())} should do / say for ${isHoa?'common-area ':''}emergencies here</span></label><textarea class="inp" id="pd-eins" rows="2" placeholder="${isHoa?'e.g. Gate stuck open: call the gate company first. Pool: lock and post closed. Main line break: call the water district.':isCom?'e.g. Elevator entrapment: call Otis 24/7 line, then building engineer. Fire alarm: evacuate, 911, then engineer.':'e.g. Shut-off valve is in the hall closet. Gas smell: leave and call 911 first.'}">${esc(p.emergency_instructions||'')}</textarea></div>
+    <div id="pd-typefields">${pmTypeFields('pd', p.property_type, p)}</div>
     <div style="display:flex;align-items:center;gap:12px"><button class="btn primary" id="pd-save">Save details</button><span id="pd-msg" style="font-size:12.5px;color:var(--muted)"></span></div>
   </div>
 
+  ${isHoa?`<div class="card">
+    <div class="card-h"><h2>Association insurance</h2><span class="hint">the association is the insured</span></div>
+    <p style="font-size:12.5px;color:var(--muted);margin:-4px 0 12px">The master policy that covers common areas and amenities${(p.community_structure==='attached'||p.community_structure==='mixed')?' and the building shell (roof, exterior, foundation) for attached homes':''}. ${esc(aName())} uses this to answer "is that covered by the HOA or me?", and to send evidence of insurance when a title company, lender, or an owner's insurance agent asks. Homeowners are not asked for insurance here — they carry their own ${(p.community_structure==='attached'||p.community_structure==='mixed')?'HO-6 walls-in':'homeowners'} policy.</p>
+    <div class="grid-2">
+      <div class="field"><label class="lab">Carrier</label><input class="inp" id="ai-carrier" value="${esc(ains.carrier||'')}" placeholder="e.g. Travelers"></div>
+      <div class="field"><label class="lab">Policy number</label><input class="inp" id="ai-policy" value="${esc(ains.policy_number||'')}"></div>
+    </div>
+    <div class="grid-2">
+      <div class="field"><label class="lab">Expires</label><input class="inp" id="ai-exp" type="date" value="${esc(ains.expiration_date||'')}"></div>
+      <div class="field"><label class="lab">Agent / contact <span class="sub">for certificates</span></label><input class="inp" id="ai-agent" value="${esc(ains.agent||'')}" placeholder="name · phone · email"></div>
+    </div>
+    <div class="field"><label class="lab">What it covers <span class="sub">plain words — ${esc(aName())} reads this to callers</span></label><textarea class="inp" id="ai-covers" rows="3" placeholder="${(p.community_structure==='attached'||p.community_structure==='mixed')?'e.g. General liability and property on the pool, clubhouse, gate, and common grounds; master policy on building exteriors, roofs, and foundations. Owners cover interiors, fixtures, personal property, and loss assessment (HO-6).':'e.g. General liability and property on the entry monuments, pool, pavilion, playground, and common landscaping. Owners insure their own homes.'}">${esc(ains.covers||'')}</textarea></div>
+    <div class="field"><label class="lab">Evidence of insurance link <span class="sub">optional — a PDF ${esc(aName())} can send on request</span></label><input class="inp" id="ai-url" value="${esc(ains.certificate_url||'')}" placeholder="https://…"></div>
+    <div style="display:flex;align-items:center;gap:12px"><button class="btn primary" id="ai-save">Save insurance</button><span id="ai-msg" style="font-size:12.5px;color:var(--muted)"></span></div>
+  </div>`:''}
+
   <div class="card">
-    <div class="card-h"><h2>People</h2><span class="hint">${isHoa?'owners, board, vendors':'tenants, owners, vendors'}</span></div>
+    <div class="card-h"><h2>People</h2><span class="hint">${isHoa?'owners, renters, board, vendors':isCom?'tenant companies, authorized contacts, vendors':'tenants, owners, vendors'}</span></div>
+    ${isHoa?`<p style="font-size:12.5px;color:var(--muted);margin:-4px 0 12px">Mark who is an <b>owner of record</b> (can submit ARC requests, ask about their account, vote) vs. a <b>renter</b> of an owner (community questions only — repairs go to their landlord). Board members get board-level answers.</p>`:''}
+    ${isCom?`<p style="font-size:12.5px;color:var(--muted);margin:-4px 0 12px">Add each tenant company's contacts and mark who is <b>authorized</b> — only authorized contacts can order billable work, after-hours access, or key changes. Anyone can report a problem.</p>`:''}
     <div class="grid-2">
       <div class="field"><label class="lab">Role</label><select class="inp" id="pc-role">${pmOpts(PM_ROLES, isHoa?'owner':'tenant')}</select></div>
-      <div class="field"><label class="lab">Unit / address <span class="sub">optional</span></label><input class="inp" id="pc-unit"></div>
+      <div class="field"><label class="lab">${isHoa?'Home address / lot':isCom?'Suite':'Unit'} <span class="sub">optional</span></label><input class="inp" id="pc-unit"></div>
     </div>
     <div class="grid-2">
       <div class="field"><label class="lab">Name</label><input class="inp" id="pc-name"></div>
       <div class="field"><label class="lab">Phone</label><input class="inp" id="pc-phone"></div>
     </div>
-    <div class="field"><label class="lab">Email <span class="sub">optional</span></label><input class="inp" id="pc-email"></div>
+    <div class="grid-2">
+      <div class="field"><label class="lab">Email <span class="sub">optional</span></label><input class="inp" id="pc-email"></div>
+      ${isCom?`<div class="field"><label class="lab">Company <span class="sub">tenant business</span></label><input class="inp" id="pc-company" placeholder="e.g. Lone Star Dental"></div>`:''}
+    </div>
+    ${isCom?`<div class="field" style="display:flex;align-items:center;gap:10px"><input type="checkbox" id="pc-auth" style="width:auto"><label class="lab" for="pc-auth" style="margin:0">Authorized contact (can order billable work, after-hours access, keys)</label></div>`:''}
     <div style="display:flex;align-items:center;gap:12px"><button class="btn primary" id="pc-add">Add person</button><span id="pc-msg" style="font-size:12.5px;color:var(--muted)"></span></div>
-    <div id="pc-list" style="margin-top:14px">${people.length?people.map(c=>`<div class="block-item"><div style="flex:1;min-width:0"><div style="font-weight:600;font-size:13px">${esc(c.name||'(no name)')} <span class="lang-badge">${esc(pmRoleLabel(c.role))}</span>${c.unit?` <span style="color:var(--muted);font-size:12px">${esc(c.unit)}</span>`:''}</div><div style="font-size:12px;color:var(--muted)">${esc([c.phone,c.email].filter(Boolean).join(' · '))}</div></div><button class="btn sm" data-pcdel="${c.id}">Remove</button></div>`).join(''):`<div class="empty" style="padding:14px">No people added yet.</div>`}</div>
+    <div id="pc-list" style="margin-top:14px">${people.length?people.map(c=>`<div class="block-item"><div style="flex:1;min-width:0"><div style="font-weight:600;font-size:13px">${esc(c.name||'(no name)')} <span class="lang-badge">${esc(pmRoleLabel(c.role))}</span>${c.authorized?` <span class="lang-badge" style="background:#e8f0fa;color:#164a85">authorized</span>`:''}${c.company?` <span style="color:var(--muted);font-size:12px">${esc(c.company)}</span>`:''}${c.unit?` <span style="color:var(--muted);font-size:12px">· ${esc(c.unit)}</span>`:''}</div><div style="font-size:12px;color:var(--muted)">${esc([c.phone,c.email].filter(Boolean).join(' · '))}</div></div>${isCom?`<button class="btn sm" data-pcauth="${c.id}" data-val="${c.authorized?'0':'1'}">${c.authorized?'Revoke':'Authorize'}</button>`:''}<button class="btn sm" data-pcdel="${c.id}">Remove</button></div>`).join(''):`<div class="empty" style="padding:14px">No people added yet.</div>`}</div>
   </div>
 
   <div class="card">
@@ -2883,9 +3121,9 @@ async function openProperty(id){
     <div id="kp-list" style="margin-top:14px">${kn2.length?kn2.map(k=>`<div class="block-item" style="align-items:flex-start"><div style="flex:1;min-width:0"><div style="font-weight:600;font-size:13px;margin-bottom:3px">${esc(k.title||'(untitled)')}${k.category?` <span class="lang-badge">${esc(k.category)}</span>`:''}</div><div style="font-size:12px;color:var(--muted)">${esc((k.content||'').slice(0,160))}${(k.content||'').length>160?'…':''}</div></div><button class="btn sm" data-kpdel="${k.id}">Delete</button></div>`).join(''):`<div class="empty" style="padding:14px">Nothing taught for this property yet.</div>`}</div>
   </div>
 
-  ${p.require_tenant_insurance?`<div class="card">
-    <div class="card-h"><h2>Tenant insurance</h2><span class="hint">certificates on file</span></div>
-    <p style="font-size:12.5px;color:var(--muted);margin:-4px 0 12px">Send a tenant a secure link to upload their certificate. ${esc(aName())} reminds them before it expires and flags lapses to you.</p>
+  ${(p.require_tenant_insurance&&!isHoa)?`<div class="card">
+    <div class="card-h"><h2>${isCom?'Tenant certificates of insurance':'Renters insurance'}</h2><span class="hint">on file per ${isCom?'tenant company':'tenant'}</span></div>
+    <p style="font-size:12.5px;color:var(--muted);margin:-4px 0 12px">Send a ${isCom?'tenant company':'tenant'} a secure link to upload their ${isCom?'certificate (naming you additional insured)':'renters policy'}. ${esc(aName())} reminds them before it expires and flags lapses to you.</p>
     <div class="grid-2">
       <div class="field"><label class="lab">Tenant name</label><input class="inp" id="ti-name"></div>
       <div class="field"><label class="lab">Unit</label><input class="inp" id="ti-unit"></div>
@@ -2898,11 +3136,14 @@ async function openProperty(id){
     <div id="ti-list" style="margin-top:14px">${coi.length?coi.map(c=>`<div class="block-item" style="align-items:flex-start"><div style="flex:1;min-width:0"><div style="font-weight:600;font-size:13px">${esc(c.tenant_name||'(tenant)')}${c.unit?` <span style="color:var(--muted);font-size:12px">${esc(c.unit)}</span>`:''} ${pmPill(COI_STATUS,c.status)}</div><div style="font-size:12px;color:var(--muted)">${esc([c.carrier,c.policy_number].filter(Boolean).join(' · '))}${c.expiration_date?` · expires ${pmFmtDate(c.expiration_date)}`:''}</div></div><div style="display:flex;gap:6px;flex-wrap:wrap">${c.document_url?`<button class="btn sm" data-tidoc="${c.document_url}">Document</button>`:''}${c.token?`<button class="btn sm" data-tilink="${c.token}">Copy link</button>`:''}${c.status!=='verified'?`<button class="btn sm primary" data-tiverify="${c.id}">Verify</button>`:''}</div></div>`).join(''):`<div class="empty" style="padding:14px">No certificates requested yet.</div>`}</div>
   </div>`:''}`;
 
-  $("#pd-ins").onchange=()=>{ $("#pd-insbox").style.display=$("#pd-ins").checked?'':'none'; };
+  pmBindTypeFields('pd');
+  $("#pd-type").onchange=()=>{ const t=$("#pd-type").value; $("#pd-typefields").innerHTML=pmTypeFields('pd', t, Object.assign({}, p, {property_type:t})); pmBindTypeFields('pd'); };
   $("#pd-save").onclick=()=>savePropertyDetails(id);
   box.querySelector('[data-pdel]').onclick=()=>deleteProperty(id);
+  { const s=$("#ai-save"); if(s) s.onclick=async()=>{ const m=$("#ai-msg"); m.textContent='Saving…'; const association_insurance={ carrier:$("#ai-carrier").value.trim()||null, policy_number:$("#ai-policy").value.trim()||null, expiration_date:$("#ai-exp").value||null, agent:$("#ai-agent").value.trim()||null, covers:$("#ai-covers").value.trim()||null, certificate_url:$("#ai-url").value.trim()||null }; const { error }=await db.from('properties').update({ association_insurance }).eq('id',id); m.style.color=error?'var(--danger)':'var(--ok)'; m.textContent=error?'Could not save.':'Saved.'; if(!error) await loadProperties(); }; }
   $("#pc-add").onclick=()=>addPropContact(id);
   box.querySelectorAll('[data-pcdel]').forEach(b=>b.onclick=async()=>{ await db.from('property_contacts').delete().eq('id',b.dataset.pcdel); openProperty(id); });
+  box.querySelectorAll('[data-pcauth]').forEach(b=>b.onclick=async()=>{ await db.from('property_contacts').update({authorized:b.dataset.val==='1'}).eq('id',b.dataset.pcauth); openProperty(id); });
   $("#ec-add").onclick=()=>addEscalContact(id);
   box.querySelectorAll('[data-ecdel]').forEach(b=>b.onclick=async()=>{ await db.from('property_escalation_contacts').delete().eq('id',b.dataset.ecdel); openProperty(id); });
   $("#kp-add").onclick=()=>addPropKnowledge(id);
@@ -2914,11 +3155,12 @@ async function openProperty(id){
   box.querySelectorAll('[data-tilink]').forEach(b=>b.onclick=()=>{ const link=location.origin.replace(/\/$/,'')+'/coi/'+b.dataset.tilink; navigator.clipboard&&navigator.clipboard.writeText(link); b.textContent='Copied'; setTimeout(()=>{b.textContent='Copy link';},1200); });
 }
 async function savePropertyDetails(id){
-  const patch={ name:$("#pd-name").value.trim(), property_type:$("#pd-type").value, address:$("#pd-addr").value.trim()||null, units_count:pmNum($("#pd-units").value), emergency_instructions:$("#pd-eins").value.trim()||null, require_tenant_insurance:$("#pd-ins").checked, insurance_min_coverage:pmNum($("#pd-mincov")&&$("#pd-mincov").value), insurance_requires_additional_insured:$("#pd-ai")?$("#pd-ai").checked:true };
+  const type=$("#pd-type").value;
+  const patch=Object.assign({ name:$("#pd-name").value.trim(), property_type:type, address:$("#pd-addr").value.trim()||null, units_count:pmNum($("#pd-units").value), emergency_instructions:$("#pd-eins").value.trim()||null }, pmReadTypeFields('pd', type));
   const msg=$("#pd-msg"); msg.style.color='var(--muted)'; msg.textContent='Saving…';
   const { error }=await db.from('properties').update(patch).eq('id',id);
   if(error){ msg.style.color='var(--danger)'; msg.textContent=error.message; return; }
-  msg.style.color='var(--ok)'; msg.textContent='Saved.'; await loadProperties(); paintPropList();
+  msg.style.color='var(--ok)'; msg.textContent='Saved.'; await loadProperties(); paintPropList(); openProperty(id);
 }
 async function deleteProperty(id){
   if(!(await uiConfirm('Delete this property and everything under it (people, on-call, documents, insurance records)? This cannot be undone.',{okText:'Delete',cancelText:'Keep'}))) return;
@@ -2927,7 +3169,9 @@ async function deleteProperty(id){
 async function addPropContact(id){
   const name=$("#pc-name").value.trim(), phone=$("#pc-phone").value.trim(), email=$("#pc-email").value.trim();
   const msg=$("#pc-msg"); if(!name&&!phone&&!email){ msg.style.color='var(--danger)'; msg.textContent='Add a name, phone, or email.'; return; }
-  const { error }=await db.from('property_contacts').insert({ account_id:state.account.id, property_id:id, role:$("#pc-role").value, unit:$("#pc-unit").value.trim()||null, name:name||null, phone:phone||null, email:email||null });
+  const row={ account_id:state.account.id, property_id:id, role:$("#pc-role").value, unit:$("#pc-unit").value.trim()||null, name:name||null, phone:phone||null, email:email||null, company:($("#pc-company")?($("#pc-company").value.trim()||null):null), authorized:!!($("#pc-auth")&&$("#pc-auth").checked) };
+  // Keep the cross-channel contact brain in sync so Donna recognizes this person by phone/email on any channel.
+  const { error }=await db.from('property_contacts').insert(row);
   if(error){ msg.style.color='var(--danger)'; msg.textContent=error.message; return; }
   openProperty(id);
 }
@@ -3884,6 +4128,9 @@ async function bootImpersonation(){
 }
 
 /* ===================== ONBOARDING WIZARD ===================== */
+const WZ_PM_TYPES=[["residential","Residential rentals","Homes, apartments, and units you lease and maintain for owners"],["commercial","Commercial & flex","Office, retail, industrial, and flex buildings with business tenants"],["hoa","Communities (HOA & condo)","Associations you manage for a board — common areas, dues, ARC, violations"]];
+// Which product features an industry turns on. (Without this, a real signup never saw the right dashboard.)
+const INDUSTRY_FEATURES={ property_management:{property_management:true,after_hours_emergency:true}, hair_salon:{salon:true}, nail_salon:{salon:true}, barbershop:{salon:true}, spa:{salon:true}, lash_brow:{salon:true} };
 const WZ_INDUSTRIES=[["property_management","Property management"],["hair_salon","Hair salon"],["nail_salon","Nail salon"],["barbershop","Barbershop"],["spa","Spa or skin care"],["lash_brow","Lash & brow"],["restaurant","Restaurant"],["contractor","Contractor or trades"],["real_estate","Real estate"],["professional","Professional services"],["other","Something else"]];
 const WZ_TITLES=["Welcome","Your business","Your assistant","Hours","Knowledge","Appointments","Calls","Notifications","Go live"];
 const WZ_TZ=[["America/New_York","Eastern"],["America/Chicago","Central"],["America/Denver","Mountain"],["America/Phoenix","Arizona"],["America/Los_Angeles","Pacific"],["America/Anchorage","Alaska"],["Pacific/Honolulu","Hawaii"]];
@@ -3965,6 +4212,7 @@ function renderWizard(){
   if(typeof state.wizStep!=='number'){ const ob=obState(); state.wizStep=(ob&&typeof ob.step==='number')?ob.step:0; }
   if(!state.wz){ state.wz={
     industry: state.account.industry||'',
+    pmTypes: ((state.account.settings&&Array.isArray(state.account.settings.property_types))?state.account.settings.property_types.slice():[]),
     company: state.account.company||'',
     tz: state.account.timezone||'America/Chicago',
     owner: (state.owner&&state.owner.name)||'',
@@ -3990,9 +4238,12 @@ const WZ_RENDER={
       <p class="lede">${esc(DEFAULT_NAME)} is your AI receptionist. In a few short steps you'll tell her about your business, how to answer, and when you're available. You can stop any time and pick up where you left off. Your phone number stays private until you finish and go live.</p>
       <div class="wz-field"><label>What kind of business is this? <span class="hint">helps ${esc(DEFAULT_NAME)} start with the right setup</span></label>
       <div class="wz-choices" id="wz-ind">${WZ_INDUSTRIES.map(x=>`<div class="wz-choice ${g.industry===x[0]?'sel':''}" data-v="${x[0]}">${esc(x[1])}</div>`).join("")}</div></div>
+      <div class="wz-field" id="wz-pmtypes-wrap" style="display:${g.industry==='property_management'?'block':'none'}"><label>What do you manage? <span class="hint">pick all that apply — each works differently</span></label>
+      <div class="wz-choices" id="wz-pmtypes">${WZ_PM_TYPES.map(x=>`<div class="wz-choice ${(g.pmTypes||[]).includes(x[0])?'sel':''}" data-v="${x[0]}"><b style="display:block">${esc(x[1])}</b><span style="font-size:12px;color:var(--muted);font-weight:400">${esc(x[2])}</span></div>`).join("")}</div></div>
     `,{});
-    document.querySelectorAll('#wz-ind .wz-choice').forEach(el=>el.onclick=()=>{ state.wz.industry=el.dataset.v; document.querySelectorAll('#wz-ind .wz-choice').forEach(c=>c.classList.toggle('sel',c===el)); });
-    wzBindNav(null,{});
+    document.querySelectorAll('#wz-ind .wz-choice').forEach(el=>el.onclick=()=>{ state.wz.industry=el.dataset.v; document.querySelectorAll('#wz-ind .wz-choice').forEach(c=>c.classList.toggle('sel',c===el)); const w=$("#wz-pmtypes-wrap"); if(w) w.style.display=el.dataset.v==='property_management'?'block':'none'; });
+    document.querySelectorAll('#wz-pmtypes .wz-choice').forEach(el=>el.onclick=()=>{ const v=el.dataset.v; const cur=new Set(state.wz.pmTypes||[]); if(cur.has(v)) cur.delete(v); else cur.add(v); state.wz.pmTypes=[...cur]; el.classList.toggle('sel',cur.has(v)); });
+    wzBindNav(async()=>{ if(state.wz.industry==='property_management' && !(state.wz.pmTypes||[]).length){ const w=$("#wz-pmtypes-wrap"); if(w){ w.scrollIntoView({behavior:'smooth',block:'center'}); w.style.outline='2px solid var(--danger)'; w.style.borderRadius='10px'; setTimeout(()=>{ w.style.outline=''; },1800); } return false; } return true; },{});
   },
   1:function(){
     const g=state.wz;
@@ -4013,6 +4264,11 @@ const WZ_RENDER={
       state.wz.company=company; state.wz.owner=$("#wz-owner").value.trim(); state.wz.phone=$("#wz-phone").value.trim(); state.wz.tz=$("#wz-tz").value;
       if(!state.wz.glabel || state.wz.glabel==='the office') state.wz.glabel=company;
       const settings=Object.assign({}, state.account.settings||{}, {timezone:state.wz.tz});
+      // Turn on the features for this industry; for property management, record what they manage.
+      const feat=Object.assign({}, settings.features||{}, INDUSTRY_FEATURES[state.wz.industry]||{});
+      if(state.wz.industry==='property_management'){ settings.property_types=(state.wz.pmTypes||[]).slice(); if(feat.salon) delete feat.salon; }
+      else if(INDUSTRY_FEATURES[state.wz.industry] && INDUSTRY_FEATURES[state.wz.industry].salon && feat.property_management){ delete feat.property_management; }
+      settings.features=feat;
       const { error:e1 }=await db.from('accounts').update({ name:company, industry:state.wz.industry||null, settings }).eq('id',state.account.id);
       if(!e1){ state.account.company=company; state.account.industry=state.wz.industry||null; state.account.settings=settings; state.account.timezone=state.wz.tz; }
       if(state.owner&&state.owner.id){ await db.from('users').update({ full_name:state.wz.owner||null, phone:state.wz.phone||null }).eq('id',state.owner.id); if(state.wz.owner) state.owner.name=state.wz.owner; if(state.wz.phone!==undefined) state.owner.phone=state.wz.phone; }
