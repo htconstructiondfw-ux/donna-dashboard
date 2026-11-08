@@ -3121,6 +3121,7 @@ async function openProperty(id){
   ]);
   const p=pr.data; if(!p){ if(box) box.innerHTML=''; return; }
   const people=pe.data||[], escal=ec.data||[], coi=ci.data||[], kn2=kn.data||[];
+  const ctx=await pmLoadPropertyExtras(id); ctx.people=people; ctx.coi=coi;
   const isHoa=p.property_type==='hoa', isCom=p.property_type==='commercial';
   const children=((state.pm&&state.pm.props)||[]).filter(x=>x.parent_property_id===p.id);
   const ains=p.association_insurance||{};
@@ -3141,6 +3142,8 @@ async function openProperty(id){
     <div id="pd-typefields">${pmTypeFields('pd', p.property_type, p)}</div>
     <div style="display:flex;align-items:center;gap:12px"><button class="btn primary" id="pd-save">Save details</button><span id="pd-msg" style="font-size:12.5px;color:var(--muted)"></span></div>
   </div>
+
+  ${pmTypeCards(p, ctx)}
 
   ${isHoa?`<div class="card">
     <div class="card-h"><h2>Association insurance</h2><span class="hint">the association is the insured</span></div>
@@ -3225,7 +3228,7 @@ async function openProperty(id){
     <div id="ti-list" style="margin-top:14px">${coi.length?coi.map(c=>`<div class="block-item" style="align-items:flex-start"><div style="flex:1;min-width:0"><div style="font-weight:600;font-size:13px">${esc(c.tenant_name||'(tenant)')}${c.unit?` <span style="color:var(--muted);font-size:12px">${esc(c.unit)}</span>`:''} ${pmPill(COI_STATUS,c.status)}</div><div style="font-size:12px;color:var(--muted)">${esc([c.carrier,c.policy_number].filter(Boolean).join(' · '))}${c.expiration_date?` · expires ${pmFmtDate(c.expiration_date)}`:''}</div></div><div style="display:flex;gap:6px;flex-wrap:wrap">${c.document_url?`<button class="btn sm" data-tidoc="${c.document_url}">Document</button>`:''}${c.token?`<button class="btn sm" data-tilink="${c.token}">Copy link</button>`:''}${c.status!=='verified'?`<button class="btn sm primary" data-tiverify="${c.id}">Verify</button>`:''}</div></div>`).join(''):`<div class="empty" style="padding:14px">No certificates requested yet.</div>`}</div>
   </div>`:''}`;
 
-  pmBindTypeFields('pd');
+  pmBindTypeFields('pd'); pmBindTypeCards(id, p, ctx);
   $("#pd-type").onchange=()=>{ const t=$("#pd-type").value; $("#pd-typefields").innerHTML=pmTypeFields('pd', t, Object.assign({}, p, {property_type:t})); pmBindTypeFields('pd'); };
   $("#pd-save").onclick=()=>savePropertyDetails(id);
   box.querySelector('[data-pdel]').onclick=()=>deleteProperty(id);
@@ -3318,37 +3321,6 @@ async function loadServiceRequests(){
   const { data:cons }=await db.from('contractors').select('id,name,company,trades,is_active').eq('account_id',state.account.id).eq('is_active',true).order('name');
   state.contractors=cons||[];
 }
-function pageServiceRequests(){
-  state.sr=state.sr||{filter:'open'};
-  $("#page").innerHTML=`
-  <div class="page">
-    <div class="page-head"><h1>Service requests</h1><p>Every request ${esc(aName())} logs — maintenance, emergencies, ARC and violations, leasing, and more — with who it's for and where it stands. Nothing falls through.</p></div>
-    <div class="card">
-      <div class="card-h">
-        <div style="display:flex;gap:6px;flex-wrap:wrap" id="sr-filters">
-          ${[['open','Open'],['emergency','Emergencies'],['all','All'],['resolved','Resolved']].map(f=>`<button class="btn sm ${state.sr.filter===f[0]?'primary':''}" data-srf="${f[0]}">${f[1]}</button>`).join('')}
-        </div>
-        <button class="btn sm" id="sr-refresh">Refresh</button>
-      </div>
-      <div id="sr-list"><div class="empty">Loading…</div></div>
-    </div>
-  </div>`;
-  $("#sr-refresh").onclick=()=>pageServiceRequests();
-  $("#sr-filters").querySelectorAll('[data-srf]').forEach(b=>b.onclick=()=>{ state.sr.filter=b.dataset.srf; paintSrList(); $("#sr-filters").querySelectorAll('[data-srf]').forEach(x=>x.classList.toggle('primary',x.dataset.srf===state.sr.filter)); });
-  loadServiceRequests().then(paintSrList);
-}
-function srMatch(r){ const f=state.sr.filter; if(f==='all')return true; if(f==='emergency')return r.priority==='emergency'||r.request_type==='emergency'; if(f==='resolved')return ['resolved','closed','cancelled'].includes(r.status); return !['resolved','closed','cancelled'].includes(r.status); }
-function paintSrList(){
-  const el=$("#sr-list"); if(!el) return;
-  const rows=(state.sr.list||[]).filter(srMatch);
-  if(!rows.length){ el.innerHTML=`<div class="empty">${I.wrench}<div>Nothing here.</div></div>`; return; }
-  el.innerHTML=rows.map(srRow).join('');
-  el.querySelectorAll('[data-sropen]').forEach(b=>b.onclick=()=>{ const id=b.dataset.sropen; state.sr.open=state.sr.open===id?null:id; paintSrList(); });
-  el.querySelectorAll('[data-srstatus]').forEach(sel=>sel.onchange=async()=>{ const patch={status:sel.value}; if(['resolved','closed'].includes(sel.value))patch.resolved_at=new Date().toISOString(); if(sel.value==='acknowledged'&&!rows.find(x=>x.id===sel.dataset.srstatus)?.acknowledged_at)patch.acknowledged_at=new Date().toISOString(); await db.from('service_requests').update(patch).eq('id',sel.dataset.srstatus); await loadServiceRequests(); paintSrList(); });
-  el.querySelectorAll('[data-srassign]').forEach(b=>b.onclick=async()=>{ const v=document.getElementById('sra-'+b.dataset.srassign).value.trim(); await db.from('service_requests').update({assigned_to:v||null}).eq('id',b.dataset.srassign); await loadServiceRequests(); paintSrList(); });
-  el.querySelectorAll('[data-srnote]').forEach(b=>b.onclick=async()=>{ const v=document.getElementById('srn-'+b.dataset.srnote).value.trim(); await db.from('service_requests').update({resolved_note:v||null}).eq('id',b.dataset.srnote); await loadServiceRequests(); paintSrList(); });
-  el.querySelectorAll('[data-srdispatch]').forEach(b=>b.onclick=async()=>{ const id=b.dataset.srdispatch; const sel=document.getElementById('srd-'+id); const cid=sel.value; const msg=document.getElementById('srdmsg-'+id); if(!cid){ if(msg) msg.textContent='Pick a contractor first.'; return; } if(msg) msg.textContent='Dispatching…'; b.disabled=true; let r=null; try{ r=(await db.functions.invoke('pm-dispatch',{body:{action:'dispatch',service_request_id:id,contractor_id:cid}})).data; }catch(_e){} b.disabled=false; if(r&&r.ok){ if(msg) msg.textContent='Dispatched'+(r.sent&&r.sent.length?' by '+r.sent.join(' & '):''); await loadServiceRequests(); paintSrList(); } else if(msg){ msg.textContent=(r&&r.error)||'Could not dispatch — check the contractor has an email or phone.'; } });
-}
 function dispatchBlock(r,fmt){
   const resolved=['resolved','closed','cancelled'].includes(r.status);
   const cons=(state.contractors||[]);
@@ -3375,6 +3347,333 @@ function dispatchBlock(r,fmt){
     }
   }
   return status+ctl;
+}
+
+/* ===================== PM: TYPE-AWARE QUEUES, REPORT, STAGE 3/5 CARDS ===================== */
+const SR_TYPE={maintenance:"Work order",emergency:"Emergency",arc:"ARC request",violation:"Violation",amenity:"Amenity",coi:"Insurance",leasing:"Leasing",general:"General",access:"Access",account:"Account",records:"Records",resale_cert:"Resale certificate",hvac_afterhours:"After-hours HVAC"};
+const SR_SCOPE={in_unit:"inside the home/unit",common_area:"common area",base_building:"base building",tenant_space:"inside the suite",shell:"building shell"};
+const VIOL_STAGES=[["reported","Reported"],["notice_sent","Notice sent"],["cure_period","In cure period"],["cured","Cured — no fine"],["hearing_requested","Hearing requested"],["hearing_scheduled","Hearing scheduled"],["fined","Fine assessed"],["closed","Closed"]];
+const SR_FILTERS=[["open","Open"],["due","Due soon"],["emergency","Emergencies"],["work","Work orders"],["arc","ARC"],["violation","Violations"],["resale","Resale certs"],["accesshvac","Access & HVAC"],["account","Account"],["other","Amenities & records"],["notours","Not ours"],["resolved","Resolved"],["all","All"]];
+const srTypeLabel=t=>SR_TYPE[t]||t;
+const srDone=r=>['resolved','closed','cancelled'].includes(r.status);
+const srDeflected=r=>!!(r.details&&r.details.deflected);
+const srDue=r=>{ if(!r.due_at||srDone(r)) return null; const ms=new Date(r.due_at)-Date.now(); return { overdue:ms<0, days:Math.ceil(ms/864e5), soon:ms<7*864e5 }; };
+const pmMoney=n=>n==null?'':'$'+Number(n).toLocaleString('en-US',{maximumFractionDigits:0});
+const pmWhen=t=>t?new Date(t).toLocaleString('en-US',{month:'short',day:'numeric',hour:'numeric',minute:'2-digit'}):'';
+const pmDay=t=>t?new Date(t).toLocaleDateString('en-US',{weekday:'short',month:'short',day:'numeric'}):'';
+async function pmCoord(action,payload){ try{ const { data, error }=await db.functions.invoke('pm-coordinate',{ body:Object.assign({action},payload||{}) }); if(error) return { ok:false, error:error.message }; return data||{ok:false}; }catch(e){ return { ok:false, error:String(e) }; } }
+function srDueChip(r){ const d=srDue(r); if(!d) return ''; const txt=d.overdue?`Overdue ${Math.abs(d.days)}d`:(d.days===0?'Due today':`Due in ${d.days}d`); const col=d.overdue?['#b4443a','#fbe6e4']:(d.soon?['#8a6d00','#fdf3d6']:['#1f5fa8','#e8f0fa']); return `<span style="display:inline-block;font-size:11px;font-weight:700;padding:2px 9px;border-radius:999px;background:${col[1]};color:${col[0]}" title="${esc(pmDay(r.due_at))}">${txt}</span>`; }
+function srTypeChip(r){ const t=r.request_type; const col={arc:['#4c3d99','#ece8fa'],violation:['#8a4d00','#fdebd6'],resale_cert:['#1f6f8a','#e3f2f8'],hvac_afterhours:['#1f5fa8','#e8f0fa'],access:['#1f5fa8','#e8f0fa'],account:['#5c6b2e','#eef3dc'],amenity:['#5c6b2e','#eef3dc'],records:['#5c6b2e','#eef3dc'],coi:['#1f6f8a','#e3f2f8']}[t]||['#555','#eef0f2']; return `<span style="display:inline-block;font-size:11px;font-weight:600;padding:2px 9px;border-radius:999px;background:${col[1]};color:${col[0]}">${esc(srTypeLabel(t))}</span>`; }
+function srDetailChips(r){
+  const d=r.details||{}; const out=[];
+  if(r.scope) out.push(SR_SCOPE[r.scope]||r.scope);
+  if(r.request_type==='arc'){ if(d.address) out.push(d.address); if(d.contractor) out.push('Contractor: '+d.contractor); if(d.start_date) out.push('Wants to start '+d.start_date); if(d.arc_decision) out.push('Decision: '+d.arc_decision.replace(/_/g,' ')+(d.arc_decided_at?' '+pmDay(d.arc_decided_at):'')); }
+  if(r.request_type==='violation'){ if(d.reported_address) out.push('At '+d.reported_address); if(d.anonymous) out.push('Anonymous reporter'); out.push('Stage: '+((VIOL_STAGES.find(s=>s[0]===(d.violation_stage||'reported'))||[])[1]||'Reported')); if(d.cure_by) out.push('Cure by '+pmFmtDate(d.cure_by)); if(d.hearing_at) out.push('Hearing '+pmWhen(d.hearing_at)); }
+  if(r.request_type==='resale_cert'){ if(d.requester_type) out.push('From '+d.requester_type+(d.requester_company?' — '+d.requester_company:'')); if(d.closing_date) out.push('Closing '+d.closing_date); if(d.deliver_to) out.push('Deliver to '+d.deliver_to); if(d.is_update) out.push('Update (7 days)'); if(d.lender_questionnaire) out.push('Lender questionnaire'); if(d.delivered_at) out.push('Delivered '+pmDay(d.delivered_at)); }
+  if(r.request_type==='hvac_afterhours'){ if(d.start) out.push('Window '+(d.start||'')+(d.end?' → '+d.end:'')); if(d.company) out.push(d.company); out.push(d.authorized?'Authorized contact':'Needs authorized sign-off'); }
+  if(r.request_type==='access'){ if(d.kind) out.push(d.kind.replace(/_/g,' ')); if(d.person) out.push('For '+d.person); if(d.when) out.push(d.when); if(d.company) out.push(d.company); if(d.authorized===false) out.push('Needs authorized sign-off'); }
+  if(r.request_type==='account'){ if(d.topic) out.push(d.topic); }
+  if(d.deflected) out.push('Not the manager’s — guidance given'); if(d.routed) out.push(d.routed);
+  if(d.caller_role) out.push('Caller: '+d.caller_role+(d.company?' · '+d.company:''));
+  return out;
+}
+function srTypeActions(r){
+  if(srDone(r)&&r.request_type!=='violation') return '';
+  const d=r.details||{};
+  if(r.request_type==='arc') return `<div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-top:10px;padding:10px 12px;background:var(--surface);border-radius:var(--r-sm)"><span style="font-size:12px;font-weight:600">Committee decision</span><input class="inp" style="flex:1;min-width:180px" id="arcn-${r.id}" placeholder="Conditions or reason (read to the owner)" value="${esc(d.arc_note||'')}"><button class="btn sm primary" data-arc="approved" data-id="${r.id}">Approve</button><button class="btn sm" data-arc="needs_info" data-id="${r.id}">Needs info</button><button class="btn sm" data-arc="denied" data-id="${r.id}">Deny</button>${r.upload_token?`<button class="btn sm" data-arclink="${r.upload_token}">Copy upload link</button>`:`<button class="btn sm" data-arcsend="${r.id}">Send upload link</button>`}${(r.photos||[]).length?`<span style="font-size:12px;color:var(--muted)">${r.photos.length} attachment${r.photos.length>1?'s':''}</span>`:''}</div>`;
+  if(r.request_type==='violation') return `<div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-top:10px;padding:10px 12px;background:var(--surface);border-radius:var(--r-sm)"><span style="font-size:12px;font-weight:600">Stage</span><select class="inp" style="max-width:200px" id="vst-${r.id}">${pmOpts(VIOL_STAGES,d.violation_stage||'reported')}</select><input class="inp" type="date" style="max-width:160px" id="vdt-${r.id}" value="${esc(d.cure_by||'')}" title="Cure-by date"><button class="btn sm primary" data-viol="${r.id}">Update</button><span style="font-size:11.5px;color:var(--muted)">Notice by certified mail · reasonable cure period · 30-day hearing right · no fine if cured</span></div>`;
+  if(r.request_type==='resale_cert') return `<div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-top:10px"><button class="btn sm primary" data-srmark="delivered" data-id="${r.id}">Mark delivered</button><span style="font-size:11.5px;color:var(--muted)">Statutory clock: ${d.is_update?'7':'10'} business days</span></div>`;
+  if(r.request_type==='hvac_afterhours'||r.request_type==='access') return `<div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-top:10px">${r.status==='new'?`<button class="btn sm" data-srmark="confirmed" data-id="${r.id}">Confirm scheduled</button>`:''}<button class="btn sm primary" data-srmark="done" data-id="${r.id}">Done</button>${d.authorized===false?`<span style="font-size:11.5px;color:#b4443a">Needs an authorized contact’s OK first</span>`:''}</div>`;
+  if(r.request_type==='maintenance'&&!r.dispatched_at&&r.priority!=='emergency') return `<div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-top:10px"><input class="inp" style="max-width:140px" inputmode="numeric" id="apr-${r.id}" placeholder="Quote $"><button class="btn sm" data-approval="${r.id}">Ask owner/board to approve</button><span style="font-size:11.5px;color:var(--muted)">One-tap approve/decline by email or text</span></div>`;
+  return '';
+}
+function srMatch(r){
+  const f=state.sr.filter; const pf=state.sr.prop;
+  if(pf&&r.property_id!==pf) return false;
+  const done=srDone(r);
+  switch(f){
+    case 'all': return true;
+    case 'resolved': return done;
+    case 'emergency': return r.priority==='emergency'||r.request_type==='emergency';
+    case 'notours': return srDeflected(r);
+    case 'due': { const d=srDue(r); return !!d&&(d.overdue||d.soon); }
+    case 'work': return !done&&['maintenance','general','emergency'].includes(r.request_type)&&!srDeflected(r);
+    case 'arc': return r.request_type==='arc'&&(!done||!!(r.details&&r.details.arc_decision&&Date.now()-new Date(r.updated_at||r.created_at)<30*864e5));
+    case 'violation': return r.request_type==='violation'&&!done;
+    case 'resale': return r.request_type==='resale_cert'&&!done;
+    case 'accesshvac': return ['access','hvac_afterhours'].includes(r.request_type)&&!done;
+    case 'account': return r.request_type==='account'&&!done;
+    case 'other': return ['amenity','records','coi','leasing'].includes(r.request_type)&&!done;
+    default: return !done&&!srDeflected(r);
+  }
+}
+function pageServiceRequests(){
+  state.sr=state.sr||{filter:'open'}; if(!state.sr.filter) state.sr.filter='open';
+  const props=(state.pm&&state.pm.props)||[];
+  $("#page").innerHTML=`
+  <div class="page">
+    <div class="page-head"><h1>Service requests</h1><p>Every request ${esc(aName())} logs — work orders, emergencies, ARC and violations, resale certificates, after-hours HVAC, access, dues — with who it’s for, where it stands, and what’s due.</p></div>
+    <div class="card">
+      <div class="card-h" style="align-items:flex-start;gap:10px">
+        <div style="display:flex;gap:6px;flex-wrap:wrap" id="sr-filters">
+          ${SR_FILTERS.map(f=>`<button class="btn sm ${state.sr.filter===f[0]?'primary':''}" data-srf="${f[0]}">${f[1]}${f[0]==='due'?` <span id="sr-duecount"></span>`:''}</button>`).join('')}
+        </div>
+        <div style="display:flex;gap:8px;align-items:center"><select class="inp" style="max-width:220px" id="sr-prop"><option value="">All properties</option>${props.map(p=>`<option value="${p.id}"${state.sr.prop===p.id?' selected':''}>${esc(p.name)}</option>`).join('')}</select><button class="btn sm" id="sr-refresh">Refresh</button></div>
+      </div>
+      <div id="sr-list"><div class="empty">Loading…</div></div>
+    </div>
+  </div>`;
+  $("#sr-refresh").onclick=()=>pageServiceRequests();
+  $("#sr-prop").onchange=()=>{ state.sr.prop=$("#sr-prop").value||null; paintSrList(); };
+  $("#sr-filters").querySelectorAll('[data-srf]').forEach(b=>b.onclick=()=>{ state.sr.filter=b.dataset.srf; paintSrList(); $("#sr-filters").querySelectorAll('[data-srf]').forEach(x=>x.classList.toggle('primary',x.dataset.srf===state.sr.filter)); });
+  const go=()=>loadServiceRequests().then(()=>{ if(!props.length){ const sel=$("#sr-prop"); if(sel) sel.innerHTML=`<option value="">All properties</option>${((state.pm&&state.pm.props)||[]).map(p=>`<option value="${p.id}"${state.sr.prop===p.id?' selected':''}>${esc(p.name)}</option>`).join('')}`; } paintSrList(); });
+  if(!props.length) loadProperties().then(go); else go();
+}
+function paintSrList(){
+  const el=$("#sr-list"); if(!el) return;
+  const all=state.sr.list||[];
+  const dueN=all.filter(r=>{ const d=srDue(r); return d&&(d.overdue||d.soon)&&(!state.sr.prop||r.property_id===state.sr.prop); }).length; const dc=$("#sr-duecount"); if(dc) dc.textContent=dueN?`(${dueN})`:'';
+  let rows=all.filter(srMatch);
+  if(state.sr.filter==='due') rows=rows.slice().sort((a,b)=>new Date(a.due_at)-new Date(b.due_at));
+  if(!rows.length){ el.innerHTML=`<div class="empty">${I.wrench}<div>Nothing here.</div></div>`; return; }
+  el.innerHTML=rows.map(srRow).join('');
+  el.querySelectorAll('[data-sropen]').forEach(b=>b.onclick=()=>{ const id=b.dataset.sropen; state.sr.open=state.sr.open===id?null:id; paintSrList(); });
+  el.querySelectorAll('[data-srstatus]').forEach(sel=>sel.onchange=async()=>{ const patch={status:sel.value}; if(['resolved','closed'].includes(sel.value))patch.resolved_at=new Date().toISOString(); if(sel.value==='acknowledged'&&!rows.find(x=>x.id===sel.dataset.srstatus)?.acknowledged_at)patch.acknowledged_at=new Date().toISOString(); await db.from('service_requests').update(patch).eq('id',sel.dataset.srstatus); await loadServiceRequests(); paintSrList(); });
+  el.querySelectorAll('[data-srassign]').forEach(b=>b.onclick=async()=>{ const v=document.getElementById('sra-'+b.dataset.srassign).value.trim(); await db.from('service_requests').update({assigned_to:v||null}).eq('id',b.dataset.srassign); await loadServiceRequests(); paintSrList(); });
+  el.querySelectorAll('[data-srnote]').forEach(b=>b.onclick=async()=>{ const v=document.getElementById('srn-'+b.dataset.srnote).value.trim(); await db.from('service_requests').update({resolved_note:v||null}).eq('id',b.dataset.srnote); await loadServiceRequests(); paintSrList(); });
+  el.querySelectorAll('[data-srdispatch]').forEach(b=>b.onclick=async()=>{ const id=b.dataset.srdispatch; const sel=document.getElementById('srd-'+id); const cid=sel.value; const msg=document.getElementById('srdmsg-'+id); if(!cid){ if(msg) msg.textContent='Pick a contractor first.'; return; } if(msg) msg.textContent='Dispatching…'; b.disabled=true; let r=null; try{ r=(await db.functions.invoke('pm-dispatch',{body:{action:'dispatch',service_request_id:id,contractor_id:cid}})).data; }catch(_e){} b.disabled=false; if(r&&r.ok){ if(msg) msg.textContent='Dispatched'+(r.sent&&r.sent.length?' by '+r.sent.join(' & '):''); await loadServiceRequests(); paintSrList(); } else if(msg){ msg.textContent=(r&&r.error)||'Could not dispatch — check the contractor has an email or phone.'; } });
+  el.querySelectorAll('[data-srcoord]').forEach(b=>b.onclick=async()=>{ const id=b.dataset.srcoord; const msg=document.getElementById('srdmsg-'+id); if(msg) msg.textContent='Sending…'; const r=await pmCoord('propose_windows',{ service_request_id:id }); if(msg) msg.textContent=r.ok?('Asked the vendor for times'+(r.sent&&r.sent.length?' by '+r.sent.join(' & '):'')):(r.error||'Could not send.'); await loadServiceRequests(); paintSrList(); });
+  // type actions
+  el.querySelectorAll('[data-arc]').forEach(b=>b.onclick=async()=>{ const id=b.dataset.id, dec=b.dataset.arc; const note=(document.getElementById('arcn-'+id)||{}).value||''; const r=(state.sr.list||[]).find(x=>x.id===id)||{}; const details=Object.assign({},r.details||{},{arc_decision:dec,arc_note:note||null,arc_decided_at:new Date().toISOString()}); const patch={details}; if(dec==='approved'){ patch.status='resolved'; patch.resolved_at=new Date().toISOString(); patch.resolved_note='ARC approved'+(note?': '+note:''); } else if(dec==='denied'){ patch.status='closed'; patch.resolved_at=new Date().toISOString(); patch.resolved_note='ARC denied'+(note?': '+note:'')+' — owner may request a hearing within 30 days'; } else { patch.status='in_progress'; } await db.from('service_requests').update(patch).eq('id',id); pmCoord('arc_decision',{ service_request_id:id, decision:dec, note }); await loadServiceRequests(); paintSrList(); });
+  el.querySelectorAll('[data-arcsend]').forEach(b=>b.onclick=async()=>{ b.disabled=true; const r=await pmCoord('arc_upload_link',{ service_request_id:b.dataset.arcsend }); b.disabled=false; b.textContent=r.ok?('Sent'+(r.sent&&r.sent.length?' by '+r.sent.join(' & '):'')):(r.error||'Failed'); await loadServiceRequests(); setTimeout(paintSrList,900); });
+  el.querySelectorAll('[data-arclink]').forEach(b=>b.onclick=()=>{ const link=location.origin.replace(/\/$/,'')+'/arc/'+b.dataset.arclink; navigator.clipboard&&navigator.clipboard.writeText(link); b.textContent='Copied'; setTimeout(()=>{b.textContent='Copy upload link';},1200); });
+  el.querySelectorAll('[data-viol]').forEach(b=>b.onclick=async()=>{ const id=b.dataset.viol; const stage=document.getElementById('vst-'+id).value; const cure=document.getElementById('vdt-'+id).value||null; const r=(state.sr.list||[]).find(x=>x.id===id)||{}; const details=Object.assign({},r.details||{},{violation_stage:stage,cure_by:cure}); const now=new Date().toISOString(); if(stage==='notice_sent'&&!details.notice_sent_at) details.notice_sent_at=now; if(stage==='hearing_requested'&&!details.hearing_requested_at) details.hearing_requested_at=now; const patch={details}; if(stage==='cured'||stage==='closed'){ patch.status=stage==='cured'?'resolved':'closed'; patch.resolved_at=now; patch.resolved_note=stage==='cured'?'Cured within the cure period — no fine':(r.resolved_note||'Closed'); } else if(stage!=='reported'){ patch.status='in_progress'; } await db.from('service_requests').update(patch).eq('id',id); await loadServiceRequests(); paintSrList(); });
+  el.querySelectorAll('[data-srmark]').forEach(b=>b.onclick=async()=>{ const id=b.dataset.id, m=b.dataset.srmark; const r=(state.sr.list||[]).find(x=>x.id===id)||{}; const now=new Date().toISOString(); const details=Object.assign({},r.details||{}); const patch={details}; if(m==='delivered'){ details.delivered_at=now; patch.status='resolved'; patch.resolved_at=now; patch.resolved_note='Delivered'+(details.deliver_to?' to '+details.deliver_to:''); } if(m==='confirmed'){ details.confirmed_at=now; patch.status='acknowledged'; patch.acknowledged_at=now; } if(m==='done'){ patch.status='resolved'; patch.resolved_at=now; } await db.from('service_requests').update(patch).eq('id',id); await loadServiceRequests(); paintSrList(); });
+  el.querySelectorAll('[data-approval]').forEach(b=>b.onclick=async()=>{ const id=b.dataset.approval; const amt=pmNum((document.getElementById('apr-'+id)||{}).value); b.disabled=true; b.textContent='Sending…'; const r=await pmCoord('request_approval',{ service_request_id:id, amount:amt }); b.disabled=false; b.textContent=r.ok?('Sent to '+(r.approver||'approver')):(r.error||'Could not send'); await loadServiceRequests(); setTimeout(paintSrList,1200); });
+}
+function srRow(r){
+  const open=state.sr.open===r.id;
+  const emg=r.priority==='emergency'||r.request_type==='emergency';
+  const when=new Date(r.created_at).toLocaleString('en-US',{month:'short',day:'numeric',hour:'numeric',minute:'2-digit'});
+  const prop=r.properties?r.properties.name:'(unassigned)';
+  const fmt=t=>new Date(t).toLocaleString('en-US',{month:'short',day:'numeric',hour:'numeric',minute:'2-digit'});
+  const defl=srDeflected(r);
+  const head=`<div class="block-item" style="align-items:flex-start;gap:10px;cursor:pointer;${emg?'border-left:3px solid var(--danger)':(defl?'opacity:.75':'')}" data-sropen="${r.id}">
+    <div style="flex:1;min-width:0">
+      <div style="font-weight:600;font-size:13.5px">${esc(r.title||srTypeLabel(r.request_type))} ${pmPill(SR_STATUS,r.status)}${emg?` <span style="display:inline-block;font-size:11px;font-weight:700;padding:2px 9px;border-radius:999px;background:#fbe6e4;color:#b4443a">EMERGENCY</span>`:''} ${srDueChip(r)}</div>
+      <div style="font-size:12px;color:var(--muted);display:flex;gap:6px;flex-wrap:wrap;align-items:center">${srTypeChip(r)}<span>${esc(r.short_ref||'')} · ${esc(prop)}${r.unit?` · ${esc(r.unit)}`:''} · ${when}</span></div>
+    </div>
+    <span style="font-size:11px;color:var(--muted)">${open?'▲':'▼'}</span>
+  </div>`;
+  if(!open) return head;
+  const esl=(r.escalation_state&&Array.isArray(r.escalation_state.notified))?r.escalation_state.notified:[];
+  const timeline=emg?`<div style="margin-top:8px;font-size:12px"><div style="font-weight:600;margin-bottom:4px">Escalation</div>${r.acknowledged_at?`<div style="color:var(--ok)">✓ Confirmed ${fmt(r.acknowledged_at)}${r.acknowledged_by?' by '+esc(r.acknowledged_by):''} — ${Math.max(1,Math.round((new Date(r.acknowledged_at)-new Date(r.created_at))/60000))} min response</div>`:`<div style="color:var(--danger)">Awaiting confirmation</div>`}${esl.map(n=>`<div style="color:var(--muted)">→ ${esc(n.name||'contact')}${n.via&&n.via.length?' ('+esc(n.via.join(', '))+')':''} · ${n.at?fmt(n.at):''}</div>`).join('')}${r.escalation_state&&r.escalation_state.exhausted?`<div style="color:var(--danger)">⚠ On-call ladder exhausted — sent to general inbox</div>`:''}</div>`:'';
+  const chips=srDetailChips(r).concat([r.category?('Category: '+r.category):'',r.reported_channel?('Via '+r.reported_channel):'',r.permission_to_enter!=null?('Permission to enter: '+(r.permission_to_enter?'yes':'no')):'',r.access_instructions?('Access: '+r.access_instructions):''].filter(Boolean));
+  const detail=`<div style="padding:4px 12px 14px;border:1px solid var(--line);border-top:none;border-radius:0 0 var(--r-sm) var(--r-sm);margin-top:-6px">
+    ${r.description?`<div style="font-size:13px;margin:10px 0;white-space:pre-wrap">${esc(r.description)}</div>`:''}
+    <div style="font-size:12px;color:var(--muted);margin-bottom:10px">${chips.map(esc).join(' · ')}</div>
+    ${timeline}
+    ${srTypeActions(r)}
+    ${defl?'':`<div style="display:flex;gap:10px;flex-wrap:wrap;align-items:center;margin-top:12px">
+      <select class="inp" style="max-width:170px" data-srstatus="${r.id}">${pmOpts(Object.keys(SR_STATUS).map(k=>[k,SR_STATUS[k][0]]),r.status)}</select>
+      <input class="inp" style="max-width:200px" id="sra-${r.id}" placeholder="Assign to…" value="${esc(r.assigned_to||'')}"><button class="btn sm" data-srassign="${r.id}">Assign</button>
+    </div>
+    ${['maintenance','emergency','general'].includes(r.request_type)?dispatchBlock(r,fmt):''}
+    ${r.dispatched_at&&!srDone(r)?`<div style="display:flex;gap:10px;flex-wrap:wrap;align-items:center;margin-top:8px"><button class="btn sm" data-srcoord="${r.id}">Coordinate access time with resident</button><span style="font-size:11.5px;color:var(--muted)">${esc(aName())} asks the vendor for windows, offers them to the resident, and confirms both sides.</span></div>`:''}`}
+    <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:center;margin-top:10px">
+      <input class="inp" style="flex:1;min-width:200px" id="srn-${r.id}" placeholder="Resolution note…" value="${esc(r.resolved_note||'')}"><button class="btn sm" data-srnote="${r.id}">Save note</button>
+    </div>
+  </div>`;
+  return head+detail;
+}
+function pmGoRequests(propId, filter){ state.sr=state.sr||{}; state.sr.prop=propId||null; state.sr.filter=filter||'open'; state.view='requests'; renderPage(); }
+
+/* ---------- property detail: per-type cards ---------- */
+function pmQueueLine(label, rows, propId, filter, extra){
+  const n=rows.length; return `<div class="block-item" style="cursor:pointer" data-pmq="${filter}"><div style="flex:1"><div style="font-weight:600;font-size:13px">${esc(label)} <span class="lang-badge">${n}</span></div>${rows.length?`<div style="font-size:12px;color:var(--muted)">${rows.slice(0,3).map(r=>esc((r.short_ref||'')+' '+(r.title||'').slice(0,48))+(srDue(r)?' · '+(srDue(r).overdue?'overdue':'due '+pmDay(r.due_at)):'')).join('<br>')}${rows.length>3?`<br>+${rows.length-3} more`:''}</div>`:`<div style="font-size:12px;color:var(--muted)">${esc(extra||'Nothing open.')}</div>`}</div><span style="font-size:11px;color:var(--muted)">›</span></div>`;
+}
+function pmTypeCards(p, c){
+  const isHoa=p.property_type==='hoa', isCom=p.property_type==='commercial';
+  const open=(c.srs||[]).filter(r=>!srDone(r)&&!srDeflected(r));
+  const by=t=>open.filter(r=>Array.isArray(t)?t.includes(r.request_type):r.request_type===t);
+  const emg=open.filter(r=>r.priority==='emergency'||r.request_type==='emergency');
+  const deflected=(c.srs||[]).filter(srDeflected).slice(0,20);
+  let queues='';
+  if(isHoa){
+    queues=pmQueueLine('Common-area work orders', by(['maintenance','general']), p.id, 'work')+pmQueueLine('Emergencies', emg, p.id, 'emergency')+pmQueueLine('ARC requests', by('arc'), p.id, 'arc', 'No architectural requests pending.')+pmQueueLine('Violations', by('violation'), p.id, 'violation', 'No open violation reports.')+pmQueueLine('Resale certificates & records', by(['resale_cert','records']), p.id, 'resale', 'Nothing due.')+pmQueueLine('Dues & payment plans', by('account'), p.id, 'account')+pmQueueLine('Not the association’s (in-home) — guidance given', deflected, p.id, 'notours', 'No deflected calls yet.');
+  } else if(isCom){
+    queues=pmQueueLine('Building work orders', by(['maintenance','general']), p.id, 'work')+pmQueueLine('Emergencies', emg, p.id, 'emergency')+pmQueueLine('After-hours HVAC', by('hvac_afterhours'), p.id, 'accesshvac', 'No after-hours requests.')+pmQueueLine('Access cards, keys, visitors', by('access'), p.id, 'accesshvac')+pmQueueLine('Rent & account', by('account'), p.id, 'account')+pmQueueLine('Insurance (COI) & records', by(['coi','records']), p.id, 'other')+pmQueueLine('Tenant’s responsibility (per lease) — guidance given', deflected, p.id, 'notours', 'None.');
+  } else {
+    queues=pmQueueLine('Work orders', by(['maintenance','general']), p.id, 'work')+pmQueueLine('Emergencies', emg, p.id, 'emergency')+pmQueueLine('Leasing & showings', by('leasing'), p.id, 'other')+pmQueueLine('Rent & payment plans', by('account'), p.id, 'account')+pmQueueLine('Renters insurance & records', by(['coi','records']), p.id, 'other');
+  }
+  const due=open.filter(r=>srDue(r)&&(srDue(r).overdue||srDue(r).soon));
+  const queueCard=`<div class="card"><div class="card-h"><h2>${isHoa?'Community queues':isCom?'Building queues':'Property queues'}</h2><div style="display:flex;gap:8px"><button class="btn sm" id="pq-report">Owner / board report</button></div></div>${due.length?`<div style="font-size:12.5px;color:#b4443a;margin:-4px 0 10px;font-weight:600">${due.length} item${due.length>1?'s':''} due within 7 days or overdue.</div>`:''}<div id="pq-list">${queues}</div></div>`;
+
+  // Active incident (Stage 3)
+  const inc=(c.incidents||[])[0];
+  const incidentCard=`<div class="card"><div class="card-h"><h2>Active incident / outage notice</h2><span class="hint">${esc(aName())} reads this to every caller first</span></div>
+    ${inc?`<div style="padding:12px;border-radius:var(--r-sm);background:#fdf3d6;border:1px solid #f1dfa1"><div style="font-weight:600;font-size:13.5px">${esc(inc.title)}</div><div style="font-size:13px;margin:4px 0;white-space:pre-wrap">${esc(inc.message)}</div><div style="font-size:12px;color:var(--muted)">${inc.eta?'ETA: '+esc(inc.eta)+' · ':''}since ${pmWhen(inc.started_at)}${inc.broadcast_at?' · broadcast '+pmWhen(inc.broadcast_at)+(inc.broadcast_stats&&inc.broadcast_stats.sent!=null?' to '+inc.broadcast_stats.sent+' contact'+(inc.broadcast_stats.sent===1?'':'s'):''):''}</div><div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:10px"><input class="inp" style="max-width:220px" id="inc-eta" placeholder="Update ETA (e.g. water back by 4 PM)" value="${esc(inc.eta||'')}"><button class="btn sm" id="inc-update">Update</button>${inc.broadcast_at?'':`<button class="btn sm primary" id="inc-broadcast">Broadcast to everyone here</button>`}<button class="btn sm" id="inc-resolve">Resolved — clear notice</button><span id="inc-msg" style="font-size:12px;color:var(--muted)"></span></div></div>`
+    :`<p style="font-size:12.5px;color:var(--muted);margin:-4px 0 10px">When something affects many people (water shut-off, gate down, power out, elevator out), post it here. ${esc(aName())} tells callers what you already know and the ETA instead of logging the same request thirty times — and can text/email everyone on file at this ${isHoa?'community':'property'}.</p>
+    <div class="grid-2"><div class="field"><label class="lab">What’s happening</label><input class="inp" id="inc-title" placeholder="${isHoa?'e.g. Main water line break on Sunset Ridge Dr':isCom?'e.g. Elevator 2 out of service':'e.g. Hot water out, building-wide'}"></div><div class="field"><label class="lab">ETA <span class="sub">optional</span></label><input class="inp" id="inc-eta" placeholder="e.g. repairs by 4 PM today"></div></div>
+    <div class="field"><label class="lab">What ${esc(aName())} should say</label><textarea class="inp" id="inc-msg-text" rows="2" placeholder="e.g. We’re aware of the water outage; the city has a crew on site and expects service back by 4 PM. No need to report it — we’ll text when it’s restored."></textarea></div>
+    <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap"><button class="btn primary" id="inc-post">Post notice</button><label style="font-size:12.5px;display:flex;align-items:center;gap:6px"><input type="checkbox" id="inc-bc" style="width:auto"> also text/email everyone on file now</label><span id="inc-msg" style="font-size:12px;color:var(--muted)"></span></div>`}
+  </div>`;
+
+  // HOA: amenities & reservations; board & meetings
+  let hoaCards='';
+  if(isHoa){
+    const ams=c.amenities||[], res=c.reservations||[];
+    hoaCards+=`<div class="card"><div class="card-h"><h2>Amenities &amp; reservations</h2><span class="hint">${esc(aName())} lists, checks conflicts, reserves for verified residents</span></div>
+      <div id="am-list">${ams.length?ams.map(a=>`<div class="block-item"><div style="flex:1;min-width:0"><div style="font-weight:600;font-size:13px">${esc(a.name)} ${a.reservable?'<span class="lang-badge">reservable</span>':'<span class="lang-badge" style="background:#eef0f2;color:#666">first come</span>'}</div><div style="font-size:12px;color:var(--muted)">${esc([a.hours,a.capacity?('up to '+a.capacity):'',a.fee?('fee '+a.fee):'',a.deposit?('deposit '+a.deposit):''].filter(Boolean).join(' · '))}${a.rules?'<br>'+esc(a.rules):''}</div></div><button class="btn sm" data-amdel="${a.id}">Remove</button></div>`).join(''):`<div class="empty" style="padding:14px">No amenities on file yet — add the pool, clubhouse, pavilion, courts.</div>`}</div>
+      <div class="grid-2" style="margin-top:12px"><div class="field"><label class="lab">Amenity</label><input class="inp" id="am-name" placeholder="e.g. Clubhouse"></div><div class="field"><label class="lab">Hours</label><input class="inp" id="am-hours" placeholder="e.g. 8 AM – 10 PM"></div></div>
+      <div class="grid-2"><div class="field"><label class="lab">Capacity <span class="sub">optional</span></label><input class="inp" id="am-cap" inputmode="numeric"></div><div class="field"><label class="lab">Fee / deposit <span class="sub">optional</span></label><div style="display:flex;gap:8px"><input class="inp" id="am-fee" placeholder="$75"><input class="inp" id="am-dep" placeholder="$200 refundable"></div></div></div>
+      <div class="field"><label class="lab">Rules <span class="sub">${esc(aName())} reads these when reserving</span></label><input class="inp" id="am-rules" placeholder="e.g. No glass by the pool; music off by 10 PM; resident must be present"></div>
+      <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap"><label style="font-size:12.5px;display:flex;align-items:center;gap:6px"><input type="checkbox" id="am-res" checked style="width:auto"> residents can reserve it</label><button class="btn primary" id="am-add">Add amenity</button><span id="am-msg" style="font-size:12px;color:var(--muted)"></span></div>
+      <div style="font-weight:600;font-size:12.5px;margin:16px 0 6px;padding-top:12px;border-top:1px solid var(--line-2)">Upcoming reservations</div>
+      <div id="res-list">${res.length?res.map(r=>`<div class="block-item"><div style="flex:1;min-width:0"><div style="font-weight:600;font-size:13px">${esc((r.amenities&&r.amenities.name)||'Amenity')} · ${pmDay(r.starts_at)} ${new Date(r.starts_at).toLocaleTimeString('en-US',{hour:'numeric',minute:'2-digit'})}–${new Date(r.ends_at).toLocaleTimeString('en-US',{hour:'numeric',minute:'2-digit'})} ${pmPill({requested:['Requested','#8a6d00','#fdf3d6'],confirmed:['Confirmed','#1f7a4d','#e7f5ee'],cancelled:['Cancelled','#8a8f98','#eef0f2']},r.status)}</div><div style="font-size:12px;color:var(--muted)">${esc([r.resident_name,r.unit,r.guests?(r.guests+' guests'):'',r.notes].filter(Boolean).join(' · '))}</div></div>${r.status!=='cancelled'?`<button class="btn sm" data-rescancel="${r.id}">Cancel</button>`:''}</div>`).join(''):`<div class="empty" style="padding:14px">No upcoming reservations.</div>`}</div>
+    </div>`;
+    const b=p.board||{}; const mtgs=c.meetings||[];
+    hoaCards+=`<div class="card"><div class="card-h"><h2>Board &amp; meetings</h2><span class="hint">who approves, when the board meets, quorum</span></div>
+      <div class="grid-2"><div class="field"><label class="lab">President</label><input class="inp" id="bd-pres" value="${esc(b.president||'')}" placeholder="name · email"></div><div class="field"><label class="lab">Treasurer</label><input class="inp" id="bd-treas" value="${esc(b.treasurer||'')}" placeholder="name · email"></div></div>
+      <div class="grid-2"><div class="field"><label class="lab">Approvals go to <span class="sub">email for one-tap approvals</span></label><input class="inp" id="bd-approver" value="${esc(b.approver_email||'')}" placeholder="president@…"></div><div class="field"><label class="lab">Regular meeting schedule <span class="sub">${esc(aName())} answers “when does the board meet?”</span></label><input class="inp" id="bd-sched" value="${esc(b.meeting_schedule||'')}" placeholder="e.g. 2nd Tuesday monthly, 6:30 PM, clubhouse"></div></div>
+      <div style="display:flex;gap:10px;align-items:center"><button class="btn primary" id="bd-save">Save board</button><span id="bd-msg" style="font-size:12px;color:var(--muted)"></span></div>
+      ${pmMeetingsBlock(p, mtgs, c.rsvps||[])}
+    </div>`;
+  }
+
+  // Commercial: tenant companies, HVAC log, access
+  let comCards='';
+  if(isCom){
+    const groups={}; (c.people||[]).forEach(x=>{ if(['tenant','owner'].includes(x.role)||x.company){ const k=(x.company||x.unit||x.name||'—'); (groups[k]=groups[k]||{company:x.company,unit:x.unit,people:[]}).people.push(x); } });
+    const coiBy={}; (c.coi||[]).forEach(t=>{ const k=(t.unit||'').toLowerCase(); if(k&&!coiBy[k]) coiBy[k]=t; });
+    const hv=(c.srs||[]).filter(r=>r.request_type==='hvac_afterhours').slice(0,12);
+    comCards+=`<div class="card"><div class="card-h"><h2>Tenant companies</h2><span class="hint">suite · lease · authorized contacts · insurance</span></div>
+      ${Object.keys(groups).length?Object.entries(groups).map(([k,g])=>{ const coi=coiBy[String(g.unit||'').toLowerCase()]; return `<div class="block-item" style="align-items:flex-start"><div style="flex:1;min-width:0"><div style="font-weight:600;font-size:13px">${esc(g.company||k)}${g.unit?` <span style="color:var(--muted);font-size:12px">· Suite ${esc(g.unit)}</span>`:''} ${coi?pmPill(COI_STATUS,coi.status):'<span class="lang-badge" style="background:#fbe6e4;color:#b4443a">no COI</span>'}</div><div style="font-size:12px;color:var(--muted)">${g.people.map(x=>esc(x.name||'(contact)')+(x.authorized?' <b>(authorized)</b>':'')).join(', ')}${g.people.some(x=>x.lease_type)?' · lease: '+esc(g.people.find(x=>x.lease_type).lease_type):''}${g.people.filter(x=>x.authorized).length<2?' · <span style="color:#8a6d00">fewer than 2 authorized contacts</span>':''}</div></div></div>`; }).join(''):`<div class="empty" style="padding:14px">Add tenant companies under People (set the company and who is authorized).</div>`}
+      <div style="font-weight:600;font-size:12.5px;margin:16px 0 6px;padding-top:12px;border-top:1px solid var(--line-2)">After-hours HVAC log <span class="hint" style="font-weight:400">billable per lease</span></div>
+      ${hv.length?hv.map(r=>`<div class="block-item"><div style="flex:1;min-width:0"><div style="font-weight:600;font-size:13px">${esc(r.title)} ${pmPill(SR_STATUS,r.status)}</div><div style="font-size:12px;color:var(--muted)">${esc(srDetailChips(r).join(' · '))}</div></div></div>`).join(''):`<div class="empty" style="padding:14px">No after-hours requests yet.</div>`}
+    </div>`;
+  }
+
+  // Residential: units & leases, upcoming visits
+  let resCards='';
+  if(!isHoa&&!isCom){
+    const tenants=(c.people||[]).filter(x=>x.role==='tenant'); const coiBy={}; (c.coi||[]).forEach(t=>{ const k=(t.unit||'').toLowerCase(); if(k&&!coiBy[k]) coiBy[k]=t; });
+    const soon=d=>{ if(!d) return ''; const days=Math.ceil((new Date(d+'T00:00:00')-Date.now())/864e5); return days<0?`<span style="color:#b4443a">lease ended ${pmFmtDate(d)}</span>`:(days<=60?`<span style="color:#8a6d00">lease ends ${pmFmtDate(d)} (${days}d)</span>`:`lease ends ${pmFmtDate(d)}`); };
+    resCards+=`<div class="card"><div class="card-h"><h2>Units &amp; leases</h2><span class="hint">who’s in each unit, lease dates, renters insurance</span></div>
+      ${tenants.length?tenants.sort((a,b)=>String(a.unit||'').localeCompare(String(b.unit||''),undefined,{numeric:true})).map(t=>{ const coi=coiBy[String(t.unit||'').toLowerCase()]; return `<div class="block-item" style="align-items:flex-start"><div style="flex:1;min-width:0"><div style="font-weight:600;font-size:13px">${t.unit?'Unit '+esc(t.unit)+' · ':''}${esc(t.name||'(tenant)')} ${p.require_tenant_insurance?(coi?pmPill(COI_STATUS,coi.status):'<span class="lang-badge" style="background:#fbe6e4;color:#b4443a">no insurance on file</span>'):''}</div><div style="font-size:12px;color:var(--muted);display:flex;gap:8px;flex-wrap:wrap;align-items:center"><span>${esc([t.phone,t.email].filter(Boolean).join(' · '))}</span><span>${soon(t.lease_end)}</span>${t.rent_due_day?`<span>rent due the ${t.rent_due_day}${['th','st','nd','rd'][(t.rent_due_day%10>3||[11,12,13].includes(t.rent_due_day%100))?0:t.rent_due_day%10]}</span>`:''}</div><div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:6px;align-items:center"><input class="inp" type="date" style="max-width:150px" id="ls-${t.id}" value="${esc(t.lease_start||'')}" title="Lease start"><input class="inp" type="date" style="max-width:150px" id="le-${t.id}" value="${esc(t.lease_end||'')}" title="Lease end"><input class="inp" style="max-width:90px" inputmode="numeric" id="rd-${t.id}" value="${t.rent_due_day||''}" placeholder="Due day"><button class="btn sm" data-lease="${t.id}">Save lease</button></div></div></div>`; }).join(''):`<div class="empty" style="padding:14px">Add tenants under People; lease dates go here.</div>`}
+    </div>`;
+  }
+  // Upcoming visits at this property (all types)
+  const ap=(c.appointments||[]);
+  const visitsCard=`<div class="card"><div class="card-h"><h2>Upcoming visits here</h2><span class="hint">showings, inspections, vendor access, meetings</span></div>${ap.length?ap.map(a=>`<div class="block-item"><div style="flex:1;min-width:0"><div style="font-weight:600;font-size:13px">${esc(a.title||a.kind||'Visit')}</div><div style="font-size:12px;color:var(--muted)">${pmWhen(a.starts_at)}${a.unit?' · '+esc(a.unit):''}${a.location_address?' · '+esc(a.location_address):''}</div></div></div>`).join(''):`<div class="empty" style="padding:14px">Nothing scheduled here yet.</div>`}</div>`;
+
+  // Compliance calendar (Stage 5) — all types
+  const comp=c.compliance||[];
+  const compCard=`<div class="card"><div class="card-h"><h2>Compliance calendar</h2><span class="hint">${esc(aName())} reminds you, then schedules the access</span></div>
+    <p style="font-size:12.5px;color:var(--muted);margin:-4px 0 10px">${isHoa?'Pool permit, backflow, playground inspection, reserve study, insurance renewal, annual meeting notice, tax filing.':isCom?'Elevator certificate, fire alarm & sprinkler, backflow, fire marshal, roof warranty inspection, insurance renewal.':'Smoke/CO detector checks, HVAC service, insurance renewal, city registration, lease renewals.'} Recurring items roll forward when you mark them done.</p>
+    <div id="cp-list">${comp.length?comp.map(x=>{ const days=Math.ceil((new Date(x.due_date+'T00:00:00')-Date.now())/864e5); const late=days<0&&x.status!=='done'; return `<div class="block-item" style="${late?'border-left:3px solid var(--danger)':''}"><div style="flex:1;min-width:0"><div style="font-weight:600;font-size:13px">${esc(x.title)} <span class="lang-badge">${esc(x.kind)}</span>${x.access_needed?' <span class="lang-badge" style="background:#e8f0fa;color:#164a85">needs access</span>':''}</div><div style="font-size:12px;color:${late?'#b4443a':'var(--muted)'}">${late?'Overdue — was due ':'Due '}${pmFmtDate(x.due_date)}${x.frequency_months?' · every '+x.frequency_months+' mo':''}${x.vendor_name?' · '+esc(x.vendor_name):''}${x.notes?' · '+esc(x.notes):''}</div></div><div style="display:flex;gap:6px">${x.access_needed&&x.status!=='done'?`<button class="btn sm" data-cpaccess="${x.id}">Schedule access</button>`:''}<button class="btn sm primary" data-cpdone="${x.id}">Done</button><button class="btn sm" data-cpdel="${x.id}">Remove</button></div></div>`; }).join(''):`<div class="empty" style="padding:14px">No compliance items yet.</div>`}</div>
+    <div class="grid-2" style="margin-top:12px"><div class="field"><label class="lab">Item</label><input class="inp" id="cp-title" placeholder="${isHoa?'e.g. Pool health permit renewal':isCom?'e.g. Elevator annual certificate':'e.g. Smoke detector check'}"></div><div class="field"><label class="lab">Kind</label><select class="inp" id="cp-kind">${pmOpts([["inspection","Inspection"],["certificate","Certificate / permit"],["insurance","Insurance renewal"],["filing","Filing / tax"],["maintenance","Preventive maintenance"],["meeting","Meeting / notice"],["other","Other"]],'inspection')}</select></div></div>
+    <div class="grid-2"><div class="field"><label class="lab">Due</label><input class="inp" type="date" id="cp-due"></div><div class="field"><label class="lab">Repeats every <span class="sub">months, blank = once</span></label><input class="inp" id="cp-freq" inputmode="numeric" placeholder="12"></div></div>
+    <div class="grid-2"><div class="field"><label class="lab">Vendor <span class="sub">optional</span></label><input class="inp" id="cp-vendor" placeholder="e.g. Otis / city inspector"></div><div class="field"><label class="lab">Remind me <span class="sub">days before</span></label><input class="inp" id="cp-remind" inputmode="numeric" value="30"></div></div>
+    <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap"><label style="font-size:12.5px;display:flex;align-items:center;gap:6px"><input type="checkbox" id="cp-access" style="width:auto"> needs access to ${isHoa?'homes':isCom?'suites':'units'} (${esc(aName())} coordinates)</label><button class="btn primary" id="cp-add">Add item</button><span id="cp-msg" style="font-size:12px;color:var(--muted)"></span></div>
+  </div>`;
+  const approvals=(c.approvals||[]);
+  const apprCard=approvals.length?`<div class="card"><div class="card-h"><h2>Approvals</h2><span class="hint">one-tap, by email or text</span></div>${approvals.map(a=>`<div class="block-item"><div style="flex:1;min-width:0"><div style="font-weight:600;font-size:13px">${esc(a.summary||'Approval')}${a.amount!=null?' · '+pmMoney(a.amount):''} ${pmPill({pending:['Waiting','#8a6d00','#fdf3d6'],approved:['Approved','#1f7a4d','#e7f5ee'],declined:['Declined','#b4443a','#fbe6e4'],expired:['Expired','#8a8f98','#eef0f2'],cancelled:['Cancelled','#8a8f98','#eef0f2']},a.status)}</div><div style="font-size:12px;color:var(--muted)">${esc(a.approver_name||a.approver_email||'')}${a.sent_at?' · sent '+pmWhen(a.sent_at):''}${a.decided_at?' · decided '+pmWhen(a.decided_at):''}${a.decision_note?' · '+esc(a.decision_note):''}</div></div></div>`).join('')}</div>`:'';
+  return queueCard+incidentCard+hoaCards+comCards+resCards+(isHoa?'':pmMeetingsCardStandalone(p,c))+visitsCard+compCard+apprCard;
+}
+function pmMeetingsBlock(p, mtgs, rsvps){
+  const cnt=m=>{ const r=rsvps.filter(x=>x.meeting_id===m.id); const att=r.filter(x=>x.attending&&!x.proxy).length, prox=r.filter(x=>x.proxy).length; return {att,prox,total:att+prox}; };
+  return `<div style="font-weight:600;font-size:12.5px;margin:16px 0 6px;padding-top:12px;border-top:1px solid var(--line-2)">Meetings &amp; hearings <span class="hint" style="font-weight:400">${esc(aName())} answers “when is the meeting?”, takes RSVPs and proxies, and counts quorum</span></div>
+    <div id="mt-list">${mtgs.length?mtgs.map(m=>{ const q=cnt(m); const quorum=m.quorum_required?` · quorum ${q.total}/${m.quorum_required}${q.total>=m.quorum_required?' ✓':''}`:''; return `<div class="block-item"><div style="flex:1;min-width:0"><div style="font-weight:600;font-size:13px">${esc(m.title)} <span class="lang-badge">${esc(m.kind)}</span></div><div style="font-size:12px;color:var(--muted)">${pmWhen(m.starts_at)}${m.location?' · '+esc(m.location):''}${m.virtual_url?' · online':''} · ${q.att} attending, ${q.prox} proxies${quorum}${m.notice_sent_at?' · notice sent '+pmDay(m.notice_sent_at):''}</div></div><div style="display:flex;gap:6px">${m.notice_sent_at?'':`<button class="btn sm" data-mtnotice="${m.id}">Send notice</button>`}<button class="btn sm" data-mtdel="${m.id}">Remove</button></div></div>`; }).join(''):`<div class="empty" style="padding:14px">No meetings scheduled.</div>`}</div>
+    <div class="grid-2" style="margin-top:12px"><div class="field"><label class="lab">Meeting</label><input class="inp" id="mt-title" placeholder="e.g. Annual meeting / Board meeting / Violation hearing"></div><div class="field"><label class="lab">Kind</label><select class="inp" id="mt-kind">${pmOpts([["board","Board meeting"],["annual","Annual meeting"],["special","Special meeting"],["budget","Budget meeting"],["hearing","Hearing"],["other","Other"]],'board')}</select></div></div>
+    <div class="grid-2"><div class="field"><label class="lab">When</label><input class="inp" type="datetime-local" id="mt-when"></div><div class="field"><label class="lab">Where <span class="sub">or a video link</span></label><input class="inp" id="mt-where" placeholder="Clubhouse / Zoom link"></div></div>
+    <div class="grid-2"><div class="field"><label class="lab">Quorum needed <span class="sub">owners or proxies — optional</span></label><input class="inp" id="mt-quorum" inputmode="numeric"></div><div class="field"><label class="lab">Agenda <span class="sub">optional</span></label><input class="inp" id="mt-agenda" placeholder="Budget vote; pool resurfacing; elections"></div></div>
+    <div style="display:flex;gap:10px;align-items:center"><button class="btn primary" id="mt-add">Add meeting</button><span id="mt-msg" style="font-size:12px;color:var(--muted)"></span></div>`;
+}
+function pmMeetingsCardStandalone(p,c){ return `<div class="card"><div class="card-h"><h2>Meetings</h2><span class="hint">owner meetings, tenant town halls, hearings</span></div>${pmMeetingsBlock(p, c.meetings||[], c.rsvps||[])}</div>`; }
+
+async function pmLoadPropertyExtras(id){
+  const since=new Date(Date.now()-120*864e5).toISOString();
+  const [srs,ams,res,ap,inc,comp,mtg,appr]=await Promise.all([
+    db.from('service_requests').select('*').eq('property_id',id).gte('created_at',since).order('created_at',{ascending:false}).limit(300),
+    db.from('amenities').select('*').eq('property_id',id).eq('is_active',true).order('name'),
+    db.from('amenity_reservations').select('*, amenities(name)').eq('property_id',id).gte('ends_at',new Date().toISOString()).order('starts_at').limit(30),
+    db.from('appointments').select('id,title,kind,starts_at,unit,location_address,status').eq('property_id',id).gte('starts_at',new Date().toISOString()).neq('status','cancelled').order('starts_at').limit(12),
+    db.from('pm_incidents').select('*').eq('property_id',id).eq('is_active',true).order('started_at',{ascending:false}).limit(1),
+    db.from('pm_compliance_items').select('*').eq('property_id',id).neq('status','done').order('due_date').limit(50),
+    db.from('pm_meetings').select('*').eq('property_id',id).gte('starts_at',new Date(Date.now()-864e5).toISOString()).neq('status','cancelled').order('starts_at').limit(12),
+    db.from('pm_approvals').select('*').eq('property_id',id).order('created_at',{ascending:false}).limit(10)
+  ]);
+  const mtgs=mtg.data||[]; let rsvps=[];
+  if(mtgs.length){ const { data }=await db.from('pm_meeting_rsvps').select('meeting_id,attending,proxy').in('meeting_id',mtgs.map(m=>m.id)); rsvps=data||[]; }
+  return { srs:srs.data||[], amenities:ams.data||[], reservations:res.data||[], appointments:ap.data||[], incidents:inc.data||[], compliance:comp.data||[], meetings:mtgs, rsvps, approvals:appr.data||[] };
+}
+function pmBindTypeCards(id, p, c){
+  const box=$("#pm-detail"); if(!box) return;
+  box.querySelectorAll('[data-pmq]').forEach(b=>b.onclick=()=>pmGoRequests(id, b.dataset.pmq));
+  const rep=$("#pq-report"); if(rep) rep.onclick=()=>pmOpenReport(id);
+  // incident
+  const post=$("#inc-post"); if(post) post.onclick=async()=>{ const title=$("#inc-title").value.trim(), message=$("#inc-msg-text").value.trim(), eta=$("#inc-eta").value.trim(); const m=$("#inc-msg"); if(!title||!message){ m.textContent='Add a title and what to say.'; return; } m.textContent='Posting…'; const { data, error }=await db.from('pm_incidents').insert({ account_id:state.account.id, property_id:id, title, message, eta:eta||null }).select('id').maybeSingle(); if(error){ m.textContent=error.message; return; } if($("#inc-bc").checked&&data){ m.textContent='Broadcasting…'; await pmCoord('broadcast_incident',{ incident_id:data.id }); } openProperty(id); };
+  const upd=$("#inc-update"); if(upd) upd.onclick=async()=>{ const inc=(c.incidents||[])[0]; if(!inc) return; await db.from('pm_incidents').update({ eta:$("#inc-eta").value.trim()||null }).eq('id',inc.id); openProperty(id); };
+  const bc=$("#inc-broadcast"); if(bc) bc.onclick=async()=>{ const inc=(c.incidents||[])[0]; if(!inc) return; const m=$("#inc-msg"); m.textContent='Broadcasting…'; const r=await pmCoord('broadcast_incident',{ incident_id:inc.id }); m.textContent=r.ok?`Sent to ${r.sent||0}`:(r.error||'Could not send'); setTimeout(()=>openProperty(id),900); };
+  const rs=$("#inc-resolve"); if(rs) rs.onclick=async()=>{ const inc=(c.incidents||[])[0]; if(!inc) return; const m=$("#inc-msg"); m.textContent='Clearing…'; await db.from('pm_incidents').update({ is_active:false, resolved_at:new Date().toISOString() }).eq('id',inc.id); if(inc.broadcast_at) await pmCoord('broadcast_incident',{ incident_id:inc.id, resolved:true }); openProperty(id); };
+  // amenities
+  const amAdd=$("#am-add"); if(amAdd) amAdd.onclick=async()=>{ const name=$("#am-name").value.trim(); const m=$("#am-msg"); if(!name){ m.textContent='Name the amenity.'; return; } const { error }=await db.from('amenities').insert({ account_id:state.account.id, property_id:id, name, hours:$("#am-hours").value.trim()||null, capacity:pmNum($("#am-cap").value), fee:$("#am-fee").value.trim()||null, deposit:$("#am-dep").value.trim()||null, rules:$("#am-rules").value.trim()||null, reservable:$("#am-res").checked }); if(error){ m.textContent=error.message; return; } openProperty(id); };
+  box.querySelectorAll('[data-amdel]').forEach(b=>b.onclick=async()=>{ await db.from('amenities').update({is_active:false}).eq('id',b.dataset.amdel); openProperty(id); });
+  box.querySelectorAll('[data-rescancel]').forEach(b=>b.onclick=async()=>{ await db.from('amenity_reservations').update({status:'cancelled'}).eq('id',b.dataset.rescancel); openProperty(id); });
+  // board
+  const bd=$("#bd-save"); if(bd) bd.onclick=async()=>{ const m=$("#bd-msg"); m.textContent='Saving…'; const board=Object.assign({}, p.board||{}, { president:$("#bd-pres").value.trim()||null, treasurer:$("#bd-treas").value.trim()||null, approver_email:$("#bd-approver").value.trim()||null, meeting_schedule:$("#bd-sched").value.trim()||null }); const { error }=await db.from('properties').update({ board }).eq('id',id); m.textContent=error?error.message:'Saved.'; if(!error) await loadProperties(); };
+  // meetings
+  const mt=$("#mt-add"); if(mt) mt.onclick=async()=>{ const title=$("#mt-title").value.trim(), when=$("#mt-when").value; const m=$("#mt-msg"); if(!title||!when){ m.textContent='Title and time, please.'; return; } const where=$("#mt-where").value.trim(); const { error }=await db.from('pm_meetings').insert({ account_id:state.account.id, property_id:id, title, kind:$("#mt-kind").value, starts_at:new Date(when).toISOString(), location:/^https?:/i.test(where)?null:(where||null), virtual_url:/^https?:/i.test(where)?where:null, quorum_required:pmNum($("#mt-quorum").value), agenda:$("#mt-agenda").value.trim()||null }); if(error){ m.textContent=error.message; return; } openProperty(id); };
+  box.querySelectorAll('[data-mtdel]').forEach(b=>b.onclick=async()=>{ await db.from('pm_meetings').update({status:'cancelled'}).eq('id',b.dataset.mtdel); openProperty(id); });
+  box.querySelectorAll('[data-mtnotice]').forEach(b=>b.onclick=async()=>{ b.disabled=true; b.textContent='Sending…'; const r=await pmCoord('meeting_notice',{ meeting_id:b.dataset.mtnotice }); b.textContent=r.ok?`Sent to ${r.sent||0}`:(r.error||'Failed'); setTimeout(()=>openProperty(id),1200); });
+  // leases
+  box.querySelectorAll('[data-lease]').forEach(b=>b.onclick=async()=>{ const pid=b.dataset.lease; await db.from('property_contacts').update({ lease_start:document.getElementById('ls-'+pid).value||null, lease_end:document.getElementById('le-'+pid).value||null, rent_due_day:pmNum(document.getElementById('rd-'+pid).value) }).eq('id',pid); b.textContent='Saved'; setTimeout(()=>openProperty(id),600); });
+  // compliance
+  const cp=$("#cp-add"); if(cp) cp.onclick=async()=>{ const title=$("#cp-title").value.trim(), due=$("#cp-due").value; const m=$("#cp-msg"); if(!title||!due){ m.textContent='Item and due date, please.'; return; } const { error }=await db.from('pm_compliance_items').insert({ account_id:state.account.id, property_id:id, title, kind:$("#cp-kind").value, due_date:due, frequency_months:pmNum($("#cp-freq").value), vendor_name:$("#cp-vendor").value.trim()||null, remind_days:pmNum($("#cp-remind").value)||30, access_needed:$("#cp-access").checked }); if(error){ m.textContent=error.message; return; } openProperty(id); };
+  box.querySelectorAll('[data-cpdone]').forEach(b=>b.onclick=async()=>{ const it=(c.compliance||[]).find(x=>x.id===b.dataset.cpdone); if(!it) return; const today=new Date().toISOString().slice(0,10); if(it.frequency_months){ const d=new Date(it.due_date+'T00:00:00'); d.setMonth(d.getMonth()+Number(it.frequency_months)); while(d<new Date()) d.setMonth(d.getMonth()+Number(it.frequency_months)); await db.from('pm_compliance_items').update({ due_date:d.toISOString().slice(0,10), completed_on:today, status:'scheduled', reminded_at:null }).eq('id',it.id); } else { await db.from('pm_compliance_items').update({ status:'done', completed_on:today }).eq('id',it.id); } openProperty(id); });
+  box.querySelectorAll('[data-cpdel]').forEach(b=>b.onclick=async()=>{ await db.from('pm_compliance_items').delete().eq('id',b.dataset.cpdel); openProperty(id); });
+  box.querySelectorAll('[data-cpaccess]').forEach(b=>b.onclick=async()=>{ b.disabled=true; b.textContent='Scheduling…'; const r=await pmCoord('compliance_access',{ compliance_id:b.dataset.cpaccess }); b.textContent=r.ok?`Asked ${r.sent||0} ${r.sent===1?'resident':'residents'}`:(r.error||'Failed'); });
+}
+
+/* ---------- Owner / board report (printable) ---------- */
+async function pmOpenReport(propId){
+  const p=((state.pm&&state.pm.props)||[]).find(x=>x.id===propId); if(!p) return;
+  const now=new Date(); const start=new Date(now.getFullYear(), now.getMonth()-1, 1); const end=new Date(now.getFullYear(), now.getMonth(), 1);
+  const period=start.toLocaleDateString('en-US',{month:'long',year:'numeric'});
+  const w=window.open('','_blank'); if(w) w.document.write('<title>Report</title><p style="font-family:system-ui;padding:30px">Building the report…</p>');
+  const [srs,appr,res,comp,mtg,calls]=await Promise.all([
+    db.from('service_requests').select('*').eq('property_id',propId).gte('created_at',start.toISOString()).lt('created_at',end.toISOString()).order('created_at'),
+    db.from('pm_approvals').select('*').eq('property_id',propId).gte('created_at',start.toISOString()).lt('created_at',end.toISOString()),
+    db.from('amenity_reservations').select('*, amenities(name)').eq('property_id',propId).gte('starts_at',start.toISOString()).lt('starts_at',end.toISOString()),
+    db.from('pm_compliance_items').select('*').eq('property_id',propId).neq('status','done').lte('due_date',new Date(now.getTime()+60*864e5).toISOString().slice(0,10)).order('due_date'),
+    db.from('pm_meetings').select('*').eq('property_id',propId).gte('starts_at',now.toISOString()).neq('status','cancelled').order('starts_at').limit(5),
+    db.from('calls').select('id,started_at,duration_seconds,outcome').eq('account_id',state.account.id).gte('started_at',start.toISOString()).lt('started_at',end.toISOString())
+  ]);
+  const rows=srs.data||[]; const isHoa=p.property_type==='hoa';
+  const byType={}; rows.forEach(r=>{ byType[r.request_type]=(byType[r.request_type]||0)+1; });
+  const resolved=rows.filter(srDone).length; const deflected=rows.filter(srDeflected).length;
+  const emgs=rows.filter(r=>r.priority==='emergency'||r.request_type==='emergency');
+  const resp=emgs.filter(e=>e.acknowledged_at).map(e=>(new Date(e.acknowledged_at)-new Date(e.created_at))/60000);
+  const avgResp=resp.length?Math.round(resp.reduce((a,b)=>a+b,0)/resp.length):null;
+  const approved=(appr.data||[]).filter(a=>a.status==='approved'); const dollars=approved.reduce((s,a)=>s+Number(a.amount||0),0);
+  const arc=rows.filter(r=>r.request_type==='arc'); const viol=rows.filter(r=>r.request_type==='violation'); const resale=rows.filter(r=>r.request_type==='resale_cert');
+  const phoneRows=rows.filter(r=>r.reported_channel==='phone').length;
+  const tr=(k,v)=>`<tr><td style="padding:6px 10px;color:#555">${k}</td><td style="padding:6px 10px;font-weight:600;text-align:right">${v}</td></tr>`;
+  const list=(title,items)=>items.length?`<h3>${title}</h3><table style="width:100%;border-collapse:collapse;font-size:13px">${items.map(r=>`<tr style="border-top:1px solid #eee"><td style="padding:6px 8px;white-space:nowrap;color:#555">${new Date(r.created_at).toLocaleDateString('en-US',{month:'short',day:'numeric'})}</td><td style="padding:6px 8px">${esc(r.title||r.request_type)}${r.unit?' · '+esc(r.unit):''}</td><td style="padding:6px 8px;white-space:nowrap;text-align:right;color:#555">${esc(SR_STATUS[r.status]?SR_STATUS[r.status][0]:r.status)}${r.due_at&&!srDone(r)?' · due '+pmDay(r.due_at):''}</td></tr>`).join('')}</table>`:'';
+  const html=`<!doctype html><html><head><meta charset="utf-8"><title>${esc(p.name)} — ${period} report</title><style>body{font-family:system-ui,-apple-system,Segoe UI,Roboto,sans-serif;max-width:820px;margin:0 auto;padding:36px 28px;color:#182230}h1{margin:0 0 4px;font-size:22px}h2{font-size:15px;margin:26px 0 8px;padding-bottom:6px;border-bottom:2px solid #182230}h3{font-size:13px;margin:16px 0 6px;color:#333}.kpis{display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin:14px 0}.kpi{border:1px solid #e5e7eb;border-radius:10px;padding:12px}.kpi b{display:block;font-size:22px}.kpi span{font-size:12px;color:#555}@media print{button{display:none}}</style></head><body>
+  <button onclick="window.print()" style="float:right;padding:8px 14px;border-radius:8px;border:1px solid #ccc;background:#fff;cursor:pointer">Print / save PDF</button>
+  <h1>${esc(p.name)}</h1><div style="color:#555">${isHoa?'Board report':'Owner report'} · ${period} · prepared by ${esc(state.account.company||state.account.name||'the management office')} with ${esc(aName())}</div>
+  <div class="kpis"><div class="kpi"><b>${rows.length}</b><span>requests handled${phoneRows?` (${phoneRows} by phone)`:''}</span></div><div class="kpi"><b>${resolved}</b><span>resolved or closed</span></div><div class="kpi"><b>${emgs.length}</b><span>emergencies${avgResp!=null?` · avg ${avgResp} min to confirm`:''}</span></div><div class="kpi"><b>${(calls.data||[]).length}</b><span>calls answered by ${esc(aName())} (all properties)</span></div></div>
+  <h2>Requests by type</h2><table style="font-size:13px;border-collapse:collapse;min-width:320px">${Object.entries(byType).sort((a,b)=>b[1]-a[1]).map(([t,n])=>tr(srTypeLabel(t),n)).join('')}${deflected?tr(isHoa?'In-home calls redirected (owner’s responsibility)':'Calls redirected per lease',deflected):''}</table>
+  ${isHoa?`<h2>Governance</h2>${list('Architectural requests',arc)}${list('Violation reports',viol)}${list('Resale certificates & closing documents',resale)}${(res.data||[]).length?`<h3>Amenity reservations</h3><div style="font-size:13px">${(res.data||[]).length} reservation${(res.data||[]).length===1?'':'s'} (${Object.entries((res.data||[]).reduce((m,r)=>{ const k=(r.amenities&&r.amenities.name)||'Amenity'; m[k]=(m[k]||0)+1; return m; },{})).map(([k,v])=>esc(k)+' '+v).join(', ')})</div>`:''}`:''}
+  ${emgs.length?list('Emergencies',emgs):''}
+  ${list(isHoa?'Common-area work orders':'Work orders',rows.filter(r=>['maintenance','general'].includes(r.request_type)&&!srDeflected(r)))}
+  <h2>Money</h2><table style="font-size:13px;border-collapse:collapse;min-width:320px">${tr('Approvals requested',(appr.data||[]).length)}${tr('Approved',approved.length+(dollars?' · '+pmMoney(dollars):''))}${tr('Declined',(appr.data||[]).filter(a=>a.status==='declined').length)}</table>
+  <h2>Coming up</h2>${(comp.data||[]).length?`<h3>Compliance due in the next 60 days</h3><ul style="font-size:13px">${(comp.data||[]).map(x=>`<li>${pmFmtDate(x.due_date)} — ${esc(x.title)}${x.vendor_name?' ('+esc(x.vendor_name)+')':''}</li>`).join('')}</ul>`:'<div style="font-size:13px;color:#555">No compliance items due in the next 60 days.</div>'}${(mtg.data||[]).length?`<h3>Meetings</h3><ul style="font-size:13px">${(mtg.data||[]).map(m=>`<li>${pmWhen(m.starts_at)} — ${esc(m.title)}${m.location?' · '+esc(m.location):''}</li>`).join('')}</ul>`:''}
+  <div style="margin-top:30px;font-size:11.5px;color:#777">Generated ${now.toLocaleString('en-US')} from ${esc(aName())}’s records. Every line links to a logged request with its reference number.</div>
+  </body></html>`;
+  if(w){ w.document.open(); w.document.write(html); w.document.close(); }
 }
 
 /* ===================== CONTRACTORS PAGE ===================== */
@@ -3496,37 +3795,6 @@ async function saveRule(){
   if(r.error){ msg.textContent='Could not save (a rule for that trade/property may already exist).'; return; }
   $("#rule-trade").value=''; msg.textContent='';
   await loadContractors(); paintRuleControls();
-}
-function srRow(r){
-  const open=state.sr.open===r.id;
-  const emg=r.priority==='emergency'||r.request_type==='emergency';
-  const when=new Date(r.created_at).toLocaleString('en-US',{month:'short',day:'numeric',hour:'numeric',minute:'2-digit'});
-  const prop=r.properties?r.properties.name:'(unassigned)';
-  const fmt=t=>new Date(t).toLocaleString('en-US',{month:'short',day:'numeric',hour:'numeric',minute:'2-digit'});
-  const head=`<div class="block-item" style="align-items:flex-start;gap:10px;cursor:pointer;${emg?'border-left:3px solid var(--danger)':''}" data-sropen="${r.id}">
-    <div style="flex:1;min-width:0">
-      <div style="font-weight:600;font-size:13.5px">${esc(r.title||r.request_type)} ${pmPill(SR_STATUS,r.status)}${emg?` <span style="display:inline-block;font-size:11px;font-weight:700;padding:2px 9px;border-radius:999px;background:#fbe6e4;color:#b4443a">EMERGENCY</span>`:''}</div>
-      <div style="font-size:12px;color:var(--muted)">${esc(r.short_ref||'')} · ${esc(prop)}${r.unit?` · unit ${esc(r.unit)}`:''} · ${esc(r.request_type)} · ${when}</div>
-    </div>
-    <span style="font-size:11px;color:var(--muted)">${open?'▲':'▼'}</span>
-  </div>`;
-  if(!open) return head;
-  const esl=(r.escalation_state&&Array.isArray(r.escalation_state.notified))?r.escalation_state.notified:[];
-  const timeline=emg?`<div style="margin-top:8px;font-size:12px"><div style="font-weight:600;margin-bottom:4px">Escalation</div>${r.acknowledged_at?`<div style="color:var(--ok)">✓ Confirmed ${new Date(r.acknowledged_at).toLocaleString('en-US',{month:'short',day:'numeric',hour:'numeric',minute:'2-digit'})}${r.acknowledged_by?' by '+esc(r.acknowledged_by):''}</div>`:`<div style="color:var(--danger)">Awaiting confirmation</div>`}${esl.map(n=>`<div style="color:var(--muted)">→ ${esc(n.name||'contact')}${n.via&&n.via.length?' ('+esc(n.via.join(', '))+')':''} · ${n.at?new Date(n.at).toLocaleString('en-US',{hour:'numeric',minute:'2-digit',month:'short',day:'numeric'}):''}</div>`).join('')}${r.escalation_state&&r.escalation_state.exhausted?`<div style="color:var(--danger)">⚠ On-call ladder exhausted — sent to general inbox</div>`:''}</div>`:'';
-  const detail=`<div style="padding:4px 12px 14px;border:1px solid var(--line);border-top:none;border-radius:0 0 var(--r-sm) var(--r-sm);margin-top:-6px">
-    ${r.description?`<div style="font-size:13px;margin:10px 0;white-space:pre-wrap">${esc(r.description)}</div>`:''}
-    <div style="font-size:12px;color:var(--muted);margin-bottom:10px">${[r.category?('Category: '+r.category):'',r.reported_channel?('Via '+r.reported_channel):'',r.permission_to_enter!=null?('Permission to enter: '+(r.permission_to_enter?'yes':'no')):'',r.access_instructions?('Access: '+r.access_instructions):'',r.response_window?('Promised: '+r.response_window):''].filter(Boolean).map(esc).join(' · ')}</div>
-    ${timeline}
-    <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:center;margin-top:12px">
-      <select class="inp" style="max-width:170px" data-srstatus="${r.id}">${pmOpts(Object.keys(SR_STATUS).map(k=>[k,SR_STATUS[k][0]]),r.status)}</select>
-      <input class="inp" style="max-width:200px" id="sra-${r.id}" placeholder="Assign to…" value="${esc(r.assigned_to||'')}"><button class="btn sm" data-srassign="${r.id}">Assign</button>
-    </div>
-    ${dispatchBlock(r,fmt)}
-    <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:center;margin-top:10px">
-      <input class="inp" style="flex:1;min-width:200px" id="srn-${r.id}" placeholder="Resolution note…" value="${esc(r.resolved_note||'')}"><button class="btn sm" data-srnote="${r.id}">Save note</button>
-    </div>
-  </div>`;
-  return head+detail;
 }
 
 function pageKnowledge(){
