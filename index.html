@@ -2351,7 +2351,8 @@ function pageNotifications(){
   const schedOn=!(ac.settings&&ac.settings.scheduling_enabled===false);
   const team=salonOn()&&teamAllowed();
   const pro=teamAllowed();
-  const rem=(ac.settings&&ac.settings.reminders)||{mode:"off"};
+  const rem=Object.assign({}, (ac.settings&&ac.settings.reminders)||{});
+  if(!rem.mode) rem.mode = sms.enabled ? "day_before" : "off";   // texting on and nothing chosen: Donna reminds the day before at 6 PM
   const remOpt=(v,l)=>`<option value="${v}" ${rem.mode===v?"selected":""}>${l}</option>`;
   const remTime=esc(rem.time||"18:00");
   $("#page").innerHTML=`
@@ -2373,7 +2374,7 @@ function pageNotifications(){
     </div>`:''}
 
     <div class="card"><div class="card-h"><h2>Appointment reminders</h2><button class="btn sm" id="rem-save">Save</button></div>
-      <p style="font-size:13px;color:var(--muted);margin-bottom:12px">Email customers a reminder before their appointment, to the address they gave when booking. It includes the video link or the address, and ${esc(aName())} checks the calendar first so a rescheduled time is reflected.</p>
+      <p style="font-size:13px;color:var(--muted);margin-bottom:12px">Remind ${pmMode()?'people':'customers'} before their appointment, by text when texting is on and by email when there is an address on file. The reminder names what it is for and where, and ${esc(aName())} checks the calendar first so a moved appointment is reflected. Text reminders say "Reply C to confirm or R to reschedule", and ${esc(aName())} handles those replies for you.</p>
       <div class="grid-2">
         <div class="field" style="margin:0"><label class="lab">When to remind</label><select class="inp" id="rem-mode">${remOpt("off","Off")}${remOpt("day_before","The day before")}${remOpt("morning_of","The morning of")}</select></div>
         <div class="field" id="rem-time-field" style="margin:0${rem.mode==="off"?";opacity:.45":""}"><label class="lab">Time</label><input class="inp" id="rem-time" type="time" value="${remTime}"></div>
@@ -2382,8 +2383,8 @@ function pageNotifications(){
     </div>
 
     <div class="card"><div class="card-h"><h2>Text message notifications</h2><button class="btn sm" id="sms-save">Save</button></div>
-      <p style="font-size:13px;color:var(--muted);margin-bottom:12px">Have ${esc(aName())} text ${pmMode()?'residents, prospects, and vendors':'clients'} their reminders and confirmations, not just email. Texts send from the shared Sidekick Logistics number, and a reply like "C to confirm" comes back to ${esc(aName())}. Your calls and your local number are not affected.</p>
-      <label style="display:flex;align-items:flex-start;gap:10px;margin:0 0 12px;cursor:pointer;font-size:13.5px;color:var(--ink)"><input type="checkbox" id="sms-enabled" style="margin-top:3px" ${sms.enabled?'checked':''}><span>Send reminders and confirmations by text<span style="display:block;font-weight:400;color:var(--muted);font-size:11.5px;margin-top:2px">${pmMode()?'They':'Clients'} still get email too. Texting activates once your account's text number is verified.</span></span></label>
+      <p style="font-size:13px;color:var(--muted);margin-bottom:12px">Have ${esc(aName())} text ${pmMode()?'residents, prospects, and vendors':'customers'} their confirmations and reminders from your ${esc(aName())} number${state.assistant&&state.assistant.number?' ('+esc(state.assistant.number)+')':''}. People can reply C to confirm, R to reschedule, or CANCEL, text that they are running late, or ask when their appointment is, and ${esc(aName())} handles it. Anything else they text lands in your Inbox.</p>
+      <label style="display:flex;align-items:flex-start;gap:10px;margin:0 0 12px;cursor:pointer;font-size:13.5px;color:var(--ink)"><input type="checkbox" id="sms-enabled" style="margin-top:3px" ${sms.enabled?'checked':''}><span>Text ${pmMode()?'people':'customers'} (recommended)<span style="display:block;font-weight:400;color:var(--muted);font-size:11.5px;margin-top:2px">Email still goes out when there is an email on file. Turning this off means ${esc(aName())} only emails, and callers without an email get no confirmation.</span></span></label>
       <div id="sms-sub" style="padding-left:28px${sms.enabled?'':';opacity:.45'}">
         <label style="display:flex;align-items:flex-start;gap:10px;margin:0 0 10px;cursor:pointer;font-size:13.5px;color:var(--ink)"><input type="checkbox" id="sms-reminders" style="margin-top:3px" ${sms.reminders!==false?'checked':''} ${sms.enabled?'':'disabled'}><span>Appointment reminders by text</span></label>
         <label style="display:flex;align-items:flex-start;gap:10px;margin:0;cursor:pointer;font-size:13.5px;color:var(--ink)"><input type="checkbox" id="sms-confirmations" style="margin-top:3px" ${sms.confirmations!==false?'checked':''} ${sms.enabled?'':'disabled'}><span>Booking confirmations by text</span></label>
@@ -2391,11 +2392,8 @@ function pageNotifications(){
       <div id="sms-msg" style="font-size:12.5px;color:var(--muted);margin-top:10px"></div>
     </div>
 
-    <div class="card"><div class="card-h"><h2>Two-way texting on your own number</h2><button class="btn sm" id="sms2-save">Save</button></div>
-      <p style="font-size:13px;color:var(--muted);margin-bottom:12px">Upgrade to a dedicated text number so ${pmMode()?'residents, owners, and vendors':'clients'} can start a text conversation with your business and ${esc(aName())} texts back, the same way she handles calls and email. On the shared number she can send reminders and read replies to them, but she cannot pick up a brand-new text ${pmMode()?'someone':'a client'} starts.</p>
-      <label style="display:flex;align-items:flex-start;gap:10px;margin:0;cursor:pointer;font-size:13.5px;color:var(--ink)"><input type="checkbox" id="sms-twoway" style="margin-top:3px" ${sms.two_way?'checked':''}><span>Turn on two-way texting with my own number<span style="display:block;font-weight:400;color:var(--muted);font-size:11.5px;margin-top:2px">We set up a dedicated number for your account. ${esc(aName())} answers inbound texts and can book, reschedule, or take a message, just like on the phone. Pairs best with your local number once texting is enabled on it.</span></span></label>
-      <div id="sms2-status" style="font-size:12px;color:var(--muted-2);margin-top:10px">Your text number: <b>${esc(sms.number||'not set up yet')}</b></div>
-      <div id="sms2-msg" style="font-size:12.5px;color:var(--muted);margin-top:6px"></div>
+    <div class="card"><div class="card-h"><h2>Your text number</h2></div>
+      <p style="font-size:13px;color:var(--muted);margin:0">Texts go out from <b style="color:var(--ink)">${esc((state.assistant&&(state.assistant.smsNumber||state.assistant.number))||sms.number||'your ${esc(aName())} number once it is set up')}</b>, the same number people call. Replies come straight back to ${esc(aName())}; anything she cannot handle on her own shows up under Inbox for you to answer.</p>
     </div>
 
     <div class="card"><div class="card-h"><h2>What ${esc(aName())} copies you on</h2><button class="btn sm" id="ncopy-save">Save</button></div>
@@ -3048,9 +3046,10 @@ function pageSettings(){
     <div class="card"><div class="card-h"><h2>Business</h2><button class="btn sm primary" id="set-biz-save">Save</button></div>
       <div class="grid-2">
         <div class="field"><label class="lab">Business name</label><input class="inp" id="set-company" value="${esc(ac.company||'')}"></div>
-        <div class="field"><label class="lab">Industry</label><input class="inp" id="set-industry" value="${esc(ac.industry||'')}" placeholder="e.g. Software / consulting"></div>
+        <div class="field"><label class="lab">Kind of business</label><select class="inp" id="set-industry">${(()=>{ const cur=String(ac.industry||''); const known=WZ_INDUSTRIES.some(x=>x[0]===cur); return (known||!cur?'':`<option value="${esc(cur)}" selected>${esc(cur)}</option>`)+WZ_INDUSTRIES.map(x=>`<option value="${x[0]}" ${cur===x[0]?'selected':''}>${esc(x[1])}</option>`).join(''); })()}</select></div>
       </div>
-      <p style="font-size:12px;color:var(--muted-2);margin-top:2px">The business name is what ${esc(aName())} says she's answering for and shows across your dashboard.</p>
+      <div class="field"><label class="lab">Business address <span class="sub">optional</span></label><input class="inp" id="set-address" value="${esc((ac.settings&&(ac.settings.address||ac.settings.office_address))||'')}" placeholder="412 W Abram St, Arlington, TX 76010"></div>
+      <p style="font-size:12px;color:var(--muted-2);margin-top:2px">${esc(aName())} says the business name on every call. The address goes on confirmations and reminders${pmMode()?' for office visits':''}, and on your booking page. Leave it blank if you only go to the customer.</p>
     </div>
 
     ${(salonOn()&&isManager())?`
@@ -3190,8 +3189,11 @@ async function saveBusiness(){
   const btn=$("#set-biz-save"); btn.disabled=true; const o=btn.textContent; btn.textContent="Saving…";
   const name=$("#set-company").value.trim()||state.account.company;
   const industry=$("#set-industry").value.trim()||null;
-  const { error } = await db.from('accounts').update({ name, industry }).eq('id', state.account.id);
-  if(!error){ state.account.company=name; state.account.industry=industry; }
+  const addrEl=$("#set-address"); const address=addrEl?addrEl.value.trim():null;
+  const settings=Object.assign({}, state.account.settings||{});
+  if(addrEl){ if(pmMode()) settings.office_address=address; else settings.address=address; }
+  const { error } = await db.from('accounts').update({ name, industry, settings }).eq('id', state.account.id);
+  if(!error){ state.account.company=name; state.account.industry=industry; state.account.settings=settings; }
   btn.disabled=false; btn.textContent=error?"Error — retry":"Saved ✓";
   setTimeout(()=>{ if(error){ btn.textContent=o; } else { renderApp(); } }, 900);
 }
@@ -4963,25 +4965,30 @@ const WZ_RENDER={
   },
   5:function(){
     const g=state.wz;
-    const list=(state.types||[]).map(t=>`<div style="font-size:13.5px;padding:6px 0;border-bottom:1px solid var(--line,#eee)">${esc(t.name)} · ${t.dur} min</div>`).join("");
+    const list=(state.types||[]).map(t=>`<div style="font-size:13.5px;padding:6px 0;border-bottom:1px solid var(--line,#eee)">${esc(t.name)} · ${t.dur} min${t.price?' · '+esc(t.price):''}${t.travel?' · at the customer\'s place':''}</div>`).join("");
+    const salonish=!!(INDUSTRY_FEATURES[g.industry]&&INDUSTRY_FEATURES[g.industry].salon);
     document.getElementById("root").innerHTML=wzShell(`
-      <h1>Appointments</h1>
-      <p class="lede">What can people book? Add the common ones. Skip if ${esc(DEFAULT_NAME)} won't be booking for you.</p>
+      <h1>What can people book?</h1>
+      <p class="lede">Add the things customers usually call about, with how long each takes and what it costs. ${esc(DEFAULT_NAME)} uses this to offer the right amount of time and to answer "how much is it?" Skip if ${esc(DEFAULT_NAME)} won't be booking for you; you can always add more later.</p>
       ${list?`<div style="margin-bottom:14px">${list}</div>`:''}
       <div class="wz-row2">
-        <div class="wz-field"><label>Name</label><input class="wz-inp" id="wz-tname" placeholder="Consultation"></div>
-        <div class="wz-field"><label>Length</label><select class="wz-sel" id="wz-tdur"><option>15</option><option selected>30</option><option>45</option><option>60</option></select></div>
+        <div class="wz-field"><label>What it's called</label><input class="wz-inp" id="wz-tname" placeholder="${salonish?'Haircut':(g.industry==='contractor'?'Estimate visit':(g.industry==='professional'?'Consultation':'e.g. Full detail, Lesson, Estimate'))}"></div>
+        <div class="wz-field"><label>How long</label><select class="wz-sel" id="wz-tdur"><option value="15">15 min</option><option value="30" selected>30 min</option><option value="45">45 min</option><option value="60">1 hour</option><option value="90">1.5 hours</option><option value="120">2 hours</option><option value="180">3 hours</option><option value="240">4 hours</option></select></div>
       </div>
-      <div class="wz-field"><label>Where</label><select class="wz-sel" id="wz-tmode"><option value="in_person">In person</option><option value="phone">Phone</option></select></div>
-      <button class="btn sm" id="wz-taddbtn">+ Add this type</button>
+      <div class="wz-row2">
+        <div class="wz-field"><label>Price <span class="hint">optional, as you'd say it</span></label><input class="wz-inp" id="wz-tprice" placeholder="e.g. $80, or from $120"></div>
+        <div class="wz-field"><label>Where it happens</label><select class="wz-sel" id="wz-tmode"><option value="in_person">${salonish?'At our place':'At my place of business'}</option>${salonish?'':'<option value="travel">At the customer\'s place (we go to them)</option>'}<option value="phone">On the phone</option><option value="virtual">Video call</option></select></div>
+      </div>
+      <button class="btn sm" id="wz-taddbtn">+ Add it</button>
       <div class="wz-msg" id="wz-m"></div>
     `,{canSkip:true, nextLabel:'Continue'});
     $("#wz-taddbtn").onclick=async()=>{
       const name=$("#wz-tname").value.trim(); const m=$("#wz-m");
       if(!name){ m.style.color='var(--danger)'; m.textContent='Give the appointment a name first.'; return; }
-      const row={ account_id:state.account.id, name, mode:$("#wz-tmode").value, default_duration_min:+$("#wz-tdur").value||30, buffer_before_min:0, buffer_after_min:0, requires_travel:false };
+      const where=$("#wz-tmode").value; const travel=where==='travel'; const price=($("#wz-tprice").value||'').trim();
+      const row={ account_id:state.account.id, name, mode:travel?'in_person':where, default_duration_min:+$("#wz-tdur").value||30, buffer_before_min:0, buffer_after_min:0, requires_travel:travel, price:price||null };
       const { data, error }=await db.from('appointment_types').insert(row).select().single();
-      if(!error&&data){ state.types=state.types||[]; state.types.push({id:data.id,name:data.name,mode:data.mode,dur:data.default_duration_min,before:0,after:0,travel:false}); WZ_RENDER[5](); }
+      if(!error&&data){ state.types=state.types||[]; state.types.push({id:data.id,name:data.name,mode:data.mode,dur:data.default_duration_min,before:0,after:0,travel:travel,price:price}); WZ_RENDER[5](); }
       else { m.style.color='var(--danger)'; m.textContent='Could not add that. Please try again.'; }
     };
     wzBindNav(async()=>true,{});
