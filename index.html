@@ -2717,7 +2717,9 @@ function renderBookingLook(){
       <div><label class="lab">${addrLabel}</label><input class="inp" id="bl-address" placeholder="Street, city, state" value="${esc(addrVal)}"></div>
       <div><label class="lab">Hours line <span style="color:var(--muted);font-weight:400">(optional)</span></label><input class="inp" id="bl-hours" maxlength="80" placeholder="e.g. Tue–Sat 9–6" value="${esc(bk.hours_line||'')}"></div>
     </div>
-    <label class="lab">Cover photo URL <span style="color:var(--muted);font-weight:400">(optional — a wide photo behind the header)</span></label><input class="inp" id="bl-cover" placeholder="https://…/storefront.jpg" value="${esc(look.cover_url||'')}">
+    <label class="lab">Cover photo <span style="color:var(--muted);font-weight:400">(optional — a wide photo behind the header; your storefront, your work, your community)</span></label>
+    <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-bottom:12px"><div id="bl-cover-prev" style="width:160px;height:60px;border-radius:10px;border:1px solid var(--line);background:#f4f4f5 center/cover no-repeat;flex:none;${look.cover_url?`background-image:url('${esc(look.cover_url)}')`:''}"></div><label class="btn sm" style="cursor:pointer">Upload photo<input type="file" id="bl-cover-file" accept="image/png,image/jpeg,image/webp" style="display:none"></label>${look.cover_url?'<button class="btn sm" id="bl-cover-rm" type="button">Remove</button>':''}<span id="bl-cover-msg" style="font-size:11.5px;color:var(--muted)">Wide works best (about 1600×600) · up to 4 MB</span></div>
+    <input type="hidden" id="bl-cover" value="${esc(look.cover_url||'')}">
     <div id="bl-msg" style="font-size:12.5px;color:var(--muted);margin-top:6px"></div>
     <div class="card-h" style="margin-top:16px"><h2 style="font-size:13px">Preview</h2><button class="btn sm" id="bl-refresh" type="button">Refresh preview</button></div>
     <div style="border:1px solid var(--line);border-radius:12px;overflow:hidden;background:#fff"><iframe id="bl-frame" src="${esc(bookingUrl())}" style="width:100%;height:560px;border:0" title="Booking page preview"></iframe></div>
@@ -2728,6 +2730,8 @@ function renderBookingLook(){
   col.oninput=()=>{ hex.value=col.value; }; hex.oninput=()=>{ if(/^#[0-9a-f]{6}$/i.test(hex.value.trim())) col.value=hex.value.trim(); };
   $("#bl-accent-clear").onclick=()=>{ hex.value=''; };
   $("#bl-logo").onchange=uploadBookingLogo;
+  $("#bl-cover-file").onchange=uploadBookingCover;
+  { const rm=$("#bl-cover-rm"); if(rm) rm.onclick=()=>{ $("#bl-cover").value=''; $("#bl-cover-prev").style.backgroundImage='none'; rm.remove(); }; }
   { const rm=$("#bl-logo-rm"); if(rm) rm.onclick=()=>{ state._pendingLogo=''; $("#bl-logo-prev").innerHTML=esc((state.account.name||'B').charAt(0)); rm.remove(); }; }
   $("#bl-save").onclick=saveBookingLook;
   $("#bl-refresh").onclick=()=>{ const f=$("#bl-frame"); f.src=bookingUrl()+(bookingUrl().includes('?')?'&':'?')+'v='+Date.now(); };
@@ -2743,6 +2747,18 @@ async function uploadBookingLogo(e){
   const { data }=db.storage.from('brand').getPublicUrl(path);
   state._pendingLogo=data.publicUrl;
   $("#bl-logo-prev").innerHTML=`<img src="${esc(data.publicUrl)}" style="width:100%;height:100%;object-fit:cover">`;
+  msg.textContent='Uploaded — click Save to apply.';
+}
+async function uploadBookingCover(e){
+  const file=e.target.files&&e.target.files[0]; if(!file) return;
+  const msg=$("#bl-cover-msg"); msg.textContent='Uploading…';
+  if(file.size>4*1024*1024){ msg.textContent='That file is over 4 MB — please use a smaller image.'; return; }
+  const ext=(file.name.split('.').pop()||'jpg').toLowerCase().replace(/[^a-z0-9]/g,'')||'jpg';
+  const path=`${state.account.id}/cover-${Date.now()}.${ext}`;
+  const { error }=await db.storage.from('brand').upload(path, file, { upsert:true, contentType:file.type||undefined });
+  if(error){ msg.textContent='Upload failed: '+(error.message||'try again'); return; }
+  const { data }=db.storage.from('brand').getPublicUrl(path);
+  $("#bl-cover").value=data.publicUrl; $("#bl-cover-prev").style.backgroundImage=`url('${data.publicUrl}')`;
   msg.textContent='Uploaded — click Save to apply.';
 }
 async function saveBookingLook(){
