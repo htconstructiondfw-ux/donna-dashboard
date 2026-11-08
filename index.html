@@ -1554,7 +1554,7 @@ async function loadVisits(id){
     try{
       const [pcRes,srRes]=await Promise.all([
         db.from('property_contacts').select('role,unit,company,authorized,properties(name,property_type)').eq('contact_id',id),
-        db.from('service_requests').select('short_ref,title,request_type,status,created_at,properties(name)').eq('contact_id',id).order('created_at',{ascending:false}).limit(8)
+        db.from('service_requests').select('short_ref,title,request_type,status,created_at,properties!service_requests_property_id_fkey(name)').eq('contact_id',id).order('created_at',{ascending:false}).limit(8)
       ]);
       const links=pcRes.data||[], reqs=srRes.data||[];
       pmBox = `<div style="font-size:11px;text-transform:uppercase;letter-spacing:.05em;color:var(--muted);font-weight:600;margin:4px 0 6px">Properties</div>`
@@ -3313,7 +3313,7 @@ async function requestCoi(id){
 /* ---- Service requests / work orders ---- */
 async function loadServiceRequests(){
   state.sr=state.sr||{filter:'open'};
-  let q=db.from('service_requests').select('*, properties(name,property_type)').eq('account_id',state.account.id).order('created_at',{ascending:false}).limit(300);
+  let q=db.from('service_requests').select('*, properties!service_requests_property_id_fkey(name,property_type)').eq('account_id',state.account.id).order('created_at',{ascending:false}).limit(300);
   const { data }=await q; state.sr.list=data||[];
   const { data:cons }=await db.from('contractors').select('id,name,company,trades,is_active').eq('account_id',state.account.id).eq('is_active',true).order('name');
   state.contractors=cons||[];
