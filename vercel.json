@@ -4,6 +4,7 @@
   "rewrites": [
     { "source": "/book/:slug", "destination": "/book?s=:slug" },
     { "source": "/intake/:token", "destination": "/intake?t=:token" },
-    { "source": "/coi/:token", "destination": "/coi?t=:token" }
+    { "source": "/coi/:token", "destination": "/coi?t=:token" },
+    { "source": "/arc/:token", "destination": "/arc?t=:token" }
   ]
 }
