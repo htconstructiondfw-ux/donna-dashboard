@@ -279,7 +279,7 @@ function renderAuth(){
       <div class="field"><label class="lab">Your mobile <span class="sub">assistant texts/forwards here</span></label><input class="inp" id="f-phone" type="tel" placeholder="(817) 555-0100"></div>
     </div>`:''}
     <div class="grid-2">
-      <div class="field"><label class="lab">Email</label><input class="inp" id="f-email" type="email" placeholder="you@business.com"></div>
+      <div class="field"><label class="lab">Email</label><input class="inp" id="f-email" type="email" placeholder="you@business.com" value="${signup?'':esc((()=>{try{return localStorage.getItem('donna-last-email')||''}catch(e){return ''}})())}"></div>
       <div class="field"><label class="lab">Password</label><input class="inp" id="f-pass" type="password" placeholder="${signup?'8+ characters':'Your password'}"></div>
     </div>
     <button class="btn primary" style="width:100%;margin-top:6px" id="f-go">${signup?'Create account & continue':'Sign in'}</button>
@@ -289,6 +289,7 @@ function renderAuth(){
   $("#f-toggle").onclick=()=>{ state.authMode = signup?"login":"signup"; renderAuth(); };
   $("#f-go").onclick = signup?doSignup:doLogin;
   if(!signup){ const fp=$("#f-forgot"); if(fp) fp.onclick=()=>{ state.authMode="forgot"; renderAuth(); }; }
+  if(!signup){ const em=$("#f-email"), pw=$("#f-pass"); if(em&&em.value&&pw) pw.focus(); else if(em) em.focus(); }
 }
 function renderForgot(){
   document.getElementById("root").innerHTML = `
@@ -348,6 +349,7 @@ async function doLogin(){
   const { error } = await db.auth.signInWithPassword({ email, password });
   $("#f-go").disabled=false;
   if(error){ authErr(error.message); return; }
+  try{ localStorage.setItem('donna-last-email', email); }catch(e){}
   await boot();
 }
 async function doForgot(){
