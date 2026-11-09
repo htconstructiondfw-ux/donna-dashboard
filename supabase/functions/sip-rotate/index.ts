@@ -7,6 +7,9 @@ import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 //   status                      -> credentials on the Twilio list (usernames only) + each Retell number's SIP config
 //   add_credential              -> create the secret's username/password on the Twilio credential list
 //   switch_retell {numbers?}    -> PATCH each live number in Retell to the new username/password (+ termination URI)
+//   reimport {numbers[]}        -> delete + re-import each number in Retell with the new credential (seconds of gap each)
+//   test_outbound {from,to}     -> place a real call from a number (uses the credential); call_status {call_id} to check
+//   twilio_calls {from?,to?,minutes?} -> Twilio's call log for the trunk (proof the credential authenticated)
 //   remove_credential {username}-> delete that username from the Twilio list (refuses the current secret username)
 // Secrets are never echoed back.
 
@@ -80,6 +83,64 @@ Deno.serve(async (req: Request) => {
       results.push({ number: n, ok: r.ok, status: r.status, username_now: after.auth_username ?? null, termination_uri: after.termination_uri ?? null, error: r.ok ? undefined : (j?.message || j?.error_message || j) });
     }
     return json({ ok: results.every((x) => x.ok), results });
+  }
+  // Retell won't rewrite trunk auth on an imported number (PATCH is accepted but ignored), so: read its config,
+  // delete it, re-import with the new credential, and restore agents / webhook / nickname. A few seconds per number.
+  if (action === "reimport") {
+    if (!SIP_USERNAME || !SIP_PASSWORD) return json({ ok: false, error: "secrets not set" });
+    const creds = await listCreds();
+    if (!creds.some((c) => c.username === SIP_USERNAME)) return json({ ok: false, error: `Twilio credential list has no "${SIP_USERNAME}" yet; run add_credential first.` });
+    const nums: string[] = Array.isArray(body.numbers) && body.numbers.length ? body.numbers : [];
+    if (!nums.length) return json({ ok: false, error: "numbers[] required (explicit, on purpose)" });
+    const results: any[] = [];
+    for (const n of nums) {
+      const g = await fetch(`https://api.retellai.com/get-phone-number/${encodeURIComponent(n)}`, { headers: rh() });
+      const cur: any = await g.json().catch(() => ({}));
+      if (!g.ok) { results.push({ number: n, ok: false, step: "get", error: cur }); continue; }
+      const inboundAgents = Array.isArray(cur.inbound_agents) && cur.inbound_agents.length ? cur.inbound_agents : [{ agent_id: Deno.env.get("RETELL_AGENT_ID") || "agent_7e8792e07df78b6e366decb52a", weight: 1 }];
+      const payload: any = { phone_number: n, termination_uri: TERMINATION_URI, sip_trunk_auth_username: SIP_USERNAME, sip_trunk_auth_password: SIP_PASSWORD, inbound_agents: inboundAgents, inbound_webhook_url: cur.inbound_webhook_url || `${Deno.env.get("SUPABASE_URL")}/functions/v1/retell-inbound`, nickname: cur.nickname || "Donna" };
+      if (Array.isArray(cur.outbound_agents) && cur.outbound_agents.length) payload.outbound_agents = cur.outbound_agents;
+      const d = await fetch(`https://api.retellai.com/delete-phone-number/${encodeURIComponent(n)}`, { method: "DELETE", headers: rh() });
+      if (!d.ok && d.status !== 404) { results.push({ number: n, ok: false, step: "delete", status: d.status, error: await d.text() }); continue; }
+      let imp: Response | null = null; let impBody: any = null;
+      for (let attempt = 0; attempt < 3; attempt++) {
+        imp = await fetch("https://api.retellai.com/import-phone-number", { method: "POST", headers: rh(), body: JSON.stringify(payload) });
+        impBody = await imp.json().catch(() => ({}));
+        if (imp.ok) break;
+        await new Promise((r) => setTimeout(r, 1500));
+      }
+      if (!imp || !imp.ok) { results.push({ number: n, ok: false, step: "import", status: imp?.status, error: impBody, payload_sans_secret: { ...payload, sip_trunk_auth_password: "•••" } }); continue; }
+      const after = await retellNumber(n);
+      results.push({ number: n, ok: after.ok && after.sip_outbound_trunk_config?.auth_username === SIP_USERNAME, username_now: after.sip_outbound_trunk_config?.auth_username ?? null, inbound_agents: inboundAgents.length, webhook: payload.inbound_webhook_url });
+    }
+    return json({ ok: results.every((x) => x.ok), results });
+  }
+  // Outbound test: a real call FROM the number (this is the path that uses the SIP credential) TO a target that answers.
+  if (action === "test_outbound") {
+    const from = String(body.from || ""); const to = String(body.to || "");
+    if (!from || !to) return json({ ok: false, error: "from and to required" });
+    const agent = String(body.agent_id || Deno.env.get("RETELL_AGENT_ID") || "agent_7e8792e07df78b6e366decb52a");
+    const r = await fetch("https://api.retellai.com/v2/create-phone-call", { method: "POST", headers: rh(), body: JSON.stringify({ from_number: from, to_number: to, override_agent_id: agent, metadata: { purpose: "sip_rotation_test" } }) });
+    const j: any = await r.json().catch(() => ({}));
+    if (!r.ok) return json({ ok: false, status: r.status, error: j });
+    return json({ ok: true, call_id: j.call_id, call_status: j.call_status });
+  }
+  if (action === "call_status") {
+    const id = String(body.call_id || ""); if (!id) return json({ ok: false, error: "call_id required" });
+    const r = await fetch(`https://api.retellai.com/v2/get-call/${encodeURIComponent(id)}`, { headers: rh() });
+    const j: any = await r.json().catch(() => ({}));
+    return json({ ok: r.ok, call_status: j.call_status, disconnection_reason: j.disconnection_reason ?? null, duration_ms: j.duration_ms ?? null, start: j.start_timestamp ?? null, end: j.end_timestamp ?? null, from: j.from_number, to: j.to_number });
+  }
+  if (action === "twilio_calls") {
+    // Twilio's view of recent outbound trunk calls. A call that authenticated shows up here (busy/no-answer/completed);
+    // a rejected SIP credential never produces a Twilio call record at all.
+    const minutes = Math.min(1440, Math.max(1, Number(body.minutes || 30)));
+    const since = new Date(Date.now() - minutes * 60_000).toISOString();
+    const q = new URLSearchParams({ PageSize: "50", "StartTime>": since }); if (body.from) q.set("From", String(body.from)); if (body.to) q.set("To", String(body.to));
+    const r = await fetch(`https://api.twilio.com/2010-04-01/Accounts/${TWILIO_SID}/Calls.json?${q}`, { headers: { Authorization: twAuth() } });
+    const j: any = await r.json().catch(() => ({}));
+    const calls = (j?.calls || []).map((c: any) => ({ sid: c.sid, from: c.from, to: c.to, status: c.status, direction: c.direction, duration: c.duration, start: c.start_time }));
+    return json({ ok: r.ok, since, calls, error: r.ok ? undefined : j });
   }
   if (action === "remove_credential") {
     const username = String(body.username || "");
