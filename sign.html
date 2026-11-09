@@ -1,0 +1,132 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>Sign</title>
+<meta name="robots" content="noindex">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Figtree:wght@400;500;600;700&family=Caveat:wght@600&display=swap" rel="stylesheet">
+<style>
+  :root{--accent:#1f6f4a;--accent-deep:#164f35;--bg:#f4f6f3;--card:#fff;--ink:#1b2420;--ink2:#4c5a52;--muted:#7d8a82;--line:#e3e8e4;--ok:#2d7a4f;--danger:#b4443a;--radius:18px}
+  *{box-sizing:border-box} body{margin:0;background:var(--bg);color:var(--ink);font:16px/1.5 'Figtree',-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;-webkit-font-smoothing:antialiased;min-height:100vh}
+  .wrap{max-width:560px;margin:0 auto;padding:22px 16px 60px}
+  .biz{display:flex;align-items:center;gap:12px;margin-bottom:16px}
+  .logo{width:44px;height:44px;border-radius:12px;background:var(--accent);color:#fff;display:flex;align-items:center;justify-content:center;font-weight:700;font-size:18px;flex:none}
+  .biz h1{font-size:18px;margin:0;font-weight:700} .biz p{margin:2px 0 0;color:var(--muted);font-size:13.5px}
+  .card{background:var(--card);border:1px solid var(--line);border-radius:var(--radius);padding:18px;box-shadow:0 10px 30px -22px rgba(0,0,0,.25);margin-bottom:14px}
+  h2{font-size:17px;margin:0 0 8px} .doc{white-space:pre-wrap;font-size:15px;line-height:1.55;color:var(--ink)}
+  .doc .t{font-weight:700;font-size:17px;display:block;margin-bottom:8px}
+  .steps{display:flex;gap:6px;margin:0 0 14px} .steps span{flex:1;height:5px;border-radius:3px;background:var(--line)} .steps span.on{background:var(--accent)}
+  label.lab{display:block;font-size:13px;font-weight:600;color:var(--ink2);margin:12px 0 4px} label.lab small{font-weight:400;color:var(--muted)}
+  .inp{width:100%;padding:12px 13px;border:1px solid var(--line);border-radius:12px;font:inherit;background:#fff;color:var(--ink)} textarea.inp{min-height:76px;resize:vertical}
+  .btn{display:block;width:100%;margin-top:14px;padding:16px;border:0;border-radius:14px;background:var(--accent);color:#fff;font-weight:700;font-size:17px;cursor:pointer;font-family:inherit}
+  .btn:disabled{opacity:.55;cursor:default} .btn:hover:not(:disabled){background:var(--accent-deep)}
+  .btn.ghost{background:#fff;color:var(--ink2);border:1px solid var(--line);font-weight:600;font-size:15px;padding:12px}
+  .chk{display:flex;gap:10px;align-items:flex-start;font-size:14.5px;color:var(--ink2);margin-top:12px} .chk input{margin-top:4px;width:20px;height:20px;flex:none}
+  .code{letter-spacing:.35em;font-size:26px;text-align:center;font-weight:700}
+  .pad{position:relative;border:1.5px dashed #b9c4bd;border-radius:14px;background:#fbfcfb;height:170px;touch-action:none} .pad canvas{width:100%;height:100%;display:block;border-radius:14px}
+  .pad .hint{position:absolute;left:0;right:0;bottom:10px;text-align:center;color:var(--muted);font-size:13px;pointer-events:none}
+  .pad .line{position:absolute;left:18px;right:18px;bottom:40px;border-top:1px solid #c9d2cc;pointer-events:none}
+  .typed{font-family:'Caveat',cursive;font-size:38px;padding:8px 14px;min-height:64px;border-bottom:1px solid #c9d2cc;color:#1b2452}
+  .tabs{display:flex;gap:6px;margin-top:12px} .tabs button{flex:1;padding:9px;border:1px solid var(--line);background:#fff;border-radius:10px;font:inherit;font-size:14px;cursor:pointer;color:var(--ink2)} .tabs button.on{background:#e4f3ea;border-color:#bfe0cc;color:var(--ok);font-weight:600}
+  .msg{margin-top:12px;font-size:14px;color:var(--danger)} .ok{color:var(--ok)}
+  .done{padding:14px;border-radius:14px;background:#e4f3ea;color:var(--ok);font-weight:600;text-align:center}
+  .err{padding:14px;border-radius:14px;background:#f6e7e5;color:var(--danger);text-align:center}
+  .foot{margin-top:22px;text-align:center;color:var(--muted);font-size:12.5px;line-height:1.6}
+  .small{font-size:13px;color:var(--muted)} .row2{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+  .skel{height:14px;border-radius:7px;background:linear-gradient(90deg,#eceeec,#f6f7f6,#eceeec);background-size:200% 100%;animation:sh 1.2s infinite;margin:10px 0} @keyframes sh{to{background-position:-200% 0}}
+  .link{color:var(--accent);text-decoration:underline;cursor:pointer;background:none;border:0;font:inherit;padding:0}
+</style>
+</head>
+<body>
+<div class="wrap" id="app"><div class="card"><div class="skel" style="width:40%"></div><div class="skel"></div><div class="skel"></div><div class="skel" style="width:60%"></div></div></div>
+<script>
+const SB="https://hingbdtmxozbjetzwibj.supabase.co", FN=SB+"/functions/v1/re-sign";
+const ANON="eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImhpbmdiZHRteG96YmpldHp3aWJqIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODE1NDMzMzUsImV4cCI6MjA5NzExOTMzNX0.7WoJYMeIl2sclHQRSjl_AoLgYgLbQXBSn-hHV2rwlgI";
+const q=new URLSearchParams(location.search);
+const token=q.get("t")||(location.pathname.match(/\/sign\/([a-z0-9]+)/i)||[])[1]||"";
+const esc=s=>String(s??"").replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
+const money=c=>"$"+(Math.round(c||0)/100).toLocaleString("en-US",{minimumFractionDigits:0,maximumFractionDigits:2});
+const app=document.getElementById("app");
+const st={doc:null,step:0,consented:false,verified:false,mode:'draw',hasInk:false,answers:{},codeSent:false};
+async function call(action,extra){ const r=await fetch(FN,{method:"POST",headers:{"Content-Type":"application/json",apikey:ANON,Authorization:"Bearer "+ANON},body:JSON.stringify(Object.assign({action,token},extra||{}))}); return r.json().catch(()=>({ok:false})); }
+function biz(d){ const b=d.business||{}; return `<div class="biz"><div class="logo">${esc((b.name||"D")[0])}</div><div><h1>${esc(b.name||"")}</h1><p>${esc([b.agent,b.license?"License #"+b.license:"",b.broker?"Broker: "+b.broker:""].filter(Boolean).join(" · "))}</p></div></div>`; }
+function docHtml(d){ const lines=String(d.body_md||"").split("\n"); const first=lines[0]||""; const title=first.trim()===first.trim().toUpperCase()&&first.trim().length>3; return `<div class="doc"><span class="t">${esc(title?first:d.title)}</span>${esc((title?lines.slice(1):lines).join("\n").trim())}</div>${d.listing?`<p class="small" style="margin:12px 0 0">Property: <b style="color:var(--ink)">${esc(d.listing.address)}${d.listing.city?", "+esc(d.listing.city):""}${d.listing.zip?" "+esc(d.listing.zip):""}</b>${d.listing.price_cents?` · ${money(d.listing.price_cents)}${d.kind==='rental_application'?'/mo':''}`:""}</p>`:""}`; }
+function steps(n){ const total=st.doc.form?4:3; return `<div class="steps">${Array.from({length:total},(_,i)=>`<span class="${i<=n?'on':''}"></span>`).join("")}</div>`; }
+function formHtml(schema,answers){ return schema.map(f=>{ const v=answers[f.id]??""; const req=f.req?' <small>required</small>':' <small>optional</small>'; if(f.type==='select') return `<label class="lab">${esc(f.label)}${req}</label><select class="inp" data-f="${f.id}"><option value="">—</option>${f.options.map(o=>`<option ${v===o?'selected':''}>${esc(o)}</option>`).join("")}</select>`; if(f.type==='textarea') return `<label class="lab">${esc(f.label)}${req}</label><textarea class="inp" data-f="${f.id}">${esc(v)}</textarea>`; return `<label class="lab">${esc(f.label)}${req}</label><input class="inp" type="${f.type||'text'}" data-f="${f.id}" value="${esc(v)}">`; }).join(""); }
+function readForm(){ document.querySelectorAll('[data-f]').forEach(el=>{ st.answers[el.dataset.f]=el.value.trim(); }); return st.answers; }
+
+async function load(){
+  if(!token){ app.innerHTML='<div class="card err">This link isn\'t complete. Please open it from your text or email.</div>'; return; }
+  const r=await call("view"); if(!r.ok||!r.doc){ app.innerHTML='<div class="card err">We couldn\'t find this document. It may have been replaced; please check with the agent.</div>'; return; }
+  st.doc=r.doc; st.consented=r.doc.consented; st.verified=r.doc.verified; st.answers=(r.doc.form&&r.doc.form.answers)||{};
+  document.title=r.doc.title+" — "+(r.doc.business&&r.doc.business.name||"");
+  if(r.doc.status==='signed') return renderSigned();
+  if(['expired','void','declined'].includes(r.doc.status)){ app.innerHTML=biz(r.doc)+`<div class="card err">This document is ${r.doc.status==='void'?'no longer active':r.doc.status}. ${r.doc.status==='expired'?'Ask the agent to send a fresh one.':''}</div>`; return; }
+  st.step=st.verified?(st.doc.form?2:2):(st.consented?1:0); render();
+}
+function render(){
+  const d=st.doc; let inner="";
+  if(st.step===0){
+    inner=`<div class="card">${steps(0)}<h2>${esc(d.title)}</h2><p class="small" style="margin:0 0 10px">${esc(d.business.name)} sent this to ${esc(d.signer_name||"you")} to read and sign on your phone. Nothing is charged by signing${d.fee_cents?`; the ${money(d.fee_cents)} application fee is a separate step afterward`:''}.</p>${docHtml(d)}</div>
+    <div class="card"><label class="chk"><input type="checkbox" id="c1" ${st.consented?'checked':''}><span>I agree to receive and sign this document electronically. I can ask ${esc(d.business.name)} for a paper copy at any time, and I'll get a copy of what I sign by text${d.signer_email?' and email':''}.</span></label>
+    <button class="btn" id="go1" ${st.consented?'':'disabled'}>Continue</button><div class="msg" id="m1"></div>
+    <p class="small" style="text-align:center;margin-top:14px"><button class="link" id="decl">I don't want to sign this</button></p></div>`;
+  } else if(st.step===1){
+    inner=`<div class="card">${steps(1)}<h2>Confirm it's you</h2><p class="small" style="margin:0 0 6px">We'll text a 6-digit code to <b style="color:var(--ink)">${esc(d.signer_phone_masked||'your phone')}</b>.</p>
+    ${st.codeSent?`<label class="lab">Enter the code</label><input class="inp code" id="code" inputmode="numeric" autocomplete="one-time-code" maxlength="6" placeholder="••••••"><button class="btn" id="verify">Verify</button><p class="small" style="text-align:center;margin-top:10px">Didn't get it? <button class="link" id="resend">Send again</button></p>`:`<button class="btn" id="send">Text me the code</button>`}
+    <div class="msg" id="m2"></div></div>`;
+  } else if(st.step===2 && d.form){
+    inner=`<div class="card">${steps(2)}<h2>${d.kind==='rental_application'?'Your application':'A few details'}</h2><p class="small" style="margin:0 0 4px">${d.kind==='rental_application'?"Answer honestly — the owner verifies these. We never ask for your Social Security or ID numbers here; if screening needs them, the agent's screening service collects them separately.":"Fix anything that's off before you sign."}</p>${formHtml(d.form.schema,st.answers)}<button class="btn" id="go3">Continue to sign</button><div class="msg" id="m3"></div></div>`;
+  } else {
+    inner=`<div class="card">${steps(d.form?3:2)}<h2>Sign</h2><p class="small" style="margin:0">Draw your signature with your finger, or type your name.</p>
+    <div class="tabs"><button class="${st.mode==='draw'?'on':''}" data-m="draw">Draw</button><button class="${st.mode==='type'?'on':''}" data-m="type">Type</button></div>
+    ${st.mode==='draw'?`<div class="pad" style="margin-top:12px"><canvas id="pad"></canvas><div class="line"></div><div class="hint" id="padhint">Sign here</div></div><p class="small" style="text-align:right;margin:6px 0 0"><button class="link" id="clear">Clear</button></p>`
+    :`<input class="inp" id="typed" style="margin-top:12px" placeholder="Type your full name" value="${esc(d.signer_name||'')}"><div class="typed" id="typedprev">${esc(d.signer_name||'')}</div>`}
+    <label class="chk"><input type="checkbox" id="c2"><span>By tapping <b>Sign</b>, I'm signing "${esc(d.title)}" and I agree it has the same effect as my handwritten signature.</span></label>
+    <button class="btn" id="sign" disabled>Sign</button><div class="msg" id="m4"></div>
+    <p class="small" style="text-align:center;margin-top:14px"><button class="link" id="back">Read it again</button> · <button class="link" id="decl">Decline</button></p></div>`;
+  }
+  app.innerHTML=biz(d)+inner+`<div class="foot">Sent through Donna for ${esc(d.business.name)}. Your signing record (time, phone verification, device) is kept with the document.</div>`;
+  bind();
+}
+function bind(){
+  const d=st.doc;
+  const c1=document.getElementById("c1"); if(c1){ c1.onchange=()=>{ document.getElementById("go1").disabled=!c1.checked; }; document.getElementById("go1").onclick=async()=>{ const b=document.getElementById("go1"); b.disabled=true; const r=await call("consent"); if(!r.ok){ document.getElementById("m1").textContent=r.message||"Something went wrong."; b.disabled=false; return; } st.consented=true; st.step=st.verified?2:1; render(); }; }
+  const send=document.getElementById("send"); if(send) send.onclick=async()=>{ send.disabled=true; send.textContent="Sending…"; const r=await call("otp_send"); if(!r.ok){ document.getElementById("m2").textContent=r.message||"Couldn't send the code."; send.disabled=false; send.textContent="Text me the code"; return; } st.codeSent=true; render(); setTimeout(()=>{ const c=document.getElementById("code"); if(c) c.focus(); },50); };
+  const resend=document.getElementById("resend"); if(resend) resend.onclick=async()=>{ resend.textContent="Sending…"; const r=await call("otp_send"); resend.textContent=r.ok?"Sent":"Try again"; };
+  const verify=document.getElementById("verify"); if(verify){ const code=document.getElementById("code"); code.oninput=()=>{ if(code.value.replace(/\D/g,'').length===6) verify.click(); }; verify.onclick=async()=>{ verify.disabled=true; const r=await call("otp_verify",{code:code.value}); if(!r.ok){ document.getElementById("m2").textContent=r.message||"That code didn't match."; verify.disabled=false; code.value=""; code.focus(); return; } st.verified=true; st.step=2; render(); }; }
+  const go3=document.getElementById("go3"); if(go3) go3.onclick=async()=>{ readForm(); const miss=d.form.schema.filter(f=>f.req&&!String(st.answers[f.id]||"").trim()); if(miss.length){ document.getElementById("m3").textContent="Please fill in: "+miss.slice(0,3).map(f=>f.label).join(", ")+(miss.length>3?"…":""); const el=document.querySelector(`[data-f="${miss[0].id}"]`); if(el) el.focus(); return; } go3.disabled=true; await call("save_form",{answers:st.answers}); st.step=3; render(); };
+  document.querySelectorAll('.tabs [data-m]').forEach(b=>b.onclick=()=>{ st.mode=b.dataset.m; render(); });
+  const back=document.getElementById("back"); if(back) back.onclick=()=>{ st.step=0; render(); };
+  document.querySelectorAll('#decl').forEach(b=>b.onclick=async()=>{ const why=prompt("Okay — anything you'd like the agent to know? (optional)"); if(why===null) return; await call("decline",{reason:why}); app.innerHTML=biz(d)+`<div class="card"><div class="done" style="background:#eef3ef;color:var(--ink2)">No problem — we've let ${esc(d.business.name)} know.</div></div>`; });
+  const c2=document.getElementById("c2"), signBtn=document.getElementById("sign");
+  if(c2){ const refresh=()=>{ const has=st.mode==='draw'?st.hasInk:!!(document.getElementById("typed")||{}).value.trim(); signBtn.disabled=!(c2.checked&&has); }; c2.onchange=refresh;
+    if(st.mode==='draw') setupPad(refresh); else { const t=document.getElementById("typed"); t.oninput=()=>{ document.getElementById("typedprev").textContent=t.value; refresh(); }; }
+    signBtn.onclick=async()=>{ signBtn.disabled=true; signBtn.textContent="Signing…"; const payload={answers:st.answers}; if(st.mode==='draw') payload.signature_png=document.getElementById("pad").toDataURL("image/png"); else payload.typed_name=document.getElementById("typed").value.trim();
+      const r=await call("sign",payload); if(!r.ok){ document.getElementById("m4").textContent=r.message||"Couldn't sign. Please try again."; signBtn.disabled=false; signBtn.textContent="Sign"; if(r.error==='form_incomplete'){ st.step=2; render(); } return; }
+      st.doc.status='signed'; st.doc.signed_at=new Date().toISOString(); st.signedUrl=r.signed_url; st.feeUrl=r.fee_url; renderSigned(); };
+  }
+}
+function setupPad(onInk){
+  const c=document.getElementById("pad"); const ctx=c.getContext("2d"); const dpr=window.devicePixelRatio||1; const rect=c.getBoundingClientRect(); c.width=rect.width*dpr; c.height=rect.height*dpr; ctx.scale(dpr,dpr); ctx.lineWidth=2.4; ctx.lineCap="round"; ctx.lineJoin="round"; ctx.strokeStyle="#1b2452";
+  let drawing=false, last=null; const pos=e=>{ const r=c.getBoundingClientRect(); const p=e.touches?e.touches[0]:e; return {x:p.clientX-r.left,y:p.clientY-r.top}; };
+  const start=e=>{ e.preventDefault(); drawing=true; last=pos(e); ctx.beginPath(); ctx.moveTo(last.x,last.y); ctx.lineTo(last.x+0.1,last.y+0.1); ctx.stroke(); mark(); };
+  const move=e=>{ if(!drawing) return; e.preventDefault(); const p=pos(e); ctx.beginPath(); ctx.moveTo(last.x,last.y); ctx.lineTo(p.x,p.y); ctx.stroke(); last=p; };
+  const end=()=>{ drawing=false; };
+  const mark=()=>{ if(!st.hasInk){ st.hasInk=true; document.getElementById("padhint").style.display='none'; onInk(); } };
+  c.addEventListener("pointerdown",start); c.addEventListener("pointermove",move); window.addEventListener("pointerup",end);
+  const clr=document.getElementById("clear"); if(clr) clr.onclick=()=>{ ctx.clearRect(0,0,rect.width,rect.height); st.hasInk=false; document.getElementById("padhint").style.display=''; onInk(); };
+  st.hasInk=false;
+}
+async function renderSigned(){
+  const d=st.doc; let url=st.signedUrl; if(!url){ const r=await call("signed_url"); url=r.url; }
+  let fee=""; if(d.fee_cents){ let feeUrl=st.feeUrl, paid=false; if(!feeUrl){ const r=await call("fee_link"); feeUrl=r.url; paid=r.paid; } fee=paid?`<p class="small ok" style="text-align:center;margin-top:12px">Application fee paid. Thank you.</p>`:feeUrl?`<a class="btn" href="${esc(feeUrl)}" style="text-decoration:none;text-align:center">Pay the ${money(d.fee_cents)} application fee</a><p class="small" style="text-align:center">Your application isn't complete until the fee is paid.</p>`:""; }
+  app.innerHTML=biz(d)+`<div class="card"><div class="done">Signed. Thank you${d.signer_name?", "+esc(d.signer_name.split(" ")[0]):""}!</div>${fee}${url?`<a class="btn ghost" href="${esc(url)}" target="_blank" rel="noopener" style="text-decoration:none;text-align:center">Download your signed copy (PDF)</a>`:""}<p class="small" style="margin-top:12px">Signed ${esc(new Date(d.signed_at||Date.now()).toLocaleString())}. ${esc(d.business.name)} has a copy with the signing certificate.</p></div>
+  <div class="card">${docHtml(d)}</div><div class="foot">Sent through Donna for ${esc(d.business.name)}.</div>`;
+}
+load();
+</script>
+</body>
+</html>

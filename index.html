@@ -424,6 +424,8 @@ function salonOn(){ const f=(state.account&&state.account.settings&&state.accoun
 function propertyOn(){ const f=(state.account&&state.account.settings&&state.account.settings.features)||{}; return !!f.property_management; }
 // Payments (shared module, exposed per vertical): contractors today; any account with features.payments later.
 function paymentsOn(){ const ac=state.account||{}; const f=(ac.settings&&ac.settings.features)||{}; return ac.industry==='contractor' || !!f.payments; }
+function realEstateOn(){ const ac=state.account||{}; const f=(ac.settings&&ac.settings.features)||{}; return ac.industry==='real_estate' || !!f.real_estate; }
+function reSettings(){ return (state.account&&state.account.settings&&state.account.settings.real_estate)||{}; }
 // Solo vs team is driven by the plan: starter is solo, Pro/Enterprise is a team.
 function salonMode(){ return teamAllowed() ? 'team' : 'solo'; }
 function isSolo(){ return salonOn() && salonMode()==='solo'; }
@@ -453,6 +455,7 @@ function renderApp(){
     if(salonOn()) navActivity.splice(2,0,["waitlist","Waitlist",I.clock]);
     if(!pmMode()) navActivity.splice(0,0,["today","Today",I.clock]);
     if(paymentsOn()) navActivity.splice(1,0,["jobs","Jobs & money",I.card]);
+    if(realEstateOn()){ navConfig.splice(1,0,["listings","Listings",I.building]); navActivity.splice(1,0,["leads","Leads & documents",I.clip]); }
     if(propertyOn()){ navConfig.splice(1,0,["properties","Properties",I.building]); navConfig.splice(2,0,["contractors","Contractors",I.users]); navActivity.splice(0,0,["requests","Service requests",I.wrench]); }
     soon=[["billing","Billing",I.card]];
   } else {
@@ -481,7 +484,7 @@ function renderApp(){
     </aside>
     <main class="main">
       <div class="topbar">
-        <div class="crumbs">${['settings','notifications'].includes(state.view)?'Account':(['today','messages','appointments','waitlist','calls','contacts','clients','gaps','conversations','requests'].includes(state.view)?'Activity':'Configure')} · <b>${esc(({today:"Today",assistant:"Assistant",schedule:"Schedule",types:(pmMode()?"Visit types":(salonOn()?"Services":"Appointment types")),staff:"Staff",messages:"Phone messages",appointments:(pmMode()?"Visits & appointments":"Appointments"),settings:"Settings",notifications:"Notifications",calls:"Calls",knowledge:"Knowledge",contacts:(salonOn()?"Clients":"Contacts"),clients:"Clients",gaps:"Open questions",conversations:"Inbox",waitlist:"Waitlist",promotions:"Promotions",booking:(pmMode()?"Self-scheduling":"Booking page"),mylink:"My booking link",intake:"Intake forms",properties:"Properties",contractors:"Contractors",requests:"Service requests"})[state.view])}</b></div>
+        <div class="crumbs">${['settings','notifications'].includes(state.view)?'Account':(['today','messages','appointments','waitlist','calls','contacts','clients','gaps','conversations','requests','leads'].includes(state.view)?'Activity':'Configure')} · <b>${esc(({today:"Today",assistant:"Assistant",schedule:"Schedule",types:(pmMode()?"Visit types":(salonOn()?"Services":"Appointment types")),staff:"Staff",messages:"Phone messages",appointments:(pmMode()?"Visits & appointments":"Appointments"),settings:"Settings",notifications:"Notifications",calls:"Calls",knowledge:"Knowledge",contacts:(salonOn()?"Clients":"Contacts"),clients:"Clients",gaps:"Open questions",conversations:"Inbox",waitlist:"Waitlist",promotions:"Promotions",booking:(pmMode()?"Self-scheduling":"Booking page"),mylink:"My booking link",intake:"Intake forms",properties:"Properties",contractors:"Contractors",requests:"Service requests",listings:"Listings",leads:"Leads & documents"})[state.view])}</b></div>
         <div class="acct-chip"><span class="av">${initials}</span><div class="who"><b>${esc(state.account.company)}</b><span>${esc((state.account.status||'trial'))} · ${esc(state.account.plan||'starter')}</span></div></div>
       </div>
       <div id="approve-banner"></div>
@@ -498,8 +501,8 @@ function renderPage(){
   if('speechSynthesis' in window) window.speechSynthesis.cancel();
   teardownRealtime();
   document.querySelectorAll(".nav-item[data-v]").forEach(b=>b.classList.toggle("active",b.dataset.v===state.view));
-  $(".crumbs").innerHTML=`${['settings','notifications'].includes(state.view)?'Account':(['today','messages','appointments','waitlist','calls','contacts','clients','gaps','conversations','requests'].includes(state.view)?'Activity':'Configure')} · <b>${esc(({today:"Today",assistant:"Assistant",schedule:"Schedule",types:(pmMode()?"Visit types":(salonOn()?"Services":"Appointment types")),staff:"Staff",messages:"Phone messages",appointments:(pmMode()?"Visits & appointments":"Appointments"),settings:"Settings",notifications:"Notifications",calls:"Calls",knowledge:"Knowledge",contacts:(salonOn()?"Clients":"Contacts"),clients:"Clients",gaps:"Open questions",conversations:"Email inbox",waitlist:"Waitlist",promotions:"Promotions",booking:(pmMode()?"Self-scheduling":"Booking page"),mylink:"My booking link",intake:"Intake forms",properties:"Properties",contractors:"Contractors",requests:"Service requests"})[state.view])}</b>`;
-  const PAGES={today:pageToday, assistant:pageAssistant, schedule:pageSchedule, types:pageTypes, staff:pageStaff, messages:pageMessages, appointments:renderAppts, settings:pageSettings, notifications:pageNotifications, calls:pageCalls, knowledge:pageKnowledge, contacts:pageContacts, clients:pageClients, gaps:pageGaps, conversations:pageConversations, waitlist:pageWaitlist, promotions:pagePromotions, booking:pageBookingPage, mylink:pageMyLink, intake:pageIntakeForms, properties:pageProperties, contractors:pageContractors, requests:pageServiceRequests, jobs:pageJobs};
+  $(".crumbs").innerHTML=`${['settings','notifications'].includes(state.view)?'Account':(['today','messages','appointments','waitlist','calls','contacts','clients','gaps','conversations','requests','leads'].includes(state.view)?'Activity':'Configure')} · <b>${esc(({today:"Today",assistant:"Assistant",schedule:"Schedule",types:(pmMode()?"Visit types":(salonOn()?"Services":"Appointment types")),staff:"Staff",messages:"Phone messages",appointments:(pmMode()?"Visits & appointments":"Appointments"),settings:"Settings",notifications:"Notifications",calls:"Calls",knowledge:"Knowledge",contacts:(salonOn()?"Clients":"Contacts"),clients:"Clients",gaps:"Open questions",conversations:"Email inbox",waitlist:"Waitlist",promotions:"Promotions",booking:(pmMode()?"Self-scheduling":"Booking page"),mylink:"My booking link",intake:"Intake forms",properties:"Properties",contractors:"Contractors",requests:"Service requests",listings:"Listings",leads:"Leads & documents"})[state.view])}</b>`;
+  const PAGES={today:pageToday, assistant:pageAssistant, schedule:pageSchedule, types:pageTypes, staff:pageStaff, messages:pageMessages, appointments:renderAppts, settings:pageSettings, notifications:pageNotifications, calls:pageCalls, knowledge:pageKnowledge, contacts:pageContacts, clients:pageClients, gaps:pageGaps, conversations:pageConversations, waitlist:pageWaitlist, promotions:pagePromotions, booking:pageBookingPage, mylink:pageMyLink, intake:pageIntakeForms, properties:pageProperties, contractors:pageContractors, requests:pageServiceRequests, jobs:pageJobs, listings:pageListings, leads:pageLeads};
   const LOADERS={today:loadAppointments, appointments:loadAppointments, messages:loadMessages, calls:loadCalls, contacts:loadContacts, clients:loadContacts, gaps:loadGaps, conversations:loadConversations, staff:loadStaff, waitlist:loadWaitlist};
   const v=state.view;
   (PAGES[v]||(()=>{}))();
@@ -3230,6 +3233,7 @@ function pageSettings(){
       <select class="inp" id="tz-select" style="max-width:340px">${TZS.map(t=>`<option value="${t[0]}" ${ac.timezone===t[0]?'selected':''}>${t[1]}</option>`).join("")}</select>
     </div>
 
+    ${(realEstateOn()&&isManager())?reSettingsCardHTML():''}
     ${(paymentsOn()&&isManager())?`
     <div class="card"><div class="card-h"><h2>Trip fee, hours & after-hours calls</h2><button class="btn sm primary" id="ctr-save">Save</button></div>
       <p style="font-size:13px;color:var(--muted);margin-bottom:12px">${esc(aName())} quotes these on the phone and puts them on the invoice when you tap Done. Leave the trip fee at 0 if you don't charge one.</p>
@@ -3352,6 +3356,7 @@ function pageSettings(){
   { const pl=$("#prov-label-save"); if(pl) pl.onclick=saveProviderLabel; }
   $("#tz-save").onclick=saveTimezone;
   if($("#pay-card")) paintPaymentsCard();
+  reBindSettingsCard();
   { const cs=$("#ctr-save"); if(cs){ const on=$("#ctr-ah-on"), box=$("#ctr-ah-box"), lab=$("#ctr-ah-on-lab"); if(on) on.onchange=()=>{ box.style.display=on.checked?'':'none'; lab.textContent=on.checked?'We take them':'We don’t take them'; }; cs.onclick=async()=>{ const msg=$("#ctr-msg"); const prev=(state.account.settings||{}).contractor||{}; const fee=Math.round((parseFloat($("#ctr-ah-fee").value)||0)*100); const prepay=$("#ctr-ah-prepay").checked; if(prepay&&fee<=0){ msg.textContent='Set a flat after-hours fee to ask for it up front.'; return; } const contractor=Object.assign({}, prev, { trip_fee_cents: Math.round((parseFloat($("#ctr-trip").value)||0)*100), trip_fee_waived_if_work: $("#ctr-waive").value==='1', day_start_hour: parseInt($("#ctr-start").value,10), day_end_hour: parseInt($("#ctr-end").value,10), travel_buffer_min: parseInt($("#ctr-buffer").value,10)||0, after_hours_enabled: $("#ctr-ah-on").checked, after_hours_fee_cents: fee, after_hours_multiplier: parseFloat($("#ctr-ah").value)||0, after_hours_prepay: prepay, after_hours_page_phone: ($("#ctr-ah-phone").value||'').trim(), job_duration_min: parseInt(($("#ctr-jobdur")||{}).value,10)||120, estimate_review_over_cents: Math.round((parseFloat(($("#ctr-est-review")||{}).value)||0)*100)||null, estimate_valid_days: parseInt(($("#ctr-est-days")||{}).value,10)||14, escalate_after_min: parseInt(($("#ctr-escalate")||{}).value,10)||15, on_call: [...document.querySelectorAll('#ctr-oncall [data-oncall]')].filter(s=>s.value).sort((a,b)=>Number(a.value)-Number(b.value)).map(s=>s.dataset.oncall), card_on_file_all: !!($("#ctr-card-all")&&$("#ctr-card-all").checked), card_on_file_types: [...document.querySelectorAll('[data-cardtype]')].filter(c=>c.checked).map(c=>c.dataset.cardtype) }); const settings=Object.assign({}, state.account.settings||{}, { contractor }); msg.textContent='Saving…'; const { error }=await db.from('accounts').update({ settings }).eq('id',state.account.id); if(error){ msg.textContent='Could not save.'; return; } state.account.settings=settings; msg.textContent='Saved.'; setTimeout(()=>{ if(msg) msg.textContent=''; },1500); }; } }
   { const ae=$("#alert-save"); if(ae) ae.onclick=saveAlertEmail; }
   { const is=$("#inbound-save"); if(is) is.onclick=saveInbound; const ic=$("#inbound-copy"); if(ic) ic.onclick=()=>{ const a=$("#inbound-addr"); if(a&&a.value){ try{ navigator.clipboard&&navigator.clipboard.writeText(a.value.trim()); }catch(e){} const m=$("#inbound-msg"); if(m){ m.style.color='var(--muted)'; m.textContent='Copied.'; } } }; }
@@ -3493,6 +3498,333 @@ function pmFmtDate(d){ if(!d) return ''; try{ return new Date(d+(d.length<=10?'T
 async function pmCall(action,payload){ try{ const { data, error }=await db.functions.invoke('pm-request',{ body:Object.assign({action},payload||{}) }); if(error) return { ok:false, error:error.message }; return data||{ok:false}; }catch(e){ return { ok:false, error:String(e) }; } }
 
 async function loadProperties(){ const { data }=await db.from('properties').select('*').eq('account_id',state.account.id).order('name'); state.pm=state.pm||{}; state.pm.props=data||[]; }
+
+// ===================== Real estate: listings, leads & documents =====================
+const RE_LISTING_TYPES=[["for_sale","For sale"],["for_rent","For rent"],["for_lease","For lease (commercial)"]];
+const RE_PROPERTY_TYPES=[["single_family","Single-family home"],["condo_townhome","Condo / townhome"],["multifamily","Multifamily"],["land","Land / lot"],["farm_ranch","Farm & ranch"],["commercial","Commercial"],["new_construction","New construction"],["other","Other"]];
+const RE_STATUSES=[["coming_soon","Coming soon"],["active","Active"],["pending","Pending"],["under_contract","Under contract"],["leased","Leased"],["sold","Sold"],["off_market","Off market"]];
+const RE_PETS=[["","—"],["no","No pets"],["cats","Cats"],["dogs","Dogs"],["cats_dogs","Cats & dogs"],["case_by_case","Case by case"]];
+const reMoney=c=>c==null?'':'$'+(Math.round(c)/100).toLocaleString('en-US',{maximumFractionDigits:0});
+const rePrice=l=>{ if(l.price_cents==null) return '—'; if(l.listing_type==='for_rent') return reMoney(l.price_cents)+'/mo'; if(l.listing_type==='for_lease') return l.price_period==='sqft_year'?('$'+(l.price_cents/100).toFixed(2)+'/sqft/yr'):(reMoney(l.price_cents)+'/mo'); return reMoney(l.price_cents); };
+const reLabel=(arr,v)=>((arr.find(x=>x[0]===v)||[])[1])||v||'';
+const reOpts=(arr,v)=>arr.map(x=>`<option value="${x[0]}" ${x[0]===v?'selected':''}>${esc(x[1])}</option>`).join('');
+const reNum=v=>{ v=String(v==null?'':v).replace(/[^0-9.\-]/g,''); return v===''?null:Number(v); };
+const reCents=v=>{ const n=reNum(v); return n==null?null:Math.round(n*100); };
+
+function pageListings(){
+  state.re=state.re||{};
+  const s=reSettings(); const lines=s.lines||['residential'];
+  $("#page").innerHTML=`<div class="page">
+    <div class="page-head"><h1>Listings</h1><p>Everything ${esc(aName())} can talk about on the phone: what's for sale, for rent or for lease, the facts about each one, and how showings work. She never shares lockbox codes or tenant details with callers.</p></div>
+    <div class="card"><div class="card-h"><h2>Your listings</h2><div style="display:flex;gap:8px;flex-wrap:wrap">
+      <select class="inp" id="re-filter" style="min-width:140px"><option value="live">Live (active, coming soon, pending)</option><option value="for_rent">Rentals</option><option value="for_sale">For sale</option><option value="for_lease">Commercial leases</option><option value="all">All</option></select>
+      <button class="btn sm" id="re-csv">Import CSV</button><button class="btn sm" id="re-export">Export CSV</button><button class="btn sm primary" id="re-new">+ Add listing</button></div></div>
+      <div id="re-form" style="display:none;border:1px solid var(--line);border-radius:12px;padding:12px;margin-bottom:12px"></div>
+      <div id="re-csv-box" style="display:none;border:1px solid var(--line);border-radius:12px;padding:12px;margin-bottom:12px">
+        <div style="font-weight:600;margin-bottom:6px">Import listings from a spreadsheet</div>
+        <p style="font-size:12.5px;color:var(--muted);margin:0 0 8px">Save your sheet as CSV with a header row. Recognized columns (any order, case doesn't matter): <code>address, city, state, zip, type</code> (rent / sale / lease), <code>property</code> (house, condo, land, commercial…), <code>price</code> or <code>rent</code>, <code>beds, baths, half_baths, sqft, lot_sqft, acres, year_built, garage, office</code> (yes/no), <code>pets, deposit, available, lease_min_months, status, mls, description, showing_instructions, aliases</code> (separate with |). Same address + zip updates the existing row.</p>
+        <input type="file" id="re-csv-file" accept=".csv,text/csv"> <span id="re-csv-msg" style="font-size:12.5px;color:var(--muted)"></span>
+        <div id="re-csv-preview" style="margin-top:8px"></div>
+      </div>
+      <div id="re-list"><p style="font-size:13px;color:var(--muted)">Loading…</p></div>
+    </div>
+  </div>`;
+  $("#re-new").onclick=()=>showListingForm(null);
+  $("#re-csv").onclick=()=>{ const b=$("#re-csv-box"); b.style.display=b.style.display==='none'?'block':'none'; };
+  $("#re-csv-file").onchange=reCsvPick;
+  $("#re-export").onclick=reExportCsv;
+  $("#re-filter").onchange=loadListings;
+  loadListings();
+}
+async function loadListings(){
+  const el=$("#re-list"); if(!el) return;
+  const f=($("#re-filter")||{}).value||'live';
+  let q=db.from('re_listings').select('*').eq('account_id',state.account.id).order('created_at',{ascending:false});
+  if(f==='live') q=q.in('status',['coming_soon','active','pending']); else if(f!=='all') q=q.eq('listing_type',f);
+  const { data, error }=await q;
+  if(error){ el.innerHTML=`<p style="font-size:13px;color:var(--danger)">${esc(error.message)}</p>`; return; }
+  state.re.listings=data||[];
+  if(!data.length){ el.innerHTML=`<div class="empty">${I.building}<div>No listings here yet. Add one, or import your spreadsheet.</div></div>`; return; }
+  el.innerHTML=`<table class="tbl" style="width:100%"><thead><tr><th>Address</th><th>Type</th><th style="text-align:right">Price</th><th>Beds / baths</th><th>Sq ft</th><th>Status</th><th></th></tr></thead><tbody>${data.map(l=>`<tr>
+    <td><b>${esc(l.address)}</b><div style="font-size:12px;color:var(--muted)">${esc([l.city,l.state,l.zip].filter(Boolean).join(', '))}${l.mls_number?' · MLS '+esc(l.mls_number):''}</div></td>
+    <td style="font-size:12.5px">${esc(reLabel(RE_LISTING_TYPES,l.listing_type))}<div style="color:var(--muted)">${esc(reLabel(RE_PROPERTY_TYPES,l.property_type))}</div></td>
+    <td style="text-align:right;font-weight:700">${esc(rePrice(l))}</td>
+    <td>${l.beds!=null?esc(String(l.beds))+(l.office?' + office':''):'—'} / ${l.baths!=null?esc(String(l.baths))+(l.half_baths?'.'+l.half_baths:''):'—'}</td>
+    <td>${l.sqft?Number(l.sqft).toLocaleString():(l.acres?esc(String(l.acres))+' ac':'—')}</td>
+    <td><span class="pill" ${l.status==='active'?'style="background:var(--ok);color:#fff"':''}>${esc(reLabel(RE_STATUSES,l.status))}</span>${l.available_on?`<div style="font-size:11.5px;color:var(--muted)">avail ${esc(l.available_on)}</div>`:''}</td>
+    <td style="text-align:right;white-space:nowrap"><button class="btn sm" data-re-edit="${l.id}">Edit</button> <select class="inp" data-re-status="${l.id}" style="display:inline-block;width:auto;padding:3px 6px;font-size:12px">${reOpts(RE_STATUSES,l.status)}</select></td></tr>`).join('')}</tbody></table>`;
+  el.querySelectorAll('[data-re-edit]').forEach(b=>b.onclick=()=>showListingForm(state.re.listings.find(x=>x.id===b.dataset.reEdit)));
+  el.querySelectorAll('[data-re-status]').forEach(s=>s.onchange=async()=>{ await db.from('re_listings').update({ status:s.value, updated_at:new Date().toISOString() }).eq('id',s.dataset.reStatus); loadListings(); });
+}
+function showListingForm(l){
+  l=l||{ listing_type:(reSettings().lines||[]).includes('rentals')&&!(reSettings().lines||[]).includes('residential')?'for_rent':'for_sale', property_type:'single_family', status:'active', state:'TX', features:[], aliases:[], photos:[] };
+  const box=$("#re-form"); box.style.display='block';
+  const isRent=l.listing_type==='for_rent', isLease=l.listing_type==='for_lease', isLand=l.property_type==='land'||l.property_type==='farm_ranch';
+  box.innerHTML=`<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px"><b>${l.id?'Edit listing':'New listing'}</b><button class="btn sm" id="re-f-close">Close</button></div>
+    <div class="grid-2">
+      <div class="field"><label class="lab">Listing</label><select class="inp" id="re-f-ltype">${reOpts(RE_LISTING_TYPES,l.listing_type)}</select></div>
+      <div class="field"><label class="lab">Property</label><select class="inp" id="re-f-ptype">${reOpts(RE_PROPERTY_TYPES,l.property_type)}</select></div>
+      <div class="field" style="grid-column:1/-1"><label class="lab">Street address</label><input class="inp" id="re-f-address" value="${esc(l.address||'')}" placeholder="3903 Belle Maison Dr"></div>
+      <div class="field"><label class="lab">City</label><input class="inp" id="re-f-city" value="${esc(l.city||'')}" placeholder="Arlington"></div>
+      <div class="field"><div class="grid-2"><div><label class="lab">State</label><input class="inp" id="re-f-state" value="${esc(l.state||'TX')}" maxlength="2"></div><div><label class="lab">Zip</label><input class="inp" id="re-f-zip" value="${esc(l.zip||'')}" inputmode="numeric"></div></div></div>
+      <div class="field"><label class="lab">${isRent?'Monthly rent':isLease?'Lease rate':'Asking price'}</label><div style="display:flex;align-items:center;gap:6px"><span style="color:var(--muted)">$</span><input class="inp" id="re-f-price" inputmode="decimal" value="${l.price_cents!=null?(l.price_cents/100):''}">${isLease?`<select class="inp" id="re-f-period" style="max-width:130px">${reOpts([["month","per month"],["sqft_year","per sq ft / yr"]],l.price_period||'month')}</select>`:''}</div></div>
+      <div class="field"><label class="lab">Status</label><select class="inp" id="re-f-status">${reOpts(RE_STATUSES,l.status)}</select></div>
+      ${isLand?`<div class="field"><label class="lab">Acres</label><input class="inp" id="re-f-acres" inputmode="decimal" value="${l.acres??''}"></div><div class="field"><label class="lab">Lot sq ft <span class="sub">optional</span></label><input class="inp" id="re-f-lot" inputmode="numeric" value="${l.lot_sqft??''}"></div>`
+      :`<div class="field"><div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px"><div><label class="lab">Beds</label><input class="inp" id="re-f-beds" inputmode="decimal" value="${l.beds??''}"></div><div><label class="lab">Full baths</label><input class="inp" id="re-f-baths" inputmode="decimal" value="${l.baths??''}"></div><div><label class="lab">Half baths</label><input class="inp" id="re-f-half" inputmode="numeric" value="${l.half_baths??''}"></div></div></div>
+      <div class="field"><div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px"><div><label class="lab">Sq ft</label><input class="inp" id="re-f-sqft" inputmode="numeric" value="${l.sqft??''}"></div><div><label class="lab">Year built</label><input class="inp" id="re-f-year" inputmode="numeric" value="${l.year_built??''}"></div><div><label class="lab">Garage</label><input class="inp" id="re-f-garage" inputmode="numeric" value="${l.garage??''}"></div></div></div>
+      <div class="field"><label class="lab">Extras</label><div style="display:flex;gap:14px;flex-wrap:wrap;font-size:13px"><label style="display:flex;gap:6px;align-items:center"><input type="checkbox" id="re-f-office" ${l.office?'checked':''} style="width:auto">Office / study</label><label style="display:flex;gap:6px;align-items:center"><input type="checkbox" id="re-f-pool" ${l.pool?'checked':''} style="width:auto">Pool</label></div><div style="font-size:12px;color:var(--muted);margin-top:4px">${esc(aName())} says "4 bedrooms plus an office" — and counts it as a 5th room when a caller asks for 5.</div></div>`}
+      ${isRent?`<div class="field"><label class="lab">Pets</label><select class="inp" id="re-f-pets">${reOpts(RE_PETS,l.pets||'')}</select></div>
+      <div class="field"><label class="lab">Security deposit</label><div style="display:flex;align-items:center;gap:6px"><span style="color:var(--muted)">$</span><input class="inp" id="re-f-deposit" inputmode="decimal" value="${l.deposit_cents!=null?(l.deposit_cents/100):''}" placeholder="same as rent"></div></div>
+      <div class="field"><label class="lab">Available on</label><input class="inp" id="re-f-avail" type="date" value="${esc(l.available_on||'')}"></div>
+      <div class="field"><label class="lab">Minimum lease</label><select class="inp" id="re-f-lease">${reOpts([["","—"],["6","6 months"],["12","12 months"],["18","18 months"],["24","24 months"]],l.lease_min_months?String(l.lease_min_months):'')}</select></div>`:''}
+      ${!isRent&&!isLand?`<div class="field"><label class="lab">HOA dues <span class="sub">optional</span></label><div style="display:flex;align-items:center;gap:6px"><span style="color:var(--muted)">$</span><input class="inp" id="re-f-hoa" inputmode="decimal" value="${l.hoa_cents!=null?(l.hoa_cents/100):''}"><select class="inp" id="re-f-hoaper" style="max-width:120px">${reOpts([["month","/ month"],["quarter","/ quarter"],["year","/ year"]],l.hoa_period||'year')}</select></div></div>
+      <div class="field"><label class="lab">Annual taxes <span class="sub">optional</span></label><div style="display:flex;align-items:center;gap:6px"><span style="color:var(--muted)">$</span><input class="inp" id="re-f-taxes" inputmode="decimal" value="${l.taxes_cents!=null?(l.taxes_cents/100):''}"></div></div>`:''}
+      <div class="field"><label class="lab">MLS # <span class="sub">optional</span></label><input class="inp" id="re-f-mls" value="${esc(l.mls_number||'')}"></div>
+      <div class="field"><label class="lab">Neighborhood / subdivision <span class="sub">optional</span></label><input class="inp" id="re-f-hood" value="${esc(l.neighborhood||'')}"></div>
+      <div class="field" style="grid-column:1/-1"><label class="lab">Description <span class="sub">what ${esc(aName())} says when a caller asks "tell me about it"</span></label><textarea class="inp" id="re-f-desc" rows="3">${esc(l.description||'')}</textarea></div>
+      <div class="field"><label class="lab">Features <span class="sub">comma-separated</span></label><input class="inp" id="re-f-features" value="${esc((l.features||[]).join(', '))}" placeholder="granite counters, fenced yard, 2-car garage"></div>
+      <div class="field"><label class="lab">Other names callers use <span class="sub">comma-separated</span></label><input class="inp" id="re-f-aliases" value="${esc((l.aliases||[]).join(', '))}" placeholder="the Belle Maison house, 3903"></div>
+      <div class="field" style="grid-column:1/-1"><label class="lab">Showing instructions <span class="sub">for you and the team — ${esc(aName())} never reads codes to callers</span></label><input class="inp" id="re-f-show" value="${esc(l.showing_instructions||'')}" placeholder="Vacant, lockbox on front door. / Tenant occupied — 24h notice."><label style="display:flex;gap:6px;align-items:center;font-size:13px;margin-top:6px"><input type="checkbox" id="re-f-occupied" ${l.occupied?'checked':''} style="width:auto">Currently occupied (tenant or owner) — showings need notice</label></div>
+      <div class="field" style="grid-column:1/-1"><label class="lab">Private notes</label><textarea class="inp" id="re-f-notes" rows="2">${esc(l.notes||'')}</textarea></div>
+    </div>
+    <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap"><button class="btn primary" id="re-f-save">${l.id?'Save changes':'Add listing'}</button>${l.id?`<button class="btn sm" id="re-f-dup">Duplicate</button><button class="btn sm" id="re-f-del" style="margin-left:auto">Delete</button>`:''}<span id="re-f-msg" style="font-size:12.5px;color:var(--muted)"></span></div>`;
+  box.scrollIntoView({behavior:'smooth',block:'start'});
+  $("#re-f-close").onclick=()=>{ box.style.display='none'; };
+  const rerender=()=>{ const cur=readListingForm(l); showListingForm(cur); };
+  $("#re-f-ltype").onchange=rerender; $("#re-f-ptype").onchange=rerender;
+  $("#re-f-save").onclick=async()=>{
+    const row=readListingForm(l); const msg=$("#re-f-msg");
+    if(!row.address){ msg.style.color='var(--danger)'; msg.textContent='Street address is required.'; return; }
+    const b=$("#re-f-save"); b.disabled=true;
+    row.account_id=state.account.id; row.updated_at=new Date().toISOString();
+    const res = l.id ? await db.from('re_listings').update(row).eq('id',l.id) : await db.from('re_listings').insert(row);
+    b.disabled=false;
+    if(res.error){ msg.style.color='var(--danger)'; msg.textContent=res.error.message; return; }
+    box.style.display='none'; loadListings();
+  };
+  if(l.id){
+    $("#re-f-dup").onclick=()=>{ const c=readListingForm(l); delete c.id; c.address=''; c.mls_number=null; showListingForm(c); };
+    $("#re-f-del").onclick=async()=>{ if(!confirm('Delete this listing? Leads and documents tied to it are kept.')) return; await db.from('re_listings').delete().eq('id',l.id); box.style.display='none'; loadListings(); };
+  }
+}
+function readListingForm(l){
+  const g=id=>{ const e=$("#re-f-"+id); return e?e.value.trim():undefined; };
+  const chk=id=>{ const e=$("#re-f-"+id); return e?e.checked:undefined; };
+  const split=v=>v==null?undefined:v.split(',').map(x=>x.trim()).filter(Boolean);
+  const out=Object.assign({}, l.id?{id:l.id}:{}, {
+    listing_type:g('ltype'), property_type:g('ptype'), status:g('status'),
+    address:g('address'), city:g('city')||null, state:(g('state')||'TX').toUpperCase(), zip:g('zip')||null, neighborhood:g('hood')||null,
+    price_cents:reCents(g('price')), price_period:g('period')||(g('ltype')==='for_rent'?'month':g('ltype')==='for_sale'?'total':'month'),
+    mls_number:g('mls')||null, description:g('desc')||null, features:split(g('features'))||[], aliases:split(g('aliases'))||[],
+    showing_instructions:g('show')||null, occupied:!!chk('occupied'), notes:g('notes')||null
+  });
+  const opt=(k,v)=>{ if(v!==undefined) out[k]=v; };
+  opt('beds',reNum(g('beds'))); opt('baths',reNum(g('baths'))); opt('half_baths',reNum(g('half'))); opt('sqft',reNum(g('sqft'))); opt('year_built',reNum(g('year'))); opt('garage',reNum(g('garage')));
+  opt('office',chk('office')); opt('pool',chk('pool'));
+  opt('acres',reNum(g('acres'))); opt('lot_sqft',reNum(g('lot')));
+  opt('pets',g('pets')===undefined?undefined:(g('pets')||null)); opt('deposit_cents',g('deposit')===undefined?undefined:reCents(g('deposit'))); opt('available_on',g('avail')===undefined?undefined:(g('avail')||null)); opt('lease_min_months',g('lease')===undefined?undefined:reNum(g('lease')));
+  opt('hoa_cents',g('hoa')===undefined?undefined:reCents(g('hoa'))); opt('hoa_period',g('hoaper')); opt('taxes_cents',g('taxes')===undefined?undefined:reCents(g('taxes')));
+  // keep untouched fields from the original so re-render doesn't lose them
+  ['beds','baths','half_baths','sqft','year_built','garage','office','pool','acres','lot_sqft','pets','deposit_cents','available_on','lease_min_months','hoa_cents','hoa_period','taxes_cents','photos'].forEach(k=>{ if(out[k]===undefined && l[k]!==undefined) out[k]=l[k]; });
+  return out;
+}
+// ---- CSV import / export ----
+function reParseCsv(text){
+  const rows=[]; let row=[], cell='', q=false;
+  for(let i=0;i<text.length;i++){ const ch=text[i];
+    if(q){ if(ch==='"'){ if(text[i+1]==='"'){ cell+='"'; i++; } else q=false; } else cell+=ch; }
+    else if(ch==='"') q=true; else if(ch===','){ row.push(cell); cell=''; } else if(ch==='\n'||ch==='\r'){ if(ch==='\r'&&text[i+1]==='\n') i++; row.push(cell); rows.push(row); row=[]; cell=''; } else cell+=ch; }
+  if(cell!==''||row.length){ row.push(cell); rows.push(row); }
+  return rows.filter(r=>r.some(c=>String(c).trim()!==''));
+}
+function reRowsToListings(rows){
+  const head=rows[0].map(h=>String(h).trim().toLowerCase().replace(/[^a-z0-9]+/g,'_'));
+  const col=(...names)=>{ for(const n of names){ const i=head.indexOf(n); if(i>=0) return i; } return -1; };
+  const ix={ address:col('address','street','street_address','property_address'), city:col('city'), state:col('state','st'), zip:col('zip','zip_code','postal_code'), type:col('type','listing_type','listing'), prop:col('property','property_type','kind'),
+    price:col('price','rent','monthly_rent','asking_price','list_price'), beds:col('beds','bedrooms','br','bed'), baths:col('baths','bathrooms','ba','bath','full_baths'), half:col('half_baths','half_bath'), sqft:col('sqft','sq_ft','square_feet','living_area'), lot:col('lot_sqft','lot_size'), acres:col('acres','acreage'), year:col('year_built','year'), garage:col('garage','garage_spaces'), office:col('office','study'), pool:col('pool'),
+    pets:col('pets','pet_policy'), deposit:col('deposit','security_deposit'), avail:col('available','available_on','available_date','move_in'), lease:col('lease_min_months','min_lease','minimum_lease'), status:col('status'), mls:col('mls','mls_number','mls_'), desc:col('description','remarks','notes_public'), show:col('showing_instructions','showing','showings'), aliases:col('aliases','also_called','nicknames'), hood:col('neighborhood','subdivision'), features:col('features','amenities') };
+  if(ix.address<0) throw new Error('Need an "address" column.');
+  const yes=v=>/^(y|yes|true|1|x)$/i.test(String(v||'').trim());
+  const ltype=v=>{ v=String(v||'').toLowerCase(); if(/lease|commercial/.test(v)) return 'for_lease'; if(/rent|rental|lease/.test(v)) return 'for_rent'; if(/sale|sell/.test(v)) return 'for_sale'; return null; };
+  const ptype=v=>{ v=String(v||'').toLowerCase(); if(/condo|town/.test(v)) return 'condo_townhome'; if(/multi|duplex|triplex|fourplex|apartment/.test(v)) return 'multifamily'; if(/land|lot|acre/.test(v)) return 'land'; if(/farm|ranch/.test(v)) return 'farm_ranch'; if(/commercial|office|retail|industrial|warehouse/.test(v)) return 'commercial'; if(/new/.test(v)) return 'new_construction'; if(/house|home|single|sfr|sfh|residential/.test(v)) return 'single_family'; return v?'other':'single_family'; };
+  const status=v=>{ v=String(v||'').toLowerCase().replace(/\s+/g,'_'); return RE_STATUSES.some(s=>s[0]===v)?v:(/coming/.test(v)?'coming_soon':/contract/.test(v)?'under_contract':/pend/.test(v)?'pending':/leas/.test(v)?'leased':/sold/.test(v)?'sold':/off|inactive|withdrawn/.test(v)?'off_market':'active'); };
+  const pets=v=>{ v=String(v||'').toLowerCase(); if(!v) return null; if(/no|none/.test(v)&&!/cat|dog/.test(v)) return 'no'; if(/cat/.test(v)&&/dog/.test(v)) return 'cats_dogs'; if(/cat/.test(v)) return 'cats'; if(/dog/.test(v)) return 'dogs'; if(/case|ask|negoti/.test(v)) return 'case_by_case'; return /yes|ok|allow/.test(v)?'case_by_case':null; };
+  const get=(r,i)=>i>=0?String(r[i]??'').trim():'';
+  const out=[];
+  for(const r of rows.slice(1)){
+    const address=get(r,ix.address); if(!address) continue;
+    const lt=ltype(get(r,ix.type))||(ix.price>=0&&/rent/.test(head[ix.price])?'for_rent':'for_sale');
+    const dateStr=v=>{ if(!v) return null; const d=new Date(v); return isNaN(d)?null:d.toISOString().slice(0,10); };
+    const li={ address, city:get(r,ix.city)||null, state:(get(r,ix.state)||'TX').toUpperCase(), zip:get(r,ix.zip)||null, listing_type:lt, property_type:ptype(get(r,ix.prop)), status:status(get(r,ix.status)),
+      price_cents:reCents(get(r,ix.price)), price_period:lt==='for_sale'?'total':'month', beds:reNum(get(r,ix.beds)), baths:reNum(get(r,ix.baths)), half_baths:reNum(get(r,ix.half))||0, sqft:reNum(get(r,ix.sqft)), lot_sqft:reNum(get(r,ix.lot)), acres:reNum(get(r,ix.acres)), year_built:reNum(get(r,ix.year)), garage:reNum(get(r,ix.garage)),
+      office:ix.office>=0?yes(get(r,ix.office)):false, pool:ix.pool>=0?yes(get(r,ix.pool)):false, pets:pets(get(r,ix.pets)), deposit_cents:reCents(get(r,ix.deposit)), available_on:dateStr(get(r,ix.avail)), lease_min_months:reNum(get(r,ix.lease)),
+      mls_number:get(r,ix.mls)||null, description:get(r,ix.desc)||null, showing_instructions:get(r,ix.show)||null, neighborhood:get(r,ix.hood)||null,
+      aliases:get(r,ix.aliases)?get(r,ix.aliases).split(/[|;]/).map(x=>x.trim()).filter(Boolean):[], features:get(r,ix.features)?get(r,ix.features).split(/[|;,]/).map(x=>x.trim()).filter(Boolean):[] };
+    out.push(li);
+  }
+  return out;
+}
+async function reCsvPick(ev){
+  const f=ev.target.files&&ev.target.files[0]; if(!f) return; const msg=$("#re-csv-msg"), prev=$("#re-csv-preview");
+  try{ const text=await f.text(); const rows=reParseCsv(text); const items=reRowsToListings(rows);
+    if(!items.length) throw new Error('No rows found.');
+    prev.innerHTML=`<div style="font-size:13px;margin-bottom:6px"><b>${items.length}</b> listing${items.length===1?'':'s'} found. First few:</div><table class="tbl" style="width:100%;font-size:12.5px"><thead><tr><th>Address</th><th>Type</th><th>Price</th><th>Beds/baths</th><th>Sq ft</th><th>Status</th></tr></thead><tbody>${items.slice(0,6).map(l=>`<tr><td>${esc(l.address)}, ${esc(l.city||'')} ${esc(l.zip||'')}</td><td>${esc(reLabel(RE_LISTING_TYPES,l.listing_type))} · ${esc(reLabel(RE_PROPERTY_TYPES,l.property_type))}</td><td>${esc(rePrice(l))}</td><td>${l.beds??'—'}${l.office?'+office':''} / ${l.baths??'—'}</td><td>${l.sqft??'—'}</td><td>${esc(reLabel(RE_STATUSES,l.status))}</td></tr>`).join('')}</tbody></table><button class="btn primary" id="re-csv-go" style="margin-top:8px">Import ${items.length}</button>`;
+    $("#re-csv-go").onclick=async()=>{ const b=$("#re-csv-go"); b.disabled=true; msg.textContent='Importing…';
+      const { data:existing }=await db.from('re_listings').select('id,address,zip').eq('account_id',state.account.id);
+      const key=l=>(String(l.address).toLowerCase().replace(/\s+/g,' ').trim()+'|'+(l.zip||''));
+      const map=new Map((existing||[]).map(e=>[key(e),e.id]));
+      let added=0, updated=0, failed=0;
+      for(const l of items){ const id=map.get(key(l)); const row=Object.assign({account_id:state.account.id, updated_at:new Date().toISOString()}, l);
+        const res=id?await db.from('re_listings').update(row).eq('id',id):await db.from('re_listings').insert(row);
+        if(res.error) failed++; else if(id) updated++; else added++; }
+      msg.textContent=`Done: ${added} added, ${updated} updated${failed?`, ${failed} failed`:''}.`; prev.innerHTML=''; $("#re-csv-file").value=''; loadListings(); };
+    msg.textContent='';
+  }catch(e){ msg.style.color='var(--danger)'; msg.textContent=e.message||'Could not read that file.'; prev.innerHTML=''; }
+}
+async function reExportCsv(){
+  const { data }=await db.from('re_listings').select('*').eq('account_id',state.account.id).order('address');
+  const cols=['address','city','state','zip','listing_type','property_type','status','price','beds','baths','half_baths','sqft','lot_sqft','acres','year_built','garage','office','pool','pets','deposit','available_on','lease_min_months','mls_number','neighborhood','description','features','aliases','showing_instructions','occupied','notes'];
+  const q=v=>{ v=v==null?'':String(v); return /[",\n]/.test(v)?'"'+v.replace(/"/g,'""')+'"':v; };
+  const lines=[cols.join(',')].concat((data||[]).map(l=>cols.map(c=>{ if(c==='price') return l.price_cents!=null?(l.price_cents/100):''; if(c==='deposit') return l.deposit_cents!=null?(l.deposit_cents/100):''; if(c==='features'||c==='aliases') return (l[c]||[]).join('|'); if(c==='office'||c==='pool'||c==='occupied') return l[c]?'yes':'no'; return l[c]; }).map(q).join(',')));
+  const blob=new Blob([lines.join('\n')],{type:'text/csv'}); const a=document.createElement('a'); a.href=URL.createObjectURL(blob); a.download='listings.csv'; a.click();
+}
+
+// ---- Leads & documents ----
+const RE_LEAD_KINDS=[["buyer","Buyer"],["seller","Seller"],["renter","Renter"],["landlord","Landlord"],["tenant","Tenant"],["other","Other"]];
+const RE_LEAD_STATUS=[["new","New"],["contacted","Contacted"],["showing_set","Showing set"],["applied","Applied"],["under_contract","Under contract"],["closed","Closed"],["lost","Lost"]];
+const RE_DOC_KINDS={ showing_agreement:'Showing agreement', buyer_intake:'Buyer intake', seller_intake:'Seller intake', landlord_intake:'Landlord intake', rental_application:'Rental application', consent:'Consent', custom:'Document' };
+function pageLeads(){
+  state.re=state.re||{};
+  $("#page").innerHTML=`<div class="page">
+    <div class="page-head"><h1>Leads & documents</h1><p>Every buyer, seller, renter and landlord ${esc(aName())} talks to lands here with what she learned. Showing agreements and rental applications she sends for signature are tracked below with their signing record.</p></div>
+    <div class="card"><div class="card-h"><h2>Leads</h2><div style="display:flex;gap:8px"><select class="inp" id="re-ld-filter" style="min-width:130px"><option value="open">Open</option><option value="hot">Hot</option><option value="all">All</option></select><button class="btn sm primary" id="re-ld-new">+ Add lead</button></div></div>
+      <div id="re-ld-form" style="display:none;border:1px solid var(--line);border-radius:12px;padding:12px;margin-bottom:12px"></div>
+      <div id="re-ld-list"><p style="font-size:13px;color:var(--muted)">Loading…</p></div></div>
+    <div class="card"><div class="card-h"><h2>Documents sent for signature</h2><select class="inp" id="re-doc-filter" style="min-width:130px"><option value="open">Waiting</option><option value="signed">Signed</option><option value="all">All</option></select></div>
+      <p style="font-size:12.5px;color:var(--muted);margin:-4px 0 10px">${esc(aName())} texts a link; the signer confirms a one-time code, reads, and signs on their phone. You get the signed PDF with a certificate (who, when, phone, IP). Nothing is a legal form — these are your own showing agreement and application; TREC contracts still go through your broker's system.</p>
+      <div id="re-doc-list"><p style="font-size:13px;color:var(--muted)">Loading…</p></div></div>
+  </div>`;
+  $("#re-ld-filter").onchange=loadLeads; $("#re-doc-filter").onchange=loadReDocs;
+  $("#re-ld-new").onclick=()=>showLeadForm(null);
+  loadLeads(); loadReDocs();
+}
+async function loadLeads(){
+  const el=$("#re-ld-list"); if(!el) return; const f=$("#re-ld-filter").value;
+  let q=db.from('re_leads').select('*, re_listings(address,zip)').eq('account_id',state.account.id).order('hot',{ascending:false}).order('created_at',{ascending:false}).limit(200);
+  if(f==='open') q=q.in('status',['new','contacted','showing_set','applied','under_contract']); if(f==='hot') q=q.eq('hot',true);
+  const { data, error }=await q; if(error){ el.innerHTML=`<p style="font-size:13px;color:var(--danger)">${esc(error.message)}</p>`; return; }
+  state.re.leads=data||[];
+  if(!data.length){ el.innerHTML=`<p style="font-size:13px;color:var(--muted)">No leads yet. They appear here as ${esc(aName())} takes calls.</p>`; return; }
+  const money=c=>c==null?'':reMoney(c);
+  el.innerHTML=`<table class="tbl" style="width:100%"><thead><tr><th>Who</th><th>Looking for</th><th>Details</th><th>Status</th><th></th></tr></thead><tbody>${data.map(l=>`<tr>
+    <td>${l.hot?'<span class="pill" style="background:#b00020;color:#fff">hot</span> ':''}<b>${esc(l.name||'Unknown')}</b><div style="font-size:12px;color:var(--muted)">${esc(l.phone||'')}${l.email?' · '+esc(l.email):''}</div><div style="font-size:11.5px;color:var(--muted)">${esc(new Date(l.created_at).toLocaleDateString())} · ${esc(l.source||'phone')}${l.iabs_sent_at?' · IABS sent':''}</div></td>
+    <td><span class="pill">${esc(reLabel(RE_LEAD_KINDS,l.kind))}</span>${l.re_listings?`<div style="font-size:12.5px;margin-top:3px">${esc(l.re_listings.address)}</div>`:''}${l.property_address?`<div style="font-size:12.5px;margin-top:3px">${esc(l.property_address)}</div>`:''}</td>
+    <td style="font-size:12.5px">${[l.timeline?'Timeline: '+l.timeline:'', (l.price_min_cents||l.price_max_cents)?('Budget: '+[money(l.price_min_cents),money(l.price_max_cents)].filter(Boolean).join(' – ')):'', (l.areas||[]).length?'Areas: '+l.areas.join(', '):'', l.beds_wanted?l.beds_wanted+' bed':'', l.move_in?'Move-in '+l.move_in:'', l.preapproved===true?'Pre-approved':l.preapproved===false?'Not pre-approved':'', l.has_agent===true?'Has an agent':'', l.lender_referral?'Wants lender referral':'', l.pets?'Pets: '+l.pets:'', l.household_size?l.household_size+' in household':''].filter(Boolean).map(esc).join(' · ')}${l.notes?`<div style="color:var(--muted);margin-top:3px">${esc(l.notes)}</div>`:''}</td>
+    <td><select class="inp" data-ld-status="${l.id}" style="width:auto;padding:3px 6px;font-size:12px">${reOpts(RE_LEAD_STATUS,l.status)}</select></td>
+    <td style="text-align:right;white-space:nowrap"><button class="btn sm" data-ld-edit="${l.id}">Edit</button> <button class="btn sm" data-ld-send="${l.id}">Send…</button></td></tr>`).join('')}</tbody></table>`;
+  el.querySelectorAll('[data-ld-status]').forEach(s=>s.onchange=async()=>{ await db.from('re_leads').update({ status:s.value, updated_at:new Date().toISOString() }).eq('id',s.dataset.ldStatus); });
+  el.querySelectorAll('[data-ld-edit]').forEach(b=>b.onclick=()=>showLeadForm(state.re.leads.find(x=>x.id===b.dataset.ldEdit)));
+  el.querySelectorAll('[data-ld-send]').forEach(b=>b.onclick=()=>reSendMenu(state.re.leads.find(x=>x.id===b.dataset.ldSend)));
+}
+function showLeadForm(l){
+  l=l||{ kind:'buyer', status:'new', source:'manual', areas:[] };
+  const box=$("#re-ld-form"); box.style.display='block';
+  const listings=(state.re.listings||[]);
+  box.innerHTML=`<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px"><b>${l.id?'Edit lead':'New lead'}</b><button class="btn sm" id="ld-close">Close</button></div>
+    <div class="grid-2">
+      <div class="field"><label class="lab">Name</label><input class="inp" id="ld-name" value="${esc(l.name||'')}"></div>
+      <div class="field"><label class="lab">Type</label><select class="inp" id="ld-kind">${reOpts(RE_LEAD_KINDS,l.kind)}</select></div>
+      <div class="field"><label class="lab">Mobile</label><input class="inp" id="ld-phone" type="tel" value="${esc(l.phone||'')}"></div>
+      <div class="field"><label class="lab">Email</label><input class="inp" id="ld-email" value="${esc(l.email||'')}"></div>
+      <div class="field"><label class="lab">Timeline</label><input class="inp" id="ld-timeline" value="${esc(l.timeline||'')}" placeholder="next 60 days"></div>
+      <div class="field"><label class="lab">Budget</label><div style="display:flex;gap:6px;align-items:center"><span style="color:var(--muted)">$</span><input class="inp" id="ld-min" inputmode="numeric" value="${l.price_min_cents!=null?l.price_min_cents/100:''}" placeholder="min"><span style="color:var(--muted)">–</span><input class="inp" id="ld-max" inputmode="numeric" value="${l.price_max_cents!=null?l.price_max_cents/100:''}" placeholder="max"></div></div>
+      <div class="field"><label class="lab">Areas <span class="sub">comma-separated</span></label><input class="inp" id="ld-areas" value="${esc((l.areas||[]).join(', '))}"></div>
+      <div class="field"><label class="lab">Property they own / asked about</label><input class="inp" id="ld-paddr" value="${esc(l.property_address||'')}" placeholder="seller or landlord's address"></div>
+      <div class="field"><label class="lab">Interested in a listing</label><select class="inp" id="ld-listing"><option value="">—</option>${listings.map(x=>`<option value="${x.id}" ${l.listing_id===x.id?'selected':''}>${esc(x.address)}</option>`).join('')}</select></div>
+      <div class="field"><label class="lab">Flags</label><div style="display:flex;gap:14px;flex-wrap:wrap;font-size:13px"><label style="display:flex;gap:6px;align-items:center"><input type="checkbox" id="ld-hot" ${l.hot?'checked':''} style="width:auto">Hot</label><label style="display:flex;gap:6px;align-items:center"><input type="checkbox" id="ld-pre" ${l.preapproved?'checked':''} style="width:auto">Pre-approved</label><label style="display:flex;gap:6px;align-items:center"><input type="checkbox" id="ld-agent" ${l.has_agent?'checked':''} style="width:auto">Has an agent</label><label style="display:flex;gap:6px;align-items:center"><input type="checkbox" id="ld-lender" ${l.lender_referral?'checked':''} style="width:auto">Wants a lender</label></div></div>
+      <div class="field" style="grid-column:1/-1"><label class="lab">Notes</label><textarea class="inp" id="ld-notes" rows="2">${esc(l.notes||'')}</textarea></div>
+    </div>
+    <div style="display:flex;gap:8px;align-items:center"><button class="btn primary" id="ld-save">${l.id?'Save':'Add lead'}</button>${l.id?`<button class="btn sm" id="ld-del" style="margin-left:auto">Delete</button>`:''}<span id="ld-msg" style="font-size:12.5px;color:var(--muted)"></span></div>`;
+  if(!listings.length) db.from('re_listings').select('id,address').eq('account_id',state.account.id).in('status',['coming_soon','active','pending']).order('address').then(({data})=>{ state.re.listings=data||[]; const s=$("#ld-listing"); if(s) s.innerHTML=`<option value="">—</option>`+(data||[]).map(x=>`<option value="${x.id}" ${l.listing_id===x.id?'selected':''}>${esc(x.address)}</option>`).join(''); });
+  $("#ld-close").onclick=()=>{ box.style.display='none'; };
+  $("#ld-save").onclick=async()=>{ const v=id=>$("#ld-"+id).value.trim();
+    const row={ account_id:state.account.id, name:v('name')||null, kind:v('kind'), phone:v('phone')||null, email:v('email')||null, timeline:v('timeline')||null, price_min_cents:reCents(v('min')), price_max_cents:reCents(v('max')), areas:v('areas')?v('areas').split(',').map(x=>x.trim()).filter(Boolean):[], property_address:v('paddr')||null, listing_id:v('listing')||null, hot:$("#ld-hot").checked, preapproved:$("#ld-pre").checked, has_agent:$("#ld-agent").checked, lender_referral:$("#ld-lender").checked, notes:v('notes')||null, source:l.source||'manual', updated_at:new Date().toISOString() };
+    const res=l.id?await db.from('re_leads').update(row).eq('id',l.id):await db.from('re_leads').insert(row);
+    if(res.error){ $("#ld-msg").style.color='var(--danger)'; $("#ld-msg").textContent=res.error.message; return; }
+    box.style.display='none'; loadLeads(); };
+  if(l.id) $("#ld-del").onclick=async()=>{ if(!confirm('Delete this lead?')) return; await db.from('re_leads').delete().eq('id',l.id); box.style.display='none'; loadLeads(); };
+}
+async function reSendMenu(l){
+  if(!l) return; if(!l.phone){ alert('This lead has no mobile number to text.'); return; }
+  const listings=state.re.listings&&state.re.listings.length?state.re.listings:((await db.from('re_listings').select('id,address').eq('account_id',state.account.id).in('status',['coming_soon','active','pending']).order('address')).data||[]);
+  const box=$("#re-ld-form"); box.style.display='block';
+  box.innerHTML=`<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px"><b>Send to ${esc(l.name||l.phone)}</b><button class="btn sm" id="sd-close">Close</button></div>
+    <div class="grid-2">
+      <div class="field"><label class="lab">What</label><select class="inp" id="sd-kind"><option value="showing_agreement">Showing agreement (sign before the showing)</option><option value="rental_application">Rental application${(reSettings().application_fee_cents||0)>0?` (${reMoney(reSettings().application_fee_cents)} fee)`:''}</option><option value="iabs">IABS notice (link only, nothing to sign)</option></select></div>
+      <div class="field"><label class="lab">For listing</label><select class="inp" id="sd-listing"><option value="">—</option>${listings.map(x=>`<option value="${x.id}" ${l.listing_id===x.id?'selected':''}>${esc(x.address)}</option>`).join('')}</select></div>
+    </div>
+    <div style="display:flex;gap:8px;align-items:center"><button class="btn primary" id="sd-go">Text it</button><span id="sd-msg" style="font-size:12.5px;color:var(--muted)"></span></div>`;
+  $("#sd-close").onclick=()=>{ box.style.display='none'; };
+  $("#sd-go").onclick=async()=>{ const b=$("#sd-go"); b.disabled=true; $("#sd-msg").textContent='Sending…';
+    const kind=$("#sd-kind").value, listing_id=$("#sd-listing").value||null;
+    const body=kind==='iabs'?{ action:'send_iabs', lead_id:l.id }:{ action:'doc_send', kind, lead_id:l.id, listing_id, signer_name:l.name, signer_phone:l.phone, signer_email:l.email };
+    const { data, error }=await db.functions.invoke('re-sign',{ body });
+    if(error||!(data&&data.ok)){ $("#sd-msg").style.color='var(--danger)'; $("#sd-msg").textContent=(data&&(data.message||data.error))||(error&&error.message)||'Could not send.'; b.disabled=false; return; }
+    $("#sd-msg").style.color='var(--ok)'; $("#sd-msg").textContent='Sent.'; setTimeout(()=>{ box.style.display='none'; },900); loadReDocs(); loadLeads(); };
+}
+async function loadReDocs(){
+  const el=$("#re-doc-list"); if(!el) return; const f=$("#re-doc-filter").value;
+  let q=db.from('re_documents').select('id,kind,title,status,signer_name,signer_phone,sent_at,viewed_at,signed_at,expires_at,token,pdf_path,fee_invoice_id,listing_id,re_listings(address)').eq('account_id',state.account.id).order('created_at',{ascending:false}).limit(200);
+  if(f==='open') q=q.in('status',['sent','viewed','verified']); if(f==='signed') q=q.eq('status','signed');
+  const { data, error }=await q; if(error){ el.innerHTML=`<p style="font-size:13px;color:var(--danger)">${esc(error.message)}</p>`; return; }
+  if(!data.length){ el.innerHTML=`<p style="font-size:13px;color:var(--muted)">${f==='open'?'Nothing waiting.':'No documents yet.'}</p>`; return; }
+  const st=s=>({sent:'sent, not opened',viewed:'opened',verified:'verified, reading',signed:'signed',declined:'declined',expired:'expired',void:'void',draft:'draft'})[s]||s;
+  el.innerHTML=`<table class="tbl" style="width:100%"><thead><tr><th>Document</th><th>Signer</th><th>Status</th><th></th></tr></thead><tbody>${data.map(d=>`<tr>
+    <td><b>${esc(d.title||RE_DOC_KINDS[d.kind]||d.kind)}</b>${d.re_listings?`<div style="font-size:12px;color:var(--muted)">${esc(d.re_listings.address)}</div>`:''}<div style="font-size:11.5px;color:var(--muted)">sent ${esc(fmtDateTime(d.sent_at))}</div></td>
+    <td>${esc(d.signer_name||'')}<div style="font-size:12px;color:var(--muted)">${esc(d.signer_phone||'')}</div></td>
+    <td><span class="pill" ${d.status==='signed'?'style="background:var(--ok);color:#fff"':''}>${esc(st(d.status))}</span>${d.signed_at?`<div style="font-size:11.5px;color:var(--muted)">${esc(fmtDateTime(d.signed_at))}</div>`:''}</td>
+    <td style="text-align:right;white-space:nowrap">${d.status==='signed'&&d.pdf_path?`<button class="btn sm" data-doc-pdf="${d.id}">Signed PDF</button> <button class="btn sm" data-doc-cert="${d.id}">Certificate</button>`:''}${['sent','viewed','verified'].includes(d.status)?`<button class="btn sm" data-doc-resend="${d.id}">Send again</button> <button class="btn sm" data-doc-void="${d.id}">Void</button>`:''}</td></tr>`).join('')}</tbody></table>`;
+  const open=async(id,which)=>{ const { data }=await db.functions.invoke('re-sign',{ body:{ action:'doc_url', id, which } }); if(data&&data.url) window.open(data.url,'_blank'); else alert('Not available yet.'); };
+  el.querySelectorAll('[data-doc-pdf]').forEach(b=>b.onclick=()=>open(b.dataset.docPdf,'pdf'));
+  el.querySelectorAll('[data-doc-cert]').forEach(b=>b.onclick=()=>open(b.dataset.docCert,'certificate'));
+  el.querySelectorAll('[data-doc-resend]').forEach(b=>b.onclick=async()=>{ b.disabled=true; await db.functions.invoke('re-sign',{ body:{ action:'doc_resend', id:b.dataset.docResend } }); loadReDocs(); });
+  el.querySelectorAll('[data-doc-void]').forEach(b=>b.onclick=async()=>{ if(!confirm('Void this document? The link stops working.')) return; await db.functions.invoke('re-sign',{ body:{ action:'doc_void', id:b.dataset.docVoid } }); loadReDocs(); });
+}
+// ---- Settings card ----
+function reSettingsCardHTML(){
+  const s=reSettings(); const ac=state.account;
+  const lines=s.lines||['residential']; const lp=s.lender_partner||{};
+  return `<div class="card"><div class="card-h"><h2>Real estate</h2><button class="btn sm primary" id="re-s-save">Save</button></div>
+    <p style="font-size:13px;color:var(--muted);margin-bottom:12px">What ${esc(aName())} knows about your practice. She never gives legal advice, never steers callers by neighborhood demographics, and never quotes commission — she takes the lead and gets you on the phone.</p>
+    <div class="grid-2">
+      <div class="field"><label class="lab">Lines of business</label><div style="display:flex;gap:10px;flex-wrap:wrap">${WZ_RE_LINES.map(x=>`<label style="display:flex;gap:6px;align-items:center;font-size:13px;border:1px solid var(--line);border-radius:10px;padding:4px 10px;cursor:pointer"><input type="checkbox" data-re-line="${x[0]}" ${lines.includes(x[0])?'checked':''} style="width:auto">${esc(x[1])}</label>`).join('')}</div></div>
+      <div class="field"><label class="lab">I also manage rentals for owners</label><label style="display:flex;gap:8px;align-items:center;font-size:13px;margin-top:6px"><input type="checkbox" id="re-s-manage" ${propertyOn()?'checked':''} style="width:auto">Turn on ${esc(aName())}'s property-management tools (tenant repair calls, vendors, visits)</label></div>
+      <div class="field"><label class="lab">License #</label><input class="inp" id="re-s-lic" value="${esc(s.license_no||'')}"></div>
+      <div class="field"><label class="lab">Sponsoring broker</label><input class="inp" id="re-s-broker" value="${esc(s.broker_name||'')}"></div>
+      <div class="field" style="grid-column:1/-1"><label class="lab">IABS link <span class="sub">${esc(aName())} texts it after the first substantive conversation with a buyer, seller, renter or landlord, and marks the lead</span></label><input class="inp" id="re-s-iabs" value="${esc(s.iabs_url||'')}" placeholder="https://…/iabs.pdf"></div>
+      <div class="field"><label class="lab">Rental application fee</label><div style="display:flex;align-items:center;gap:6px"><span style="color:var(--muted)">$</span><input class="inp" id="re-s-fee" inputmode="numeric" value="${s.application_fee_cents?Math.round(s.application_fee_cents/100):''}" placeholder="0" style="max-width:120px"></div><div style="font-size:12px;color:var(--muted);margin-top:4px">Charged on your own Stripe when an applicant submits. ${paymentsOn()?'':'Turn on Payments to collect it.'} ${esc(aName())} never holds deposits or earnest money.</div></div>
+      <div class="field"><label class="lab">Lender partner <span class="sub">optional — offered to buyers who aren't pre-approved and say yes to a referral</span></label><div class="grid-2" style="gap:6px"><input class="inp" id="re-s-lname" value="${esc(lp.name||'')}" placeholder="Name"><input class="inp" id="re-s-lphone" type="tel" value="${esc(lp.phone||'')}" placeholder="Mobile"></div></div>
+      <div class="field" style="grid-column:1/-1"><label class="lab">Showing agreement text <span class="sub">what buyers/renters sign before ${esc(aName())} books a showing; placeholders fill in automatically</span></label><textarea class="inp" id="re-s-show" rows="7" style="font-family:ui-monospace,monospace;font-size:12.5px">${esc(s.showing_agreement_text||RE_DEFAULT_SHOWING_TEXT)}</textarea><div style="font-size:12px;color:var(--muted);margin-top:4px">Placeholders: {{signer_name}} {{agent_name}} {{company}} {{broker_name}} {{property_address}} {{showing_date}}. <button class="btn sm" id="re-s-reset" style="margin-left:6px">Reset to default</button></div></div>
+      <div class="field"><label class="lab">Require a signed showing agreement before booking a showing?</label><select class="inp" id="re-s-require"><option value="1" ${s.require_showing_agreement===false?'':'selected'}>Yes — ${esc(aName())} holds the time, texts it, and confirms once it's signed</option><option value="0" ${s.require_showing_agreement===false?'selected':''}>No — confirm right away, send it for the record</option></select><div style="font-size:12px;color:var(--muted);margin-top:4px">Either way you're texted when it's signed (or declined). Callers who signed one in the last 6 months aren't asked again.</div></div>
+      <div class="field"><label class="lab">Showing length</label><select class="inp" id="re-s-showlen">${[[20,'20 minutes'],[30,'30 minutes'],[45,'45 minutes'],[60,'1 hour']].map(x=>`<option value="${x[0]}" ${Number(s.showing_minutes||30)===x[0]?'selected':''}>${x[1]}</option>`).join('')}</select></div>
+    </div>
+    <div id="re-s-msg" style="font-size:12.5px;color:var(--muted);margin-top:6px"></div></div>`;
+}
+function reBindSettingsCard(){
+  const sv=$("#re-s-save"); if(!sv) return;
+  $("#re-s-reset").onclick=()=>{ $("#re-s-show").value=RE_DEFAULT_SHOWING_TEXT; };
+  sv.onclick=async()=>{ sv.disabled=true; const msg=$("#re-s-msg");
+    const settings=Object.assign({}, state.account.settings||{}); const cur=settings.real_estate||{};
+    const lines=[...document.querySelectorAll('[data-re-line]:checked')].map(c=>c.dataset.reLine); if(!lines.length) lines.push('residential');
+    settings.real_estate=Object.assign({}, cur, { lines, manages_rentals:$("#re-s-manage").checked, license_no:$("#re-s-lic").value.trim(), broker_name:$("#re-s-broker").value.trim(), iabs_url:$("#re-s-iabs").value.trim(), application_fee_cents:reCents($("#re-s-fee").value)||0, lender_partner:{ name:$("#re-s-lname").value.trim(), phone:$("#re-s-lphone").value.trim() }, showing_agreement_text:$("#re-s-show").value, require_showing_agreement:$("#re-s-require").value==='1', showing_minutes:Number($("#re-s-showlen").value)||30 });
+    const feat=Object.assign({}, settings.features||{}); if($("#re-s-manage").checked) feat.property_management=true; else delete feat.property_management; settings.features=feat;
+    const { error }=await db.from('accounts').update({ settings }).eq('id',state.account.id);
+    sv.disabled=false;
+    if(error){ msg.style.color='var(--danger)'; msg.textContent=error.message; return; }
+    const pmChanged=(!!(state.account.settings.features||{}).property_management)!==!!feat.property_management;
+    state.account.settings=settings; msg.style.color='var(--ok)'; msg.textContent='Saved.';
+    if(pmChanged) setTimeout(()=>renderApp(),400); };
+}
 
 function pageProperties(){
   state.pm=state.pm||{sel:null};
@@ -4937,6 +5269,18 @@ const WZ_PM_TYPES=[["residential","Residential rentals","Homes, apartments, and 
 // Which product features an industry turns on. (Without this, a real signup never saw the right dashboard.)
 const INDUSTRY_FEATURES={ property_management:{property_management:true,after_hours_emergency:true}, hair_salon:{salon:true}, nail_salon:{salon:true}, barbershop:{salon:true}, spa:{salon:true}, lash_brow:{salon:true} };
 const WZ_TRADES=[["hvac","HVAC / heating & air"],["plumbing","Plumbing"],["electrical","Electrical"],["landscaping","Landscaping"],["lawn","Mowing / lawn care"],["pool","Pool service"],["handyman","Handyman"],["roofing","Roofing"],["painting","Painting"],["remodeling","Remodeling / general contractor"],["flooring","Flooring"],["fencing","Fencing / gates"],["concrete","Concrete"],["garage_door","Garage doors"],["appliance","Appliance repair"],["pest","Pest control"],["pressure_washing","Pressure washing"],["windows","Window cleaning"],["gutters","Gutters"],["tree","Tree service"],["irrigation","Irrigation / sprinklers"],["locksmith","Locksmith"],["junk","Junk removal / hauling"],["cleaning","House / commercial cleaning"],["chimney","Chimney"],["septic","Septic"],["well","Well & pump"],["solar","Solar"],["insulation","Insulation"],["drywall","Drywall"],["tile","Tile"],["carpentry","Carpentry / decks"],["welding","Welding"],["detailing","Mobile detailing"],["other_trade","Something else"]];
+const WZ_RE_LINES=[["residential","Residential","homes, condos, townhomes"],["commercial","Commercial","office, retail, industrial — sale or lease"],["land","Land","lots, acreage, farm & ranch"],["rentals","Rentals / leasing","you list homes for rent and place tenants"]];
+const RE_DEFAULT_SHOWING_TEXT=`SHOWING AGREEMENT
+
+I, {{signer_name}}, ask {{agent_name}} ({{company}}) to show me the property at {{property_address}} on or about {{showing_date}}.
+
+I understand that:
+1. {{agent_name}} is a licensed Texas real estate agent sponsored by {{broker_name}}, and has given me the Texas Real Estate Commission's Information About Brokerage Services notice.
+2. This is a showing only. It does not make {{agent_name}} my agent and does not obligate me to buy, lease or pay anything.
+3. I will be respectful of the property and follow the agent's instructions while inside.
+4. I may be asked to show a government-issued photo ID before entering.
+
+Signed electronically. A copy of this agreement and its signing record is texted or emailed to me.`;
 const WZ_INDUSTRIES=[["property_management","Property management"],["hair_salon","Hair salon"],["nail_salon","Nail salon"],["barbershop","Barbershop"],["spa","Spa or skin care"],["lash_brow","Lash & brow"],["restaurant","Restaurant"],["contractor","Contractor or trades"],["real_estate","Real estate"],["professional","Professional services"],["other","Something else"]];
 const WZ_TITLES=["Welcome","Your business","Your assistant","Hours","Knowledge","Appointments","Calls","Notifications","Go live"];
 const WZ_TZ=[["America/New_York","Eastern"],["America/Chicago","Central"],["America/Denver","Mountain"],["America/Phoenix","Arizona"],["America/Los_Angeles","Pacific"],["America/Anchorage","Alaska"],["Pacific/Honolulu","Hawaii"]];
@@ -5049,8 +5393,21 @@ const WZ_RENDER={
       <div class="wz-choices" id="wz-trades">${WZ_TRADES.map(x=>`<div class="wz-choice ${(g.trades||[]).includes(x[0])?'sel':''}" data-v="${x[0]}">${esc(x[1])}</div>`).join("")}</div></div>
       <div class="wz-field" id="wz-pmtypes-wrap" style="display:${g.industry==='property_management'?'block':'none'}"><label>What do you manage? <span class="hint">pick all that apply — each works differently</span></label>
       <div class="wz-choices" id="wz-pmtypes">${WZ_PM_TYPES.map(x=>`<div class="wz-choice ${(g.pmTypes||[]).includes(x[0])?'sel':''}" data-v="${x[0]}"><b style="display:block">${esc(x[1])}</b><span style="font-size:12px;color:var(--muted);font-weight:400">${esc(x[2])}</span></div>`).join("")}</div></div>
+      <div id="wz-re-wrap" style="display:${g.industry==='real_estate'?'block':'none'}">
+        <div class="wz-field"><label>What do you work with? <span class="hint">pick all that apply</span></label>
+        <div class="wz-choices" id="wz-relines">${WZ_RE_LINES.map(x=>`<div class="wz-choice ${(g.reLines||[]).includes(x[0])?'sel':''}" data-v="${x[0]}"><b style="display:block">${esc(x[1])}</b><span style="font-size:12px;color:var(--muted);font-weight:400">${esc(x[2])}</span></div>`).join("")}</div></div>
+        <div class="wz-field"><label class="chk" style="display:flex;gap:8px;align-items:center;font-weight:500"><input type="checkbox" id="wz-re-manage" ${g.reManages?'checked':''}> I also manage rentals for owners <span class="hint">adds ${esc(DEFAULT_NAME)}'s property-management tools: tenant repair calls, vendors, visits</span></label></div>
+        <div class="wz-row2">
+          <div class="wz-field"><label>Your license # <span class="hint">TREC, shown on documents</span></label><input class="wz-inp" id="wz-re-lic" value="${esc(g.reLicense||'')}" placeholder="0123456"></div>
+          <div class="wz-field"><label>Sponsoring broker</label><input class="wz-inp" id="wz-re-broker" value="${esc(g.reBroker||'')}" placeholder="Acme Realty, LLC"></div>
+        </div>
+        <div class="wz-field"><label>Link to your IABS form <span class="hint">optional — ${esc(DEFAULT_NAME)} texts it after the first real conversation with a buyer, seller or renter</span></label><input class="wz-inp" id="wz-re-iabs" value="${esc(g.reIabs||'')}" placeholder="https://…/iabs.pdf"></div>
+      </div>
     `,{});
-    document.querySelectorAll('#wz-ind .wz-choice').forEach(el=>el.onclick=()=>{ state.wz.industry=el.dataset.v; document.querySelectorAll('#wz-ind .wz-choice').forEach(c=>c.classList.toggle('sel',c===el)); const w=$("#wz-pmtypes-wrap"); if(w) w.style.display=el.dataset.v==='property_management'?'block':'none'; const tw=$("#wz-trade-wrap"); if(tw) tw.style.display=el.dataset.v==='contractor'?'block':'none'; });
+    document.querySelectorAll('#wz-ind .wz-choice').forEach(el=>el.onclick=()=>{ state.wz.industry=el.dataset.v; document.querySelectorAll('#wz-ind .wz-choice').forEach(c=>c.classList.toggle('sel',c===el)); const w=$("#wz-pmtypes-wrap"); if(w) w.style.display=el.dataset.v==='property_management'?'block':'none'; const tw=$("#wz-trade-wrap"); if(tw) tw.style.display=el.dataset.v==='contractor'?'block':'none'; const rw=$("#wz-re-wrap"); if(rw) rw.style.display=el.dataset.v==='real_estate'?'block':'none'; });
+    document.querySelectorAll('#wz-relines .wz-choice').forEach(el=>el.onclick=()=>{ const v=el.dataset.v; const cur=new Set(state.wz.reLines||[]); if(cur.has(v)) cur.delete(v); else cur.add(v); state.wz.reLines=[...cur]; el.classList.toggle('sel',cur.has(v)); });
+    const reM=$("#wz-re-manage"); if(reM) reM.onchange=()=>{ state.wz.reManages=reM.checked; };
+    ['lic','broker','iabs'].forEach(k=>{ const i=$("#wz-re-"+k); if(i) i.oninput=()=>{ state.wz[{lic:'reLicense',broker:'reBroker',iabs:'reIabs'}[k]]=i.value.trim(); }; });
     document.querySelectorAll('#wz-trades .wz-choice').forEach(el=>el.onclick=()=>{ const v=el.dataset.v; const cur=new Set(state.wz.trades||[]); if(cur.has(v)) cur.delete(v); else cur.add(v); state.wz.trades=[...cur]; el.classList.toggle('sel',cur.has(v)); });
     document.querySelectorAll('#wz-pmtypes .wz-choice').forEach(el=>el.onclick=()=>{ const v=el.dataset.v; const cur=new Set(state.wz.pmTypes||[]); if(cur.has(v)) cur.delete(v); else cur.add(v); state.wz.pmTypes=[...cur]; el.classList.toggle('sel',cur.has(v)); });
     wzBindNav(async()=>{ if(state.wz.industry==='property_management' && !(state.wz.pmTypes||[]).length){ const w=$("#wz-pmtypes-wrap"); if(w){ w.scrollIntoView({behavior:'smooth',block:'center'}); w.style.outline='2px solid var(--danger)'; w.style.borderRadius='10px'; setTimeout(()=>{ w.style.outline=''; },1800); } return false; } return true; },{});
@@ -5077,6 +5434,13 @@ const WZ_RENDER={
       // Turn on the features for this industry; for property management, record what they manage.
       const feat=Object.assign({}, settings.features||{}, INDUSTRY_FEATURES[state.wz.industry]||{});
       if(state.wz.industry==='property_management'){ settings.property_types=(state.wz.pmTypes||[]).slice(); if(feat.salon) delete feat.salon; }
+      if(state.wz.industry==='real_estate'){
+        const lines=(state.wz.reLines||[]).slice(); if(!lines.length) lines.push('residential');
+        settings.real_estate=Object.assign({ showing_agreement_text:RE_DEFAULT_SHOWING_TEXT, application_fee_cents:0 }, settings.real_estate||{}, { lines, manages_rentals:!!state.wz.reManages, license_no:state.wz.reLicense||'', broker_name:state.wz.reBroker||'', iabs_url:state.wz.reIabs||'' });
+        if(state.wz.reManages) feat.property_management=true; else delete feat.property_management;
+        if(feat.salon) delete feat.salon;
+        if(!settings.sms) settings.sms={ enabled:true, confirmations:true, reminders:true };
+      }
       if(state.wz.industry==='contractor'){ settings.trades=(state.wz.trades||[]).slice(); settings.contractor=Object.assign({ trip_fee_cents:0, trip_fee_waived_if_work:true, after_hours_multiplier:1.5, day_start_hour:7, day_end_hour:19 }, settings.contractor||{}); if(!settings.sms) settings.sms={ enabled:true, confirmations:true, reminders:true }; }
       else if(INDUSTRY_FEATURES[state.wz.industry] && INDUSTRY_FEATURES[state.wz.industry].salon && feat.property_management){ delete feat.property_management; }
       settings.features=feat;

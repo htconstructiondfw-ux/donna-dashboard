@@ -27,6 +27,10 @@
       "destination": "/quote?t=:token"
     },
     {
+      "source": "/sign/:token",
+      "destination": "/sign?t=:token"
+    },
+    {
       "source": "/app",
       "destination": "/crew"
     }

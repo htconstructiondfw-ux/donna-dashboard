@@ -1,7 +1,7 @@
 import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 
-// Donna — Retell inbound-call webhook (emits greeting, routing, memory, voice). v45: trip_fee + after_hours vars (prepay only when cards are live). v47: card processing fee note in trip_fee.
+// Donna — Retell inbound-call webhook (emits greeting, routing, memory, voice). v45: trip_fee + after_hours vars (prepay only when cards are live). v47: card processing fee note in trip_fee. v48: real_estate var.
 
 const supabase = createClient(
   Deno.env.get("SUPABASE_URL")!,
@@ -188,7 +188,8 @@ Deno.serve(async (req: Request) => {
   const isPro = plan === "pro";
   const salonTeam = settings?.features?.salon === true && (plan === "pro" || plan === "enterprise");
   const isSalon = settings?.features?.salon === true;
-  const isPm = settings?.features?.property_management === true && !isSalon;
+  const isRealEstate = String(acct?.industry || settings?.industry || "") === "real_estate";
+  const isPm = settings?.features?.property_management === true && !isSalon && !isRealEstate;
   const industry = isSalon ? "salon" : (isPm ? "property_management" : String(settings?.industry || acct?.industry || "general"));
   const smsOn = settings?.sms?.enabled === true && settings?.sms?.confirmations !== false;
   // Who this business sells to. Only B2B shops get the "what business do you run / what are you interested in" intake.
@@ -221,6 +222,26 @@ Deno.serve(async (req: Request) => {
     } else {
       afterHoursText = `NO: regular hours are ${hrs}. Outside those, book the next regular opening; for a true emergency take an urgent message and give the safety advice.`;
     }
+  }
+
+  // Real estate: what Donna knows about the agent's practice (facts only; she never prices, never gives legal advice).
+  let realEstateText = "n/a";
+  if (isRealEstate) {
+    const re: any = settings?.real_estate || {};
+    const lines: string[] = Array.isArray(re.lines) && re.lines.length ? re.lines : ["residential"];
+    const lineWords: Record<string, string> = { residential: "residential homes", commercial: "commercial property (sale and lease)", land: "land and acreage", rentals: "rental homes and leasing" };
+    let listingCount = 0; try { const { count } = await supabase.from("re_listings").select("id", { count: "exact", head: true }).eq("account_id", asst.account_id).in("status", ["coming_soon", "active", "pending"]); listingCount = count || 0; } catch { /* */ }
+    const parts = [
+      `YES, this is a real estate business. ${re.agent_name || business} handles ${lines.map((l) => lineWords[l] || l).join(", ")}.`,
+      listingCount ? `${listingCount} listing${listingCount === 1 ? "" : "s"} on the books: use listing_lookup for any question about a property, price, bedrooms, availability, pets, or a showing.` : "No listings on the books right now: take the lead with re_lead and say the agent will follow up.",
+      re.license_no ? `License #${re.license_no}${re.broker_name ? ", sponsored by " + re.broker_name : ""}.` : (re.broker_name ? `Sponsored by ${re.broker_name}.` : ""),
+      re.iabs_url ? "IABS notice is texted automatically by the tools; if asked, say it was (or will be) texted." : "No IABS link on file; don't mention it.",
+      re.require_showing_agreement === false ? "Showings book right away; a showing agreement is texted for the record." : "A short showing agreement is texted after booking a showing; the showing is confirmed once it's signed.",
+      Number(re.application_fee_cents || 0) > 0 ? `Rental application fee: ${fmt$(Number(re.application_fee_cents))}, paid by card after the applicant signs; never collect card numbers by phone.` : "No rental application fee.",
+      re.lender_partner?.name ? `Lender partner: ${re.lender_partner.name}. Offer the referral only to buyers who are not pre-approved and say yes; re_lead with lender_referral=true texts it.` : "No lender partner; don't recommend one.",
+      settings?.features?.property_management === true ? "This agent ALSO manages rental properties for owners, so the property-management section below applies too for tenants calling about repairs, rent, or their lease." : "",
+    ].filter(Boolean);
+    realEstateText = parts.join(" ");
   }
 
   const customInstructions = String(routing.custom_instructions || "").trim();
@@ -412,7 +433,7 @@ Deno.serve(async (req: Request) => {
           b2b: b2b ? "yes" : "no", booking_link: canTextLinks ? "yes" : "no",
           usual_service: usualService, usual_stylist: usualStylist, next_appointment: nextAppt, client_flags: clientFlags,
           provider_label: providerLabel, provider_label_plural: providerLabelPlural,
-          trip_fee: tripFeeText, after_hours: afterHoursText,
+          trip_fee: tripFeeText, after_hours: afterHoursText, real_estate: realEstateText,
           paused: "no",
         },
         agent_override: { agent: { voice_id: retellVoice }, retell_llm: { begin_message: greeting } },
