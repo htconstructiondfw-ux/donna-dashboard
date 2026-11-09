@@ -1,4 +1,4 @@
-// msg-inbound (v10)
+// msg-inbound (v12)
 // Twilio SMS intake. Two paths:
 //  1) SHARED toll-free number (reminders/confirmations): match the sender to a
 //     recent appointment, handle STOP, then let msg-quick handle confirm / reschedule /
@@ -8,6 +8,8 @@
 //     message, try msg-quick first, then route to the msg-brain conversation engine.
 // v10: texts from a CREW phone (a users.phone on a contractor account, or any account with
 //     features.crew_text) go to crew-text first on both paths: OMW / DONE / LATE / TODAY / photos.
+// v12: tenant-number path converses (msg-brain) ONLY when settings.sms.two_way && two_way_verified; otherwise it
+//     acknowledges inline and forwards to the owner. Notifications always leave via the toll-free (see msg-send).
 // verify_jwt = false because Twilio authenticates by signature.
 
 import "jsr:@supabase/functions-js/edge-runtime.d.ts";
@@ -177,6 +179,12 @@ Deno.serve(async (req: Request) => {
   const { data: supp } = await sb.from("suppressions").select("id").eq("account_id", accountId).eq("customer_identifier", from).maybeSingle();
   if (supp) return xml();
 
+  // v12: two-way texting on this number only when the account has it enabled AND the number is verified.
+  // Otherwise: acknowledge inline (TwiML, no outbound send), log it, and hand the text to the owner's inbox.
+  const { data: acctRow } = await sb.from("accounts").select("name, settings").eq("id", accountId).maybeSingle();
+  const acctSettings: any = (acctRow as any)?.settings || {};
+  const twoWayReady = acctSettings?.sms?.two_way === true && acctSettings?.sms?.two_way_verified === true;
+
   let contactId: string | null = null;
   const { data: existing } = await sb.from("contacts").select("id").eq("account_id", accountId).eq("phone", from).order("updated_at", { ascending: false }).limit(1).maybeSingle();
   if (existing) { contactId = existing.id; }
@@ -197,8 +205,22 @@ Deno.serve(async (req: Request) => {
     account_id: accountId, conversation_id: conversationId, direction: "inbound", actor: "customer", channel: "sms", body: bodyText, provider_message_id: messageSid, status: "received",
   }).select("id").maybeSingle();
 
+  if (!twoWayReady) {
+    // Appointment keywords still work inline (reply travels back on the number they texted, no outbound send needed).
+    const q0 = await invoke("msg-quick", { account_id: accountId, from, body: bodyText, conversation_id: conversationId, send: false });
+    if (q0?.handled && q0.reply) { await sb.from("conversation_messages").insert({ account_id: accountId, conversation_id: conversationId, direction: "outbound", actor: "donna", channel: "sms", body: String(q0.reply), status: "sent" }); return xml(String(q0.reply)); }
+    const business = String((acctRow as any)?.name || "us");
+    const generalBox = String(acctSettings.alert_email || acctSettings.escalation_email || "").trim();
+    const fromAddr = String(acctSettings.email_reply_from || `${business} <no-reply@client.sidekicklogistics.com>`).trim();
+    if (generalBox) await sendEmail(fromAddr, generalBox, `Text from ${from}`, `${from} texted ${business}:\n\n"${bodyText}"\n\nTwo-way texting isn't active on this number yet, so Donna only acknowledged it. Reply to them directly at ${from}.`);
+    await sb.from("conversations").update({ status: "awaiting_staff", updated_at: nowIso }).eq("id", conversationId);
+    const ack = `Thanks for texting ${business}! We got your message and someone will get back to you shortly. For anything urgent, please call us.`;
+    await sb.from("conversation_messages").insert({ account_id: accountId, conversation_id: conversationId, direction: "outbound", actor: "donna", channel: "sms", body: ack, status: "sent" });
+    return xml(ack);
+  }
+
   // Deterministic appointment replies first (confirm / move / cancel / late / when); the LLM handles everything else.
-  const q = await invoke("msg-quick", { account_id: accountId, from, body: bodyText, conversation_id: conversationId, send: true });
+  const q = await invoke("msg-quick", { account_id: accountId, from, body: bodyText, conversation_id: conversationId, send: true, two_way: true });
   if (q?.handled) return xml();
 
   await invoke("msg-brain", { account_id: accountId, conversation_id: conversationId, message_id: msg?.id ?? null, from, body: bodyText });

@@ -2539,7 +2539,7 @@ function pageNotifications(){
     </div>
 
     <div class="card"><div class="card-h"><h2>Text message notifications</h2><button class="btn sm" id="sms-save">Save</button></div>
-      <p style="font-size:13px;color:var(--muted);margin-bottom:12px">Have ${esc(aName())} text ${pmMode()?'residents, prospects, and vendors':'customers'} their confirmations and reminders from your ${esc(aName())} number${state.assistant&&state.assistant.number?' ('+esc(state.assistant.number)+')':''}. People can reply C to confirm, R to reschedule, or CANCEL, text that they are running late, or ask when their appointment is, and ${esc(aName())} handles it. Anything else they text lands in your Inbox.</p>
+      <p style="font-size:13px;color:var(--muted);margin-bottom:12px">Have ${esc(aName())} text ${pmMode()?'residents, prospects, and vendors':'customers'} their confirmations, reminders, and links. These go out from ${esc(aName())}'s shared texting line (a toll-free number), so they work for every business without any setup. People can reply C to confirm, R to reschedule, or CANCEL, say they are running late, or ask when their appointment is, and ${esc(aName())} handles it. Anything else they text lands in your Inbox.</p>
       <label style="display:flex;align-items:flex-start;gap:10px;margin:0 0 12px;cursor:pointer;font-size:13.5px;color:var(--ink)"><input type="checkbox" id="sms-enabled" style="margin-top:3px" ${sms.enabled?'checked':''}><span>Text ${pmMode()?'people':'customers'} (recommended)<span style="display:block;font-weight:400;color:var(--muted);font-size:11.5px;margin-top:2px">Email still goes out when there is an email on file. Turning this off means ${esc(aName())} only emails, and callers without an email get no confirmation.</span></span></label>
       <div id="sms-sub" style="padding-left:28px${sms.enabled?'':';opacity:.45'}">
         <label style="display:flex;align-items:flex-start;gap:10px;margin:0 0 10px;cursor:pointer;font-size:13.5px;color:var(--ink)"><input type="checkbox" id="sms-reminders" style="margin-top:3px" ${sms.reminders!==false?'checked':''} ${sms.enabled?'':'disabled'}><span>Appointment reminders by text</span></label>
@@ -2548,8 +2548,13 @@ function pageNotifications(){
       <div id="sms-msg" style="font-size:12.5px;color:var(--muted);margin-top:10px"></div>
     </div>
 
-    <div class="card"><div class="card-h"><h2>Your text number</h2></div>
-      <p style="font-size:13px;color:var(--muted);margin:0">Texts go out from <b style="color:var(--ink)">${esc((state.assistant&&(state.assistant.smsNumber||state.assistant.number))||sms.number||'your ${esc(aName())} number once it is set up')}</b>, the same number people call. Replies come straight back to ${esc(aName())}; anything she cannot handle on her own shows up under Inbox for you to answer.</p>
+    <div class="card"><div class="card-h"><h2>Two-way texting</h2>${sms.two_way_verified?'':'<button class="btn sm" id="sms2-save">Save</button>'}</div>
+      ${(()=>{ const num=state.assistant&&(state.assistant.smsNumber||state.assistant.number); const ready=sms.two_way===true&&sms.two_way_verified===true&&!!num;
+        const pill=ready?'<span class="pill" style="background:var(--ok);color:#fff">Active</span>':sms.two_way===true?'<span class="pill">Pending carrier verification</span>':'<span class="pill">Off</span>';
+        return `<p style="font-size:13px;color:var(--muted);margin:0 0 10px">With two-way texting, people can text <b style="color:var(--ink)">${num?esc(num):'your '+esc(aName())+' number'}</b> — the same number they call — and ${esc(aName())} answers questions, books, and reschedules by text, in their language. It needs your own number to be registered with the carriers for business texting, which we handle; that review usually takes a few days to a few weeks. ${pmMode()?'Notifications to residents and vendors keep working either way.':'Confirmations and reminders keep working either way.'}</p>
+        <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;font-size:13.5px"><span>Status: ${pill}</span>${sms.two_way_verified_at?`<span style="font-size:12px;color:var(--muted)">verified ${esc(new Date(sms.two_way_verified_at).toLocaleDateString())}</span>`:''}</div>
+        ${sms.two_way_verified?'':`<label style="display:flex;align-items:flex-start;gap:10px;margin:12px 0 0;cursor:pointer;font-size:13.5px;color:var(--ink)"><input type="checkbox" id="sms-twoway" style="margin-top:3px" ${sms.two_way?'checked':''}><span>I want two-way texting on my number<span style="display:block;font-weight:400;color:var(--muted);font-size:11.5px;margin-top:2px">We'll register your number and turn it on when the carriers approve it. Until then, people who text your number get a polite acknowledgement and their message lands in your Inbox.</span></span></label>`}
+        <div id="sms2-msg" style="font-size:12.5px;color:var(--muted);margin-top:8px"></div>`; })()}
     </div>
 
     <div class="card"><div class="card-h"><h2>What ${esc(aName())} copies you on</h2><button class="btn sm" id="ncopy-save">Save</button></div>
@@ -3174,7 +3179,7 @@ async function saveSmsTwoWay(){
   const o=btn?btn.textContent:''; if(btn){ btn.disabled=true; btn.textContent="Saving…"; }
   const settings=Object.assign({}, state.account.settings||{}, { sms:patch });
   const { error }=await db.from('accounts').update({settings}).eq('id',state.account.id);
-  if(!error){ state.account.settings=settings; if(msg){ msg.style.color='var(--muted)'; msg.textContent = patch.two_way ? 'Noted. We will set up your dedicated text number.' : 'Two-way texting is off.'; } }
+  if(!error){ state.account.settings=settings; if(msg){ msg.style.color='var(--muted)'; msg.textContent = patch.two_way ? 'Noted. We will register your number with the carriers and turn two-way texting on once it is approved.' : 'Two-way texting is off.'; } }
   else if(msg){ msg.style.color='var(--danger)'; msg.textContent='Could not save. Try again.'; }
   if(btn){ btn.disabled=false; btn.textContent=error?"Try again":"Saved ✓"; setTimeout(()=>{ if(btn) btn.textContent=o; },1300); }
 }

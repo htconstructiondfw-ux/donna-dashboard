@@ -356,9 +356,13 @@ function paintSmsPlatform(s){
     ["Shared sending number", num?`<span class="mono">${esc(num)}</span> ${copyBtn(s.number)}`:'<span class="sub">not purchased yet</span>'],
     ["Messaging Service", s.messaging_service_sid?`<span class="mono">${esc(s.messaging_service_sid)}</span> ${copyBtn(s.messaging_service_sid)}`:'<span class="sub">none</span>'],
     ["Verification", smsVerPill(ver)+(ver&&ver.rejection_reason?` <span class="sub">${esc(ver.rejection_reason)}</span>`:"")],
-    ["Tenant numbers SMS-enabled", `<span class="mono">${s.tenant_sms_numbers||0}</span>`]
+    ["Tenant numbers SMS-enabled", `<span class="mono">${s.tenant_sms_numbers||0}</span>`],
+    ["Two-way ready accounts", `<span class="mono">${s.two_way_ready||0}</span> <span class="sub">enabled + verified + own number</span>`]
   ];
-  host.innerHTML=`<table><tbody>${rows.map(kv=>`<tr><td style="width:240px;color:var(--muted)">${kv[0]}</td><td>${kv[1]}</td></tr>`).join("")}</tbody></table>`;
+  const acctRows=(s.accounts||[]).map(r=>`<tr><td>${esc(r.name)}</td><td class="mono">${r.number?esc(prettyPhone(r.number)):'<span class="sub">—</span>'}</td><td>${r.ready?'<span class="pill active">Two-way</span>':r.two_way?'<span class="pill trial">Awaiting verification</span>':'<span class="pill paused">Notifications only</span>'}</td></tr>`).join("");
+  host.innerHTML=`<table><tbody>${rows.map(kv=>`<tr><td style="width:240px;color:var(--muted)">${kv[0]}</td><td>${kv[1]}</td></tr>`).join("")}</tbody></table>
+    <div class="hint" style="margin:10px 0 6px">Policy: every notification (confirmations, reminders, links, codes, crew pages) goes out from the shared toll-free. A tenant's own number is used only for two-way conversation, and only once enabled + verified on the account.</div>
+    <table><thead><tr><th>Account</th><th>Own number</th><th>Texting</th></tr></thead><tbody>${acctRows||'<tr><td colspan="3" class="sub">No accounts</td></tr>'}</tbody></table>`;
   host.querySelectorAll("[data-copy]").forEach(b=>b.onclick=()=>{ try{ navigator.clipboard.writeText(b.dataset.copy); b.textContent="Copied"; setTimeout(()=>b.textContent="Copy",1200); }catch(e){} });
 }
 const RQ_LABEL={knowledge_gap:["Knowledge gap","warn"],failed_call:["Failed call","cancelled"],abrupt_call:["Abrupt call","starter"],no_action_call:["No action","starter"],emergency_msg:["Emergency","cancelled"],repeat_caller:["Repeat caller","pro"]};
@@ -513,6 +517,21 @@ function paintTenant(d){
     </div>
 
     <div class="sec">
+      <h3>Texting</h3>
+      ${(()=>{ const sms=(a.settings&&a.settings.sms)||{}; const num=asst&&asst.sms_number?prettyPhone(asst.sms_number):null; const ready=sms.two_way===true&&sms.two_way_verified===true&&!!num;
+        return `<div class="kv"><span class="k">Notifications</span><span class="v">Shared toll-free (always)</span></div>
+        <div class="kv"><span class="k">Own text number</span><span class="v mono">${num?esc(num):'<span class="sub">none</span>'}</span></div>
+        <div class="kv"><span class="k">Two-way texting</span><span class="v">${ready?'<span class="pill active">Active</span>':sms.two_way===true?'<span class="pill trial">Enabled, awaiting verification</span>':'<span class="pill paused">Off</span>'}</span></div>
+        <div class="row" style="margin-top:10px;flex-wrap:wrap;gap:14px">
+          <label style="display:flex;gap:8px;align-items:center;font-size:13px"><input type="checkbox" id="d-tw-on" ${sms.two_way===true?'checked':''}> Two-way texting enabled</label>
+          <label style="display:flex;gap:8px;align-items:center;font-size:13px"><input type="checkbox" id="d-tw-ver" ${sms.two_way_verified===true?'checked':''}> Number verified by Twilio (10DLC / toll-free approved)</label>
+          <button class="btn sm ghost" id="d-tw-save">Save</button>
+        </div>
+        <div class="hint">Donna only replies in conversation from this account's own number when BOTH boxes are checked and a number exists. Until then, inbound texts get an acknowledgement and go to the owner's inbox. Notifications are never affected.</div>
+        <div class="msg" id="d-tw-msg"></div>`; })()}
+    </div>
+
+    <div class="sec">
       <h3>Assistant</h3>
       <div class="kv"><span class="k">Name</span><span class="v">${esc(asst&&asst.assistant_name||"Donna")}</span></div>
       <div class="kv"><span class="k">Answering</span><span class="v"><span class="dot ${asst&&asst.is_active?"on":"off"}"></span>${asst&&asst.is_active?"On":"Off"}</span></div>
@@ -542,6 +561,12 @@ function paintTenant(d){
       <div class="msg" id="d-name-msg"></div>
     </div>`;
 
+  // two-way texting flags
+  { const b=$("#d-tw-save"); if(b) b.onclick=async()=>{ const m=$("#d-tw-msg"); b.disabled=true; m.textContent="";
+      const r=await api("set_sms_two_way",{account_id:a.id, enabled:$("#d-tw-on").checked, verified:$("#d-tw-ver").checked});
+      b.disabled=false;
+      if(r.data&&r.data.ok){ m.style.color="var(--ok)"; m.textContent="Saved."; a.settings=Object.assign({},a.settings||{},{sms:Object.assign({},(a.settings||{}).sms||{},{two_way:r.data.sms.two_way,two_way_verified:r.data.sms.two_way_verified})}); }
+      else { m.style.color="var(--danger)"; m.textContent=(r.data&&r.data.error)||"Could not save."; } }; }
   // plan + status
   $("#d-save-plan").onclick=async(e)=>{
     const btn=e.target, m=$("#d-plan-msg"); btn.disabled=true; const o=btn.textContent; btn.textContent="Saving…"; m.textContent="";
