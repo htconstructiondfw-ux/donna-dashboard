@@ -440,7 +440,7 @@ function providerLabelPlural(){ return providerLabel()+'s'; }
 function teamAllowed(){ const p=String((state.account&&state.account.plan)||'').toLowerCase(); return p==='pro'||p==='enterprise'; }
 function renderApp(){
   const mgr=isManager();
-  if(!mgr && !['today','schedule','appointments','clients','messages','waitlist','mylink','jobs'].includes(state.view)) state.view='today';
+  if(!mgr && !['today','schedule','appointments','clients','messages','waitlist','mylink','jobs','account'].includes(state.view)) state.view='today';
   // A solo owner lives in their day; land there on first load, then leave navigation free.
   if(mgr && isSolo() && !state._homed){ state._homed=true; if(state.view==='assistant') state.view='today'; }
   if(mgr && new URLSearchParams(location.search).get('calendar')) state.view='settings';
@@ -470,6 +470,7 @@ function renderApp(){
     if(salonOn()) navConfig.splice(3,0,["waitlist","Waitlist",I.clock]);
     if(salonOn()) navConfig.push(["mylink","My booking link",I.link]);
     if(paymentsOn()) navConfig.splice(1,0,["jobs","Jobs & money",I.card]);
+    navConfig.push(["account","My account",I.gear]);
     navActivity=[];
   }
   const navCount=v=>{ if(v==='messages') return unreadCount(); if(v==='conversations') return (state.conversations||[]).filter(c=>c.status==='awaiting_staff').length; if(v==='gaps') return (state.gaps||[]).length; return 0; };
@@ -490,7 +491,7 @@ function renderApp(){
     </aside>
     <main class="main">
       <div class="topbar">
-        <div class="crumbs">${['settings','notifications'].includes(state.view)?'Account':(['today','messages','appointments','waitlist','calls','contacts','clients','gaps','conversations','requests','leads'].includes(state.view)?'Activity':'Configure')} · <b>${esc(({today:"Today",assistant:"Assistant",schedule:"Schedule",types:(pmMode()?"Visit types":(salonOn()?"Services":"Appointment types")),staff:"Staff",messages:"Phone messages",appointments:(pmMode()?"Visits & appointments":"Appointments"),settings:"Settings",notifications:"Notifications",calls:"Calls",knowledge:"Knowledge",contacts:(salonOn()?"Clients":"Contacts"),clients:"Clients",gaps:"Open questions",conversations:"Inbox",waitlist:"Waitlist",promotions:"Promotions",booking:(pmMode()?"Self-scheduling":"Booking page"),mylink:"My booking link",intake:"Intake forms",properties:"Properties",contractors:"Contractors",requests:"Service requests",listings:"Listings",leads:"Leads & documents"})[state.view])}</b></div>
+        <div class="crumbs">${['settings','notifications','account'].includes(state.view)?'Account':(['today','messages','appointments','waitlist','calls','contacts','clients','gaps','conversations','requests','leads'].includes(state.view)?'Activity':'Configure')} · <b>${esc(({today:"Today",assistant:"Assistant",schedule:"Schedule",types:(pmMode()?"Visit types":(salonOn()?"Services":"Appointment types")),staff:"Staff",messages:"Phone messages",appointments:(pmMode()?"Visits & appointments":"Appointments"),settings:"Settings",notifications:"Notifications",calls:"Calls",knowledge:"Knowledge",contacts:(salonOn()?"Clients":"Contacts"),clients:"Clients",gaps:"Open questions",conversations:"Inbox",waitlist:"Waitlist",promotions:"Promotions",booking:(pmMode()?"Self-scheduling":"Booking page"),mylink:"My booking link",intake:"Intake forms",properties:"Properties",contractors:"Contractors",requests:"Service requests",listings:"Listings",leads:"Leads & documents",account:"My account"})[state.view])}</b></div>
         <div class="acct-chip"><span class="av">${initials}</span><div class="who"><b>${esc(state.account.company)}</b><span>${esc((state.account.status||'trial'))} · ${esc(state.account.plan||'starter')}</span></div></div>
       </div>
       <div id="approve-banner"></div>
@@ -503,12 +504,12 @@ function renderApp(){
   paintApproveBanner();
 }
 function renderPage(){
-  if(!isManager() && !['today','schedule','appointments','clients','messages','waitlist','mylink','jobs'].includes(state.view)) state.view='today';
+  if(!isManager() && !['today','schedule','appointments','clients','messages','waitlist','mylink','jobs','account'].includes(state.view)) state.view='today';
   if('speechSynthesis' in window) window.speechSynthesis.cancel();
   teardownRealtime();
   document.querySelectorAll(".nav-item[data-v]").forEach(b=>b.classList.toggle("active",b.dataset.v===state.view));
-  $(".crumbs").innerHTML=`${['settings','notifications'].includes(state.view)?'Account':(['today','messages','appointments','waitlist','calls','contacts','clients','gaps','conversations','requests','leads'].includes(state.view)?'Activity':'Configure')} · <b>${esc(({today:"Today",assistant:"Assistant",schedule:"Schedule",types:(pmMode()?"Visit types":(salonOn()?"Services":"Appointment types")),staff:"Staff",messages:"Phone messages",appointments:(pmMode()?"Visits & appointments":"Appointments"),settings:"Settings",notifications:"Notifications",calls:"Calls",knowledge:"Knowledge",contacts:(salonOn()?"Clients":"Contacts"),clients:"Clients",gaps:"Open questions",conversations:"Email inbox",waitlist:"Waitlist",promotions:"Promotions",booking:(pmMode()?"Self-scheduling":"Booking page"),mylink:"My booking link",intake:"Intake forms",properties:"Properties",contractors:"Contractors",requests:"Service requests",listings:"Listings",leads:"Leads & documents"})[state.view])}</b>`;
-  const PAGES={today:pageToday, assistant:pageAssistant, schedule:pageSchedule, types:pageTypes, staff:pageStaff, messages:pageMessages, appointments:renderAppts, settings:pageSettings, notifications:pageNotifications, calls:pageCalls, knowledge:pageKnowledge, contacts:pageContacts, clients:pageClients, gaps:pageGaps, conversations:pageConversations, waitlist:pageWaitlist, promotions:pagePromotions, booking:pageBookingPage, mylink:pageMyLink, intake:pageIntakeForms, properties:pageProperties, contractors:pageContractors, requests:pageServiceRequests, jobs:pageJobs, listings:pageListings, leads:pageLeads};
+  $(".crumbs").innerHTML=`${['settings','notifications','account'].includes(state.view)?'Account':(['today','messages','appointments','waitlist','calls','contacts','clients','gaps','conversations','requests','leads'].includes(state.view)?'Activity':'Configure')} · <b>${esc(({today:"Today",assistant:"Assistant",schedule:"Schedule",types:(pmMode()?"Visit types":(salonOn()?"Services":"Appointment types")),staff:"Staff",messages:"Phone messages",appointments:(pmMode()?"Visits & appointments":"Appointments"),settings:"Settings",notifications:"Notifications",calls:"Calls",knowledge:"Knowledge",contacts:(salonOn()?"Clients":"Contacts"),clients:"Clients",gaps:"Open questions",conversations:"Email inbox",waitlist:"Waitlist",promotions:"Promotions",booking:(pmMode()?"Self-scheduling":"Booking page"),mylink:"My booking link",intake:"Intake forms",properties:"Properties",contractors:"Contractors",requests:"Service requests",listings:"Listings",leads:"Leads & documents",account:"My account"})[state.view])}</b>`;
+  const PAGES={today:pageToday, assistant:pageAssistant, schedule:pageSchedule, types:pageTypes, staff:pageStaff, messages:pageMessages, appointments:renderAppts, settings:pageSettings, notifications:pageNotifications, calls:pageCalls, knowledge:pageKnowledge, contacts:pageContacts, clients:pageClients, gaps:pageGaps, conversations:pageConversations, waitlist:pageWaitlist, promotions:pagePromotions, booking:pageBookingPage, mylink:pageMyLink, intake:pageIntakeForms, properties:pageProperties, contractors:pageContractors, requests:pageServiceRequests, jobs:pageJobs, listings:pageListings, leads:pageLeads, account:pageMyAccount};
   const LOADERS={today:loadAppointments, appointments:loadAppointments, messages:loadMessages, calls:loadCalls, contacts:loadContacts, clients:loadContacts, gaps:loadGaps, conversations:loadConversations, staff:loadStaff, waitlist:loadWaitlist};
   const v=state.view;
   (PAGES[v]||(()=>{}))();
@@ -3384,6 +3385,32 @@ function pageSettings(){
   }
   $("#set-pw-save").onclick=savePassword;
   paintCalendarCard();
+}
+function pageMyAccount(){
+  // Staff (non-manager) view: who they are signed in as, plus the same change-password form managers get in Settings.
+  const ac=state.account||{};
+  $("#page").innerHTML=`<div class="page">
+    <div class="card"><div class="card-h"><h2>Signed in as</h2></div>
+      <div class="set-rows">
+        <div class="set-row"><span class="k">Name</span><span class="v">${esc(state.owner.name)}</span></div>
+        <div class="set-row"><span class="k">Login</span><span class="v">${esc(state.owner.email)}</span></div>
+        <div class="set-row"><span class="k">Role</span><span class="v">${esc(roleLabel(state.owner))}</span></div>
+        <div class="set-row"><span class="k">Business</span><span class="v">${esc(ac.company||'')}</span></div>
+      </div>
+    </div>
+    <div class="card"><div class="card-h"><h2>Change password</h2><span class="hint">Takes effect right away</span></div>
+      <div class="grid-2">
+        <div class="field"><label class="lab">New password</label><input class="inp" id="set-pw1" type="password" placeholder="At least 8 characters" autocomplete="new-password"></div>
+        <div class="field"><label class="lab">Confirm new password</label><input class="inp" id="set-pw2" type="password" placeholder="Re-enter new password" autocomplete="new-password"></div>
+      </div>
+      <div style="display:flex;align-items:center;gap:12px;margin-top:4px">
+        <button class="btn sm primary" id="set-pw-save">Update password</button>
+        <span id="set-pw-msg" style="font-size:12.5px;color:var(--muted)"></span>
+      </div>
+      <p class="hint" style="margin-top:10px">Forgot it? Sign out and use "Forgot password?" on the login screen to get a reset link by email.</p>
+    </div>
+  </div>`;
+  $("#set-pw-save").onclick=savePassword;
 }
 async function savePassword(){
   const p1=$("#set-pw1").value, p2=$("#set-pw2").value, msg=$("#set-pw-msg"), btn=$("#set-pw-save");
