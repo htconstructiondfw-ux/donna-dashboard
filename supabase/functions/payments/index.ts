@@ -2,13 +2,15 @@ import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import Stripe from "https://esm.sh/stripe@14.25.0?target=denonext";
 
-// Donna shared payments module (v8). Any vertical can use it; the dashboard exposes it to contractors first.
+// Donna shared payments module (v10). Any vertical can use it; the dashboard exposes it to contractors first.
 // Tenants connect THEIR OWN Stripe account (Connect, Accounts v2, SaaS pattern). Donna never holds, touches or routes money:
 // Checkout Sessions are created directly on the tenant's account (Stripe-Account header), no application fee.
 //
 // User actions (JWT, or service role + user_id from internal callers):
 //   status | connect | refresh | enable | disable
 //   invoice_create | invoice_update | invoice_send | invoice_mark_paid | invoice_void | invoice_list | export_csv
+//   card_setup_send {appointment_id|job_id, phone?}  -> texts the customer a Stripe link to put a card on file (nothing charged; saved on the job)
+//   invoice_charge_card {id}                          -> charges the card on file for the invoice's job (off-session); falls back to the pay link
 // Public actions:       checkout {token}  -> Stripe Checkout URL for one invoice (pay page calls this)
 //                       webhook           -> Stripe Connect webhook (signature-verified)
 // Secrets: STRIPE_SECRET_KEY (env) decides test vs live; webhook secret from env or app_secrets
@@ -149,7 +151,7 @@ async function markPaid(inv: any, method: string, provider: string, providerRef:
       if (job?.kind === "emergency" && job.invoice_id !== inv.id) {
         const ctr: any = acct.settings?.contractor || {};
         const pagePhone = String(ctr.after_hours_page_phone || who?.phone || "").trim();
-        if (pagePhone) { paged = await sendText(inv.account_id, pagePhone, `${acct.name} AFTER-HOURS, FEE PAID (${money(amountCents ?? inv.total_cents)}): ${job.customer_name || "Caller"}${job.customer_phone ? " " + job.customer_phone : ""}${job.address ? " at " + job.address : ""}. ${String(job.notes || "").slice(0, 300)}. Call them back now.`); }
+        if (pagePhone) { try { const r = await fetch(`${SELF}/oncall`, { method: "POST", headers: { "Content-Type": "application/json", Authorization: `Bearer ${SERVICE_ROLE}` }, body: JSON.stringify({ action: "page", account_id: inv.account_id, job_id: inv.job_id, message: `FEE PAID (${money(amountCents ?? inv.total_cents)}): ${job.customer_name || "Caller"}${job.customer_phone ? " " + job.customer_phone : ""}${job.address ? " at " + job.address : ""}. ${String(job.notes || "").slice(0, 300)}. Call them back now.` }) }); const j: any = await r.json().catch(() => ({})); paged = !!j?.ok; } catch { paged = false; } }
         if (job.customer_phone) await sendText(inv.account_id, job.customer_phone, `${acct.name}: got it, thank you. The on-call technician has been paged and will call you shortly.`);
       }
     }
@@ -183,7 +185,19 @@ Deno.serve(async (req: Request) => {
     try { ev = await stripe.webhooks.constructEventAsync(raw, sig, WEBHOOK_SECRET, undefined, Stripe.createSubtleCryptoProvider()); }
     catch (e) { return json({ ok: false, error: "bad_signature", detail: String(e) }, 400); }
     try {
-      if (ev.type === "checkout.session.completed" || ev.type === "checkout.session.async_payment_succeeded") {
+      if (ev.type === "checkout.session.completed" && ev.data.object?.mode === "setup") {
+        // Card on file: the customer saved a card for a booked job. Keep the ids on the job; the tech can charge it at Done.
+        const cs = ev.data.object; const jobId = cs?.metadata?.job_id; const acctStripe = ev.account || cs?.metadata?.stripe_account || null;
+        if (jobId && cs.setup_intent && acctStripe) {
+          try {
+            const si: any = await stripe.setupIntents.retrieve(String(cs.setup_intent), { expand: ["payment_method"] }, { stripeAccount: acctStripe });
+            const pm: any = si?.payment_method || {};
+            const card = { payment_method: pm.id || String(si.payment_method || ""), customer: cs.customer || si.customer || null, brand: pm.card?.brand || null, last4: pm.card?.last4 || null, saved_at: new Date().toISOString() };
+            const { data: job } = await supabase.from("jobs").update({ card, updated_at: new Date().toISOString() }).eq("id", jobId).select("account_id, customer_phone, customer_name, assigned_user_id").maybeSingle();
+            if (job) { const acct = await loadAccount(job.account_id); if (acct && job.customer_phone && acct.settings?.sms?.enabled === true) await sendText(job.account_id, job.customer_phone, `${acct.name}: thanks, your card ending ${card.last4 || "on file"} is saved. Nothing is charged until the work is done.`); }
+          } catch (e) { console.error("card setup webhook", e); }
+        }
+      } else if (ev.type === "checkout.session.completed" || ev.type === "checkout.session.async_payment_succeeded") {
         const cs = ev.data.object; const invoiceId = cs?.metadata?.invoice_id;
         if (invoiceId && cs.payment_status === "paid") {
           const { data: inv } = await supabase.from("invoices").select("*").eq("id", invoiceId).maybeSingle();
@@ -338,6 +352,50 @@ Deno.serve(async (req: Request) => {
     const method = ["cash", "check", "card", "other"].includes(body.method) ? body.method : "cash";
     const upd = await markPaid(inv, method, "manual", null, String(body.note || "").slice(0, 200) || null);
     return json({ ok: true, invoice: upd });
+  }
+
+  if (action === "card_setup_send") {
+    // Text the customer a Stripe Checkout (setup mode) link on the business's own account. Nothing is charged; the card is saved to the job.
+    const pa = await loadPA(acct.id);
+    if (!stripe || !acct.settings?.payments?.enabled || !pa?.charges_enabled || !pa?.stripe_account_id) return json({ ok: false, error: "online_payments_off", message: "Connect Stripe and turn on online payments first." });
+    let job: any = null;
+    if (body.job_id) { const { data } = await supabase.from("jobs").select("*").eq("id", body.job_id).eq("account_id", acct.id).maybeSingle(); job = data; }
+    else if (body.appointment_id) {
+      const { data } = await supabase.from("jobs").select("*").eq("appointment_id", body.appointment_id).eq("account_id", acct.id).maybeSingle(); job = data;
+      if (!job) { const { data: a } = await supabase.from("appointments").select("id, contact_id, user_id, title, starts_at, location_address, notes, customer_email, contacts(name, phone, email)").eq("id", body.appointment_id).eq("account_id", acct.id).maybeSingle(); if (a) { const c: any = (a as any).contacts || {}; const { data: nj } = await supabase.from("jobs").upsert({ account_id: acct.id, appointment_id: a.id, contact_id: a.contact_id, assigned_user_id: a.user_id, title: a.title || "Job", kind: "service", status: "scheduled", customer_name: c.name || null, customer_phone: c.phone || null, customer_email: c.email || a.customer_email || null, address: a.location_address || null, scheduled_at: a.starts_at, notes: a.notes || null }, { onConflict: "appointment_id" }).select("*").maybeSingle(); job = nj; } }
+    }
+    if (!job) return json({ ok: false, error: "job_not_found" }, 404);
+    if (job.card?.payment_method) return json({ ok: true, already: true, last4: job.card.last4 || null });
+    const to = String(body.phone || job.customer_phone || "").trim(); if (!to) return json({ ok: false, error: "no_phone" });
+    try {
+      const session: any = await stripe.checkout.sessions.create({
+        mode: "setup", payment_method_types: ["card"], customer_email: job.customer_email || undefined,
+        success_url: `${APP}/pay/card-saved`, cancel_url: `${APP}/pay/card-saved?cancel=1`,
+        metadata: { job_id: job.id, account_id: acct.id, stripe_account: pa.stripe_account_id },
+        setup_intent_data: { metadata: { job_id: job.id, account_id: acct.id } },
+      } as any, { stripeAccount: pa.stripe_account_id });
+      const when = job.scheduled_at ? new Intl.DateTimeFormat("en-US", { timeZone: acct.settings?.timezone || "America/Chicago", weekday: "long", month: "long", day: "numeric", hour: "numeric", minute: "2-digit" }).format(new Date(job.scheduled_at)) : "your appointment";
+      const sent = acct.settings?.sms?.enabled === true ? await sendText(acct.id, to, `${business}: to hold ${when}, please put a card on file here (nothing is charged now; you're billed only when the work is done): ${session.url}`) : false;
+      await supabase.from("jobs").update({ card: { requested_at: new Date().toISOString(), session_id: session.id }, updated_at: new Date().toISOString() }).eq("id", job.id);
+      return json({ ok: true, sent, url: session.url });
+    } catch (e) { console.error("card setup", e); return json({ ok: false, error: "stripe_error", detail: String((e as any)?.message || e) }, 502); }
+  }
+
+  if (action === "invoice_charge_card") {
+    const id = String(body.id || ""); const { data: inv } = await supabase.from("invoices").select("*").eq("id", id).eq("account_id", acct.id).maybeSingle();
+    if (!inv) return json({ ok: false, error: "not_found" }, 404); if (inv.paid_at) return json({ ok: false, error: "already_paid" });
+    const pa = await loadPA(acct.id);
+    if (!stripe || !pa?.charges_enabled || !pa?.stripe_account_id) return json({ ok: false, error: "online_payments_off" });
+    const { data: job } = inv.job_id ? await supabase.from("jobs").select("card, customer_name").eq("id", inv.job_id).maybeSingle() : { data: null as any };
+    const card = (job as any)?.card; if (!card?.payment_method) return json({ ok: false, error: "no_card", message: "No card on file for this job. Send the pay link instead." });
+    try {
+      const pi: any = await stripe.paymentIntents.create({ amount: inv.total_cents, currency: inv.currency || "usd", customer: card.customer || undefined, payment_method: card.payment_method, off_session: true, confirm: true, description: `${business} \u00b7 Invoice ${inv.number}`, metadata: { invoice_id: inv.id, account_id: acct.id, number: inv.number } }, { stripeAccount: pa.stripe_account_id });
+      if (pi.status === "succeeded") { const upd = await markPaid(inv, "card", "stripe", pi.id, `card on file${card.last4 ? " \u2022\u2022\u2022\u2022 " + card.last4 : ""}`, pi.amount_received ?? inv.total_cents); return json({ ok: true, invoice: upd, charged: true, last4: card.last4 || null }); }
+      return json({ ok: false, error: "not_succeeded", status: pi.status, message: "The bank wants the customer to confirm. Send them the pay link." });
+    } catch (e: any) {
+      const code = e?.code || e?.raw?.code || ""; console.error("charge card", code, e?.message);
+      return json({ ok: false, error: code === "authentication_required" ? "needs_customer" : "card_declined", message: code === "authentication_required" ? "Their bank wants them to confirm. Send the pay link and they can finish it on their phone." : `The card was declined${e?.decline_code ? " (" + e.decline_code + ")" : ""}. Send the pay link so they can use another card.` });
+    }
   }
 
   if (action === "invoice_void") {

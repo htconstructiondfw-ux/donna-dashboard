@@ -48,6 +48,7 @@ const money = c => "$" + (Math.round(c||0)/100).toLocaleString("en-US",{minimumF
 const app = document.getElementById("app");
 
 async function load(attempt=0){
+  if(token==="card-saved"){ app.innerHTML = q.get("cancel")==="1" ? '<div class="card"><h2 style="margin:0 0 8px">No card saved</h2><p style="color:#555;margin:0">That\'s okay. You can pay when the work is done. If you meant to add a card, open the link from your text again.</p></div>' : '<div class="card"><h2 style="margin:0 0 8px">Card saved. Thank you!</h2><p style="color:#555;margin:0">Nothing has been charged. You\'ll be billed only when the work is done, and you\'ll get a receipt by text.</p></div>'; return; }
   if(!token){ app.innerHTML = '<div class="card err">This invoice link isn\'t complete. Please use the link from your text or email.</div>'; return; }
   let inv=null;
   try{

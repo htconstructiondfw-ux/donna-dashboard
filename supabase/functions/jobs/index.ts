@@ -1,7 +1,7 @@
 import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 
-// Donna jobs (v5): the contractor's day. A job wraps an appointment (created lazily) and carries the
+// Donna jobs (v6): the contractor's day. A job wraps an appointment (created lazily) and carries the
 // on-my-way / started / done timeline, proposed invoice lines, notes and photos.
 // Actions (user JWT, or service role + user_id from the text-command layer):
 //   today {date?}                      -> this user's jobs for the day (managers: whole company)
@@ -86,6 +86,8 @@ async function proposeLines(acct: any, job: any) {
   const outside = hour < Number(cfg.day_start_hour ?? 7) || hour >= Number(cfg.day_end_hour ?? 19) || dow === "Sun" || job.kind === "emergency";
   const mult = Number(cfg.after_hours_multiplier || 0); const flatFee = Number(cfg.after_hours_fee_cents || 0);
   const afterHours = outside && cfg.after_hours_enabled !== false && (mult > 1 || flatFee > 0);
+  // Recurring route visits carry their own saved price; no menu lookup, no after-hours math.
+  if (job.kind === "route" && Array.isArray(job.lines) && job.lines.length) { const menu = types.map((t) => ({ id: t.id, name: t.name, cents: parsePrice(t.price), category: t.category || null })); return { lines: job.lines, menu, after_hours: false }; }
   if (booked) {
     const base = parsePrice(booked.price);
     if (base != null) { const cents = afterHours && mult > 1 ? Math.round(base * mult) : base; lines.push({ desc: booked.name + (afterHours && mult > 1 ? " (after hours)" : ""), qty: 1, unit_cents: cents, cents, kind: "service" }); }
@@ -132,7 +134,7 @@ Deno.serve(async (req: Request) => {
     const ids = (appts || []).map((a: any) => a.id);
     const { data: jobs } = ids.length ? await supabase.from("jobs").select("*").in("appointment_id", ids) : { data: [] as any[] };
     const byAppt = new Map((jobs || []).map((j: any) => [j.appointment_id, j]));
-    const out = (appts || []).map((a: any) => { const j: any = byAppt.get(a.id); return { appointment_id: a.id, job_id: j?.id || null, title: a.appointment_types?.name || a.title, price: a.appointment_types?.price || null, starts_at: a.starts_at, ends_at: a.ends_at, customer_name: a.contacts?.name || j?.customer_name || null, customer_phone: a.contacts?.phone || j?.customer_phone || null, address: a.location_address || j?.address || null, notes: a.notes, tech: a.users?.full_name || null, user_id: a.user_id, status: j?.status || (a.status === "completed" ? "done" : "scheduled"), invoice_id: j?.invoice_id || null, eta_minutes: j?.eta_minutes || null, photos: Array.isArray(j?.photos) ? j.photos.length : 0 }; });
+    const out = (appts || []).map((a: any) => { const j: any = byAppt.get(a.id); return { appointment_id: a.id, job_id: j?.id || null, kind: j?.kind || null, title: a.appointment_types?.name || a.title, price: a.appointment_types?.price || (j?.kind === "route" && Array.isArray(j.lines) && j.lines.length ? money(j.lines.reduce((s: number, l: any) => s + (l.cents || 0), 0)) : null), starts_at: a.starts_at, ends_at: a.ends_at, customer_name: a.contacts?.name || j?.customer_name || null, customer_phone: a.contacts?.phone || j?.customer_phone || null, address: a.location_address || j?.address || null, notes: a.notes, tech: a.users?.full_name || null, user_id: a.user_id, status: j?.status || (a.status === "completed" ? "done" : "scheduled"), invoice_id: j?.invoice_id || null, eta_minutes: j?.eta_minutes || null, photos: Array.isArray(j?.photos) ? j.photos.length : 0 }; });
     // Emergency / after-hours jobs opened by phone have no appointment yet; list them too (newest first, flagged).
     let qj = supabase.from("jobs").select("*").eq("account_id", acct.id).is("appointment_id", null).gte("scheduled_at", start).lt("scheduled_at", end).not("status", "in", "(cancelled,paid)").order("scheduled_at");
     if (!isAdmin(caller.role) || body.mine) qj = qj.eq("assigned_user_id", caller.userId);

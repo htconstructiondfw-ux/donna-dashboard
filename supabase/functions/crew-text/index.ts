@@ -1,7 +1,7 @@
 import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 
-// Donna crew-text (v9): the contractor runs his day by texting Donna's number from his own phone.
+// Donna crew-text (v10): the contractor runs his day by texting Donna's number from his own phone.
 // Called by msg-inbound when the sender is a user (owner or tech) on the account. Returns { handled, reply }.
 // Commands (forgiving, case-insensitive):
 //   omw / on my way [20]      -> customer gets "on the way, about 20 min"
@@ -57,14 +57,14 @@ function addonPrompt(st: any) {
 // something needed is missing (which job, how many minutes, what price). The last few turns are kept so answers
 // to those questions land in context.
 const ANTHROPIC_KEY = Deno.env.get("ANTHROPIC_API_KEY") || "";
-const CMD_RE = /^(omw|on my way|otw|here|arrived|done|finished|finish|complete|completed|all done|wrapped up|wrapping up|bill it|invoice|late|running late|today|next|note|notes|help|\?|commands|menu|ok|okay|yes|no|send|later|hold|paid|got paid|they paid|cash|check|card|venmo|zelle|add|remove|discount|price|trip|cancel|nevermind|never mind|stop|move|reschedule|ack|got it|on it|taking it|quote|estimate|bid|schedule|optional|\d+)\b/;
+const CMD_RE = /^(omw|on my way|otw|here|arrived|done|finished|finish|complete|completed|all done|wrapped up|wrapping up|bill it|invoice|late|running late|today|next|note|notes|help|\?|commands|menu|ok|okay|yes|no|send|later|hold|paid|got paid|they paid|cash|check|card|venmo|zelle|add|remove|discount|price|trip|cancel|nevermind|never mind|stop|move|reschedule|ack|got it|on it|taking it|quote|estimate|bid|schedule|optional|charge|run it|\d+)\b/;
 async function interpret(text: string, jobs: any[], acct: any, tz: string, chat: any[], flow: string): Promise<{ command?: string; answer?: string; ask?: string } | null> {
   if (!ANTHROPIC_KEY) return null;
   const now = new Intl.DateTimeFormat("en-US", { timeZone: tz, weekday: "short", hour: "numeric", minute: "2-digit" }).format(new Date());
   const fmt = (iso: string) => { try { return new Intl.DateTimeFormat("en-US", { timeZone: tz, hour: "numeric", minute: "2-digit" }).format(new Date(iso)); } catch { return ""; } };
   const list = jobs.map((j: any, i: number) => `#${i + 1} ${fmt(j.starts_at)} ${j.title} — ${j.customer_name || "no name"}${j.address ? ", " + j.address : ""} [${j.status}]${j.kind === "emergency" ? " (after-hours call)" : ""}`).join("\n") || "(nothing scheduled today)";
   const system = `You are Donna, the dispatcher/assistant for a small trade business, texting with one of its technicians. Reply with JSON only, one of:
-{"command": "..."}  when the tech clearly wants you to DO something. Allowed commands (exact strings, fill the blanks): "omw <minutes>", "here", "done", "late <minutes>", "today", "next", "note <text>", "help", "send", "later", "paid cash", "paid check", "paid card", "add <what> <price>", "remove <what>", "discount <amount>", "price <amount>", "trip on", "trip off", "ok", "cancel", "move <YYYY-MM-DD> <HH:MM>" (24h; moves the job to a new day/time), "cancel job" (cancels the job itself and tells the customer), "ack" (take the after-hours call you were paged for), "quote" (start an estimate for the current job; the tech supplies all prices), "optional <what> <price>" (an optional line while building an estimate), "schedule <EST-number> <YYYY-MM-DD> <HH:MM>" (book an approved estimate). Commands act on the current job (in progress, or the next one up). To aim at a different job from the list, append " #<n>" (e.g. "omw 10 #2").
+{"command": "..."}  when the tech clearly wants you to DO something. Allowed commands (exact strings, fill the blanks): "omw <minutes>", "here", "done", "late <minutes>", "today", "next", "note <text>", "help", "send", "later", "paid cash", "paid check", "paid card", "add <what> <price>", "remove <what>", "discount <amount>", "price <amount>", "trip on", "trip off", "ok", "cancel", "charge" (run the customer's card on file for the invoice just built), "move <YYYY-MM-DD> <HH:MM>" (24h; moves the job to a new day/time), "cancel job" (cancels the job itself and tells the customer), "ack" (take the after-hours call you were paged for), "quote" (start an estimate for the current job; the tech supplies all prices), "optional <what> <price>" (an optional line while building an estimate), "schedule <EST-number> <YYYY-MM-DD> <HH:MM>" (book an approved estimate). Commands act on the current job (in progress, or the next one up). To aim at a different job from the list, append " #<n>" (e.g. "omw 10 #2").
 {"answer": "..."}  (1-2 short friendly sentences, no markdown) when they ask a question you can answer from the schedule or the conversation: what's next, when, where, who, how many left, what's on the invoice so far.
 {"ask": "..."}  ONE short question when they want an action but something needed is missing or ambiguous: which job (name the choices briefly), how many minutes, what price, what to add. Don't ask when a sensible default exists (no minutes given → "omw 0" is fine; "done" needs nothing).
 Never invent jobs, prices, times or customers. Times are already in the shop's local time zone. If it's small talk or off-topic, give a one-line friendly answer and say what you can help with.`;
@@ -148,8 +148,9 @@ Deno.serve(async (req: Request) => {
       if (/^(ok|okay|k|yes|y|good|none|no|nope|that's it|thats it|right|correct|looks good|send)$/.test(low)) {
         const fin = await call("jobs", { action: "finalize", user_id: userId, job_id: st.job_id, lines: st.lines });
         if (!fin?.ok) { await clear(); return reply("Couldn't build the invoice. Open the app and try from there."); }
-        await save({ step: "send", job_id: st.job_id, invoice_id: fin.invoice.id, total_cents: fin.invoice.total_cents, customer: st.customer, phone: st.phone });
-        return reply(`Invoice ${fin.invoice.number}: ${money(fin.invoice.total_cents)} for ${st.customer || "the customer"}.\nReply SEND to text it to them now, LATER to hold it, or PAID if they already paid you${st.online ? "" : " (cash/check)"}.`);
+        let card: any = null; try { const { data: jr } = await supabase.from("jobs").select("card").eq("id", st.job_id).maybeSingle(); card = (jr as any)?.card?.payment_method ? (jr as any).card : null; } catch { /* */ }
+        await save({ step: "send", job_id: st.job_id, invoice_id: fin.invoice.id, total_cents: fin.invoice.total_cents, customer: st.customer, phone: st.phone, card: !!card });
+        return reply(`Invoice ${fin.invoice.number}: ${money(fin.invoice.total_cents)} for ${st.customer || "the customer"}.\n${card ? `They have a card on file (${card.brand || "card"} ${card.last4 ? "ending " + card.last4 : ""}). Reply CHARGE to run it, SEND to text them the invoice instead, LATER to hold it, or PAID if they paid another way.` : `Reply SEND to text it to them now, LATER to hold it, or PAID if they already paid you${st.online ? "" : " (cash/check)"}.`}`);
       }
       const nums = low.match(/^\s*(\d+(?:\s*[, ]\s*\d+)*)\s*$/);
       if (nums) {
@@ -174,6 +175,12 @@ Deno.serve(async (req: Request) => {
       return null;
     }
     if (st.step === "send" && st.invoice_id) {
+      if (/^(charge|charge it|run it|run the card|charge the card|charge card)$/.test(low)) {
+        const { customer, total_cents } = st;
+        const r = await call("payments", { action: "invoice_charge_card", user_id: userId, id: st.invoice_id });
+        if (r?.ok) { await clear(); return reply(`Charged ${money(total_cents)} to ${customer || "the customer"}'s card${r.last4 ? " ending " + r.last4 : ""}. Receipt sent. Nice work.`); }
+        return reply(`${r?.message || "Couldn't charge the card."}\nReply SEND to text them the pay link, LATER to hold it, or PAID.`);
+      }
       if (/^(send|send it|yes|y|ok|go)$/.test(low)) {
         const { customer, total_cents } = st;
         const r = await call("payments", { action: "invoice_send", user_id: userId, id: st.invoice_id });
@@ -202,7 +209,7 @@ Deno.serve(async (req: Request) => {
     }
 
     // ---- Commands ----
-    if (/^(help|\?|commands|menu)$/.test(low)) return reply(`Text me:\nOMW 20 - tell the customer you're on the way\nHERE - started\nDONE - finish up and bill\nLATE 15 - running behind\nTODAY - your jobs\nNEXT - next stop + map\nNOTE <text> - note on this job\nSend a photo to save it to the job.`);
+    if (/^(help|\?|commands|menu)$/.test(low)) return reply(`Text me:\nOMW 20 - tell the customer you're on the way\nHERE - started\nDONE - finish up and bill\nLATE 15 - running behind\nTODAY - your jobs\nNEXT - next stop + map\nNOTE <text> - note on this job\nQUOTE - write an estimate (you set every price)\nMOVE 2026-11-12 15:00 - reschedule\nCANCEL JOB - cancel and tell the customer\nACK - take an after-hours call you were paged for\nSend a photo to save it to the job.\nOr just tell me what you need in your own words.`);
 
     if (/^(today|jobs|schedule|what's today|whats today|list)$/.test(low)) {
       const jobs = await todays(); if (!jobs.length) return reply("Nothing on the books today.");
@@ -322,7 +329,7 @@ Deno.serve(async (req: Request) => {
   }
   if (!out) {
     if (st.step === "addons" || st.step === "quote") out = await reply(`Didn't catch that.\n${addonPrompt(st)}`);
-    else if (st.step === "send") out = await reply(`Reply SEND, LATER, or PAID.`);
+    else if (st.step === "send") out = await reply(st.card ? `Reply CHARGE (card on file), SEND, LATER, or PAID.` : `Reply SEND, LATER, or PAID.`);
     else return ok({ handled: false });
   }
   return out;

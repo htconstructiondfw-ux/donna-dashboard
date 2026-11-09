@@ -1,7 +1,7 @@
 import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 
-// Donna — take a message (Retell custom function) v22
+// Donna — take a message (Retell custom function) v23
 // Saves caller name, callback number, message, language, urgency, and who the
 // message is for. When the message is for a named person, it resolves that person
 // FIRST against the staff list (so a stylist gets their own message), then the Pro
@@ -199,7 +199,7 @@ Deno.serve(async (req: Request) => {
 
   // ---- Contractor after-hours: open an emergency job, then prepay link or page the on-call tech ----
   const ctr: any = settings.contractor || {};
-  if (isEmergency && acct.industry === "contractor" && ctr.after_hours_enabled === true) {
+  if (isEmergency && String(settings.industry || acct.industry || "") === "contractor" && ctr.after_hours_enabled === true) {
     try {
       const { data: owner } = await supabase.from("users").select("id, full_name, phone").eq("account_id", asst.account_id).eq("role", "owner").limit(1).maybeSingle();
       const pagePhone = String(ctr.after_hours_page_phone || (owner as any)?.phone || "").trim();
@@ -223,7 +223,8 @@ Deno.serve(async (req: Request) => {
         // fall through to paging if the link couldn't go out
       }
       if (pagePhone) {
-        await sendText(asst.account_id, pagePhone, `${business} AFTER-HOURS: ${who}${callbackNumber ? " " + callbackNumber : ""}${address ? " at " + address : ""}. ${messageText.slice(0, 300)}${fee > 0 ? ` (after-hours fee ${money(fee)} goes on the invoice)` : ""}. Call them back now.`);
+        // On-call ladder: first rung now, next rung if nobody acknowledges within the shop's window (oncall.sweep).
+        await callFn("oncall", { action: "page", account_id: asst.account_id, job_id: job?.id || null, message: `${who}${callbackNumber ? " " + callbackNumber : ""}${address ? " at " + address : ""}. ${messageText.slice(0, 300)}${fee > 0 ? ` (after-hours fee ${money(fee)} goes on the invoice)` : ""}. Call them back now.` });
         return json({ result: `I've paged the on-call technician with your address and the problem. Expect a call back within about fifteen minutes${fee > 0 ? `; the after-hours fee is ${money(fee)} on top of the regular price` : (Number(ctr.after_hours_multiplier || 0) > 1 ? `; after-hours work is billed at ${ctr.after_hours_multiplier} times the regular price` : "")}. Is there anything else you'd like them to know?` });
       }
     } catch (e) { console.error("after-hours branch", String(e)); }
