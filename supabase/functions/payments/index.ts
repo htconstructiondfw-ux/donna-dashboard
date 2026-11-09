@@ -2,7 +2,7 @@ import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import Stripe from "https://esm.sh/stripe@14.25.0?target=denonext";
 
-// Donna shared payments module (v10). Any vertical can use it; the dashboard exposes it to contractors first.
+// Donna shared payments module (v11). Any vertical can use it; the dashboard exposes it to contractors first.
 // Tenants connect THEIR OWN Stripe account (Connect, Accounts v2, SaaS pattern). Donna never holds, touches or routes money:
 // Checkout Sessions are created directly on the tenant's account (Stripe-Account header), no application fee.
 //
@@ -57,6 +57,8 @@ const CORS = { "Access-Control-Allow-Origin": "*", "Access-Control-Allow-Headers
 const json = (o: unknown, s = 200) => new Response(JSON.stringify(o), { status: s, headers: { ...CORS, "Content-Type": "application/json" } });
 const money = (c: number) => `$${(Math.round(c) / 100).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 const payUrl = (token: string) => `${APP}/pay/${token}`;
+// Card processing fee (settings.payments.card_fee_pct, 0 = off). Charged only when the customer pays by card; cash/check never pay it.
+const cardFee = (acct: any, totalCents: number) => { const pct = Number(acct?.settings?.payments?.card_fee_pct || 0); return pct > 0 ? { pct, cents: Math.round(totalCents * pct / 100) } : { pct: 0, cents: 0 }; };
 
 async function resolveCaller(req: Request, body?: any): Promise<{ userId: string; accountId: string; role: string } | null> {
   const m = (req.headers.get("Authorization") || "").match(/Bearer\s+(.+)/i);
@@ -132,11 +134,12 @@ async function sendEmail(to: string, from: string, subject: string, text: string
   try { const r = await fetch("https://api.resend.com/emails", { method: "POST", headers: { Authorization: `Bearer ${RESEND_KEY}`, "Content-Type": "application/json" }, body: JSON.stringify({ from, to: [to], subject, text }) }); return r.ok; } catch { return false; }
 }
 
-async function markPaid(inv: any, method: string, provider: string, providerRef: string | null, note: string | null, amountCents?: number, feeCents?: number) {
+async function markPaid(inv: any, method: string, provider: string, providerRef: string | null, note: string | null, amountCents?: number, feeCents?: number, surchargeCents = 0) {
   if (inv.paid_at) return inv;
   const now = new Date().toISOString();
-  const { data } = await supabase.from("invoices").update({ status: "paid", paid_at: now, paid_method: method, paid_note: note, stripe_payment_intent_id: providerRef && provider === "stripe" ? providerRef : inv.stripe_payment_intent_id, updated_at: now }).eq("id", inv.id).select("*").maybeSingle();
-  await supabase.from("payments").insert({ account_id: inv.account_id, invoice_id: inv.id, amount_cents: amountCents ?? inv.total_cents, method, provider, provider_ref: providerRef, fee_cents: feeCents ?? null, note });
+  const paidNote = surchargeCents > 0 ? `${note ? note + "; " : ""}incl. ${money(surchargeCents)} card processing fee` : note;
+  const { data } = await supabase.from("invoices").update({ status: "paid", paid_at: now, paid_method: method, paid_note: paidNote, stripe_payment_intent_id: providerRef && provider === "stripe" ? providerRef : inv.stripe_payment_intent_id, updated_at: now }).eq("id", inv.id).select("*").maybeSingle();
+  await supabase.from("payments").insert({ account_id: inv.account_id, invoice_id: inv.id, amount_cents: amountCents ?? inv.total_cents, method, provider, provider_ref: providerRef, fee_cents: feeCents ?? null, note: paidNote });
   // Only the job's final invoice closes the job; an after-hours prepay invoice (job_id set, but not the job's invoice_id) leaves it open.
   if (inv.job_id) { try { await supabase.from("jobs").update({ status: "paid", updated_at: now }).eq("id", inv.job_id).eq("invoice_id", inv.id); } catch { /* jobs may not exist yet */ } }
   // After-hours prepay cleared (any method): page the on-call tech with the job, tell the customer. Card payments also text whoever sent the invoice.
@@ -163,7 +166,7 @@ async function markPaid(inv: any, method: string, provider: string, providerRef:
       if (inv.customer_phone && acct.settings?.sms?.enabled === true) await sendText(inv.account_id, inv.customer_phone, `${acct.name}: paid, thank you. ${amt} on invoice ${inv.number} (${how}). Your receipt: ${link}`);
       if (inv.customer_email) {
         const lines = (inv.lines || []).map((l: any) => `  ${l.desc}${l.qty > 1 ? ` x${l.qty}` : ""}  ${money(l.cents)}`).join("\n");
-        await sendEmail(inv.customer_email, `${acct.name} via Donna <donna@sidekicklogistics.com>`, `Receipt from ${acct.name} - ${amt} - Invoice ${inv.number}`, `Hi${inv.customer_name ? " " + inv.customer_name : ""},\n\nThank you. We received ${amt} (${how}) on invoice ${inv.number}.\n\n${lines}\n\nTotal: ${money(inv.total_cents)}\nPaid: ${amt}\n\nYour receipt: ${link}\n\n${acct.name}`);
+        await sendEmail(inv.customer_email, `${acct.name} via Donna <donna@sidekicklogistics.com>`, `Receipt from ${acct.name} - ${amt} - Invoice ${inv.number}`, `Hi${inv.customer_name ? " " + inv.customer_name : ""},\n\nThank you. We received ${amt} (${how}) on invoice ${inv.number}.\n\n${lines}${surchargeCents > 0 ? `\n  Card processing fee  ${money(surchargeCents)}` : ""}\n\nTotal: ${money(inv.total_cents + surchargeCents)}\nPaid: ${amt}\n\nYour receipt: ${link}\n\n${acct.name}`);
       }
     }
   } catch { /* non-fatal */ }
@@ -201,7 +204,7 @@ Deno.serve(async (req: Request) => {
         const cs = ev.data.object; const invoiceId = cs?.metadata?.invoice_id;
         if (invoiceId && cs.payment_status === "paid") {
           const { data: inv } = await supabase.from("invoices").select("*").eq("id", invoiceId).maybeSingle();
-          if (inv) await markPaid(inv, "card", "stripe", String(cs.payment_intent || cs.id), null, cs.amount_total ?? inv.total_cents);
+          if (inv) await markPaid(inv, "card", "stripe", String(cs.payment_intent || cs.id), null, cs.amount_total ?? inv.total_cents, undefined, Number(cs?.metadata?.card_fee_cents || 0));
         }
       } else if (ev.type === "account.updated") {
         const a = ev.data.object; const { data: pa } = await supabase.from("payment_accounts").select("*").eq("stripe_account_id", a.id).maybeSingle();
@@ -228,17 +231,19 @@ Deno.serve(async (req: Request) => {
     const discount = (inv.lines || []).filter((l: any) => l.kind === "discount").reduce((s: number, l: any) => s + Math.abs(l.cents), 0);
     const tax = inv.tax_cents || 0;
     // Stripe line items can't be negative: when there's a discount, collapse to one line for the total.
+    const fee = cardFee(acct, inv.total_cents);
     const items = (discount > 0 || lines.length === 0)
       ? [{ quantity: 1, price_data: { currency: inv.currency, unit_amount: inv.total_cents, product_data: { name: `Invoice ${inv.number}` } } }]
       : [...lines.map((l: any) => ({ quantity: 1, price_data: { currency: inv.currency, unit_amount: l.cents, product_data: { name: l.desc.slice(0, 120) } } })),
          ...(tax > 0 ? [{ quantity: 1, price_data: { currency: inv.currency, unit_amount: tax, product_data: { name: "Sales tax" } } }] : [])];
+    if (fee.cents > 0) items.push({ quantity: 1, price_data: { currency: inv.currency, unit_amount: fee.cents, product_data: { name: `Card processing fee (${fee.pct}%)` } } });
     try {
       const session: any = await stripe.checkout.sessions.create({
         mode: "payment", line_items: items,
         success_url: `${payUrl(token)}?paid=1`, cancel_url: payUrl(token),
         customer_email: inv.customer_email || undefined,
-        metadata: { invoice_id: inv.id, account_id: inv.account_id, number: inv.number },
-        payment_intent_data: { description: `${acct.name} · Invoice ${inv.number}`, metadata: { invoice_id: inv.id } },
+        metadata: { invoice_id: inv.id, account_id: inv.account_id, number: inv.number, card_fee_cents: String(fee.cents) },
+        payment_intent_data: { description: `${acct.name} · Invoice ${inv.number}${fee.cents ? " (incl. card fee)" : ""}`, metadata: { invoice_id: inv.id, card_fee_cents: String(fee.cents) } },
       }, { stripeAccount: pa.stripe_account_id });
       await supabase.from("invoices").update({ stripe_checkout_session_id: session.id, updated_at: new Date().toISOString() }).eq("id", inv.id);
       return json({ ok: true, url: session.url });
@@ -330,8 +335,9 @@ Deno.serve(async (req: Request) => {
     const to = String(body.to || inv.customer_phone || "").trim(); const email = String(body.email || inv.customer_email || "").trim();
     const pa = await loadPA(acct.id); const online = acct.settings?.payments?.enabled === true && pa?.charges_enabled === true;
     const link = payUrl(inv.pay_token); const total = money(inv.total_cents);
+    const sfee = cardFee(acct, inv.total_cents);
     const text = online
-      ? `${business}: your invoice ${inv.number} for ${total} is ready. Tap to view and pay: ${link}`
+      ? `${business}: your invoice ${inv.number} for ${total} is ready. Tap to view and pay: ${link}${sfee.cents ? ` (${sfee.pct}% card fee if paying by card; cash or check is ${total})` : ""}`
       : `${business}: your invoice ${inv.number} for ${total} is ready. View it here: ${link}`;
     let sentSms = false, sentEmail = false;
     if (to && acct.settings?.sms?.enabled === true) sentSms = await sendText(acct.id, to, text);
@@ -389,8 +395,9 @@ Deno.serve(async (req: Request) => {
     const { data: job } = inv.job_id ? await supabase.from("jobs").select("card, customer_name").eq("id", inv.job_id).maybeSingle() : { data: null as any };
     const card = (job as any)?.card; if (!card?.payment_method) return json({ ok: false, error: "no_card", message: "No card on file for this job. Send the pay link instead." });
     try {
-      const pi: any = await stripe.paymentIntents.create({ amount: inv.total_cents, currency: inv.currency || "usd", customer: card.customer || undefined, payment_method: card.payment_method, off_session: true, confirm: true, description: `${business} \u00b7 Invoice ${inv.number}`, metadata: { invoice_id: inv.id, account_id: acct.id, number: inv.number } }, { stripeAccount: pa.stripe_account_id });
-      if (pi.status === "succeeded") { const upd = await markPaid(inv, "card", "stripe", pi.id, `card on file${card.last4 ? " \u2022\u2022\u2022\u2022 " + card.last4 : ""}`, pi.amount_received ?? inv.total_cents); return json({ ok: true, invoice: upd, charged: true, last4: card.last4 || null }); }
+      const fee = cardFee(acct, inv.total_cents);
+      const pi: any = await stripe.paymentIntents.create({ amount: inv.total_cents + fee.cents, currency: inv.currency || "usd", customer: card.customer || undefined, payment_method: card.payment_method, off_session: true, confirm: true, description: `${business} \u00b7 Invoice ${inv.number}${fee.cents ? " (incl. card fee)" : ""}`, metadata: { invoice_id: inv.id, account_id: acct.id, number: inv.number, card_fee_cents: String(fee.cents) } }, { stripeAccount: pa.stripe_account_id });
+      if (pi.status === "succeeded") { const upd = await markPaid(inv, "card", "stripe", pi.id, `card on file${card.last4 ? " \u2022\u2022\u2022\u2022 " + card.last4 : ""}`, pi.amount_received ?? (inv.total_cents + fee.cents), undefined, fee.cents); return json({ ok: true, invoice: upd, charged: true, last4: card.last4 || null, card_fee_cents: fee.cents, total_charged: inv.total_cents + fee.cents }); }
       return json({ ok: false, error: "not_succeeded", status: pi.status, message: "The bank wants the customer to confirm. Send them the pay link." });
     } catch (e: any) {
       const code = e?.code || e?.raw?.code || ""; console.error("charge card", code, e?.message);

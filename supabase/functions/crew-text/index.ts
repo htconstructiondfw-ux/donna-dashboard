@@ -1,7 +1,7 @@
 import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 
-// Donna crew-text (v10): the contractor runs his day by texting Donna's number from his own phone.
+// Donna crew-text (v11): the contractor runs his day by texting Donna's number from his own phone.
 // Called by msg-inbound when the sender is a user (owner or tech) on the account. Returns { handled, reply }.
 // Commands (forgiving, case-insensitive):
 //   omw / on my way [20]      -> customer gets "on the way, about 20 min"
@@ -178,7 +178,7 @@ Deno.serve(async (req: Request) => {
       if (/^(charge|charge it|run it|run the card|charge the card|charge card)$/.test(low)) {
         const { customer, total_cents } = st;
         const r = await call("payments", { action: "invoice_charge_card", user_id: userId, id: st.invoice_id });
-        if (r?.ok) { await clear(); return reply(`Charged ${money(total_cents)} to ${customer || "the customer"}'s card${r.last4 ? " ending " + r.last4 : ""}. Receipt sent. Nice work.`); }
+        if (r?.ok) { await clear(); return reply(`Charged ${money(r.total_charged || total_cents)} to ${customer || "the customer"}'s card${r.last4 ? " ending " + r.last4 : ""}${r.card_fee_cents ? ` (includes the ${money(r.card_fee_cents)} card fee)` : ""}. Receipt sent. Nice work.`); }
         return reply(`${r?.message || "Couldn't charge the card."}\nReply SEND to text them the pay link, LATER to hold it, or PAID.`);
       }
       if (/^(send|send it|yes|y|ok|go)$/.test(low)) {

@@ -1,7 +1,7 @@
 import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 
-// Donna — take a message (Retell custom function) v23
+// Donna — take a message (Retell custom function) v24
 // Saves caller name, callback number, message, language, urgency, and who the
 // message is for. When the message is for a named person, it resolves that person
 // FIRST against the staff list (so a stylist gets their own message), then the Pro
@@ -14,6 +14,8 @@ import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 // after-hours fee first (prepay on; the on-call tech is paged when it's paid, by `payments`),
 // or (b) pages the on-call tech by text right away.
 
+// v23: paging goes through the on-call ladder (oncall.page) so it escalates when nobody answers.
+// v24: a second urgent message from the same caller within 15 min updates the open emergency job (address, notes) instead of paging again.
 const supabase = createClient(
   Deno.env.get("SUPABASE_URL")!,
   Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!,
@@ -205,6 +207,19 @@ Deno.serve(async (req: Request) => {
       const pagePhone = String(ctr.after_hours_page_phone || (owner as any)?.phone || "").trim();
       const addrMatch = messageText.match(/(\d{2,6}\s+[^,.;]{3,60}(?:,\s*[^,.;]{2,40}){0,2})/);
       const address = addressArg || (addrMatch ? addrMatch[1].trim() : null);
+      // Same caller, same call or within 15 minutes, already has an open emergency job: add the details to it (address, notes),
+      // tell the tech, and do NOT open a second job or page the ladder again.
+      if (callbackNumber) {
+        const { data: open } = await supabase.from("jobs").select("id, address, notes, assigned_user_id").eq("account_id", asst.account_id).eq("kind", "emergency").eq("customer_phone", callbackNumber).gte("created_at", new Date(Date.now() - 15 * 60000).toISOString()).not("status", "in", "(cancelled,paid,done)").order("created_at", { ascending: false }).limit(1).maybeSingle();
+        if (open) {
+          const upd: Record<string, unknown> = { notes: ((open as any).notes ? (open as any).notes + "\n" : "") + messageText, updated_at: new Date().toISOString() };
+          if (address && !(open as any).address) upd.address = address;
+          await supabase.from("jobs").update(upd).eq("id", (open as any).id);
+          const { data: pg } = await supabase.from("pages").select("to_phone").eq("job_id", (open as any).id).order("sent_at", { ascending: false }).limit(1).maybeSingle();
+          if ((pg as any)?.to_phone) await sendText(asst.account_id, (pg as any).to_phone, `${acct.name} update on ${who}: ${address && !(open as any).address ? "address " + address + ". " : ""}${messageText.slice(0, 240)}`);
+          return json({ result: `Got it, I've added that for the technician${address && !(open as any).address ? " along with the address" : ""}. They'll have it when they call you back. Anything else?` });
+        }
+      }
       const { data: job } = await supabase.from("jobs").insert({ account_id: asst.account_id, kind: "emergency", status: "scheduled", priority: "emergency", title: "After-hours call", customer_name: callerName || null, customer_phone: callbackNumber || null, address, notes: messageText, assigned_user_id: (owner as any)?.id || null, scheduled_at: new Date().toISOString() }).select("id").maybeSingle();
       const fee = Number(ctr.after_hours_fee_cents || 0);
       // Prepay only works when the shop can actually take cards (their Stripe is live); otherwise page right away and the fee goes on the invoice.
@@ -225,7 +240,7 @@ Deno.serve(async (req: Request) => {
       if (pagePhone) {
         // On-call ladder: first rung now, next rung if nobody acknowledges within the shop's window (oncall.sweep).
         await callFn("oncall", { action: "page", account_id: asst.account_id, job_id: job?.id || null, message: `${who}${callbackNumber ? " " + callbackNumber : ""}${address ? " at " + address : ""}. ${messageText.slice(0, 300)}${fee > 0 ? ` (after-hours fee ${money(fee)} goes on the invoice)` : ""}. Call them back now.` });
-        return json({ result: `I've paged the on-call technician with your address and the problem. Expect a call back within about fifteen minutes${fee > 0 ? `; the after-hours fee is ${money(fee)} on top of the regular price` : (Number(ctr.after_hours_multiplier || 0) > 1 ? `; after-hours work is billed at ${ctr.after_hours_multiplier} times the regular price` : "")}. Is there anything else you'd like them to know?` });
+        return json({ result: `I've paged the on-call technician with ${address ? "your address and " : ""}the problem.${address ? "" : " What's the address where you need them?"} Expect a call back within about fifteen minutes${fee > 0 ? `; the after-hours fee is ${money(fee)} on top of the regular price` : (Number(ctr.after_hours_multiplier || 0) > 1 ? `; after-hours work is billed at ${ctr.after_hours_multiplier} times the regular price` : "")}. Is there anything else you'd like them to know?` });
       }
     } catch (e) { console.error("after-hours branch", String(e)); }
   }

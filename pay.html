@@ -79,9 +79,9 @@ function render(inv){
         <tr class="total"><td>Total</td><td class="amt">${money(inv.total_cents)}</td></tr>
       </table>
       ${inv.notes?`<div class="notes">${esc(inv.notes)}</div>`:""}
-      ${paid ? `<div class="done">Paid${inv.paid_method&&inv.paid_method!=="card"?" ("+esc(inv.paid_method)+")":""} on ${new Date(inv.paid_at).toLocaleDateString("en-US",{month:"long",day:"numeric",year:"numeric"})}. Thank you!</div>`
+      ${paid ? `<div class="done">Paid${inv.paid_method&&inv.paid_method!=="card"?" ("+esc(inv.paid_method)+")":""}${inv.paid_note&&/card processing fee/.test(inv.paid_note)?` · ${esc(inv.paid_note.replace(/^.*incl\. /,"incl. "))}`:""} on ${new Date(inv.paid_at).toLocaleDateString("en-US",{month:"long",day:"numeric",year:"numeric"})}. Thank you!</div>`
         : isVoid ? `<div class="err">This invoice was cancelled by ${esc(b.name||"the business")}.</div>`
-        : inv.can_pay_online ? `<button class="pay" id="payBtn">Pay ${money(inv.total_cents)}</button><div class="alt">Secure card payment through Stripe. Your payment goes directly to ${esc(b.name||"the business")}.</div><div id="payErr"></div>`
+        : inv.can_pay_online ? `${inv.card_fee_cents>0?`<div class="alt" style="margin-top:14px;text-align:left"><b>Cash or check:</b> ${money(inv.total_cents)} &nbsp;·&nbsp; <b>By card:</b> ${money(inv.total_cents+inv.card_fee_cents)} <span style="color:#999">(includes a ${inv.card_fee_pct}% card processing fee of ${money(inv.card_fee_cents)})</span></div>`:""}<button class="pay" id="payBtn">Pay ${money(inv.total_cents+(inv.card_fee_cents||0))} by card</button><div class="alt">Secure card payment through Stripe. Your payment goes directly to ${esc(b.name||"the business")}.</div><div id="payErr"></div>`
         : (justPaid ? `<div class="alt">Confirming your payment…</div>` : `<div class="alt">Pay ${esc(b.name||"the business")} directly${b.phone?` · ${esc(b.phone)}`:""}.</div>`)}
     </div>
     <div class="foot">Sent by ${esc(b.name||"the business")} with Donna.<br>Payments are processed by ${esc(b.name||"the business")}'s own Stripe account; Donna never holds your money.</div>`;
@@ -94,7 +94,7 @@ function render(inv){
       if(j.ok && j.url){ location.href = j.url; return; }
       document.getElementById("payErr").innerHTML = `<div class="err">${j.error==="already_paid"?"This invoice is already paid.":"Online payment isn't available right now. Please pay the business directly."}</div>`;
     }catch(e){ document.getElementById("payErr").innerHTML = '<div class="err">Couldn\'t open checkout. Please try again.</div>'; }
-    btn.disabled = false; btn.textContent = `Pay ${money(inv.total_cents)}`;
+    btn.disabled = false; btn.textContent = `Pay ${money(inv.total_cents+(inv.card_fee_cents||0))} by card`;
   };
 }
 load();

@@ -1,7 +1,7 @@
 import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 
-// Donna — Retell inbound-call webhook (emits greeting, routing, memory, voice).
+// Donna — Retell inbound-call webhook (emits greeting, routing, memory, voice). v45: trip_fee + after_hours vars (prepay only when cards are live). v47: card processing fee note in trip_fee.
 
 const supabase = createClient(
   Deno.env.get("SUPABASE_URL")!,
@@ -203,6 +203,9 @@ Deno.serve(async (req: Request) => {
   if (industry === "contractor") {
     const tf = Number(ctr.trip_fee_cents || 0);
     tripFeeText = tf > 0 ? `${fmt$(tf)} service-call / trip fee${ctr.trip_fee_waived_if_work === false ? ", charged even if the work is done" : ", waived if the customer goes ahead with the work"}` : "no trip fee";
+    // Card processing fee (settings.payments.card_fee_pct): only if the caller asks about paying by card; cash and check never pay it.
+    const cardPct = Number(settings?.payments?.card_fee_pct || 0);
+    if (cardPct > 0) tripFeeText += `. If asked about paying by card: a ${cardPct}% card processing fee is added when paying by card; cash or check has no fee. Don't bring it up unless they ask about payment.`;
   }
   let afterHoursText = "n/a";
   if (industry === "contractor") {
