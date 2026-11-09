@@ -10,6 +10,7 @@ import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 //   reimport {numbers[]}        -> delete + re-import each number in Retell with the new credential (seconds of gap each)
 //   test_outbound {from,to}     -> place a real call from a number (uses the credential); call_status {call_id} to check
 //   twilio_calls {from?,to?,minutes?} -> Twilio's call log for the trunk (proof the credential authenticated)
+//   rotate_auto                 -> generate+store a new credential (app_secrets), reimport all numbers, drop the old one; nothing echoed
 //   remove_credential {username}-> delete that username from the Twilio list (refuses the current secret username)
 // Secrets are never echoed back.
 
@@ -17,8 +18,19 @@ const supabase = createClient(Deno.env.get("SUPABASE_URL")!, Deno.env.get("SUPAB
 const RETELL_API_KEY = Deno.env.get("RETELL_API_KEY") || "";
 const TWILIO_SID = Deno.env.get("TWILIO_ACCOUNT_SID") || "";
 const TWILIO_TOKEN = Deno.env.get("TWILIO_AUTH_TOKEN") || "";
-const SIP_USERNAME = Deno.env.get("TWILIO_SIP_USERNAME") || "";
-const SIP_PASSWORD = Deno.env.get("TWILIO_SIP_PASSWORD") || "";
+// v6: the live SIP credential lives in app_secrets (service-role only; same place as the OAuth/Stripe secrets) so a
+// rotation can generate + store a password without a human ever seeing it. Edge secrets remain a fallback.
+let SIP_USERNAME = Deno.env.get("TWILIO_SIP_USERNAME") || "";
+let SIP_PASSWORD = Deno.env.get("TWILIO_SIP_PASSWORD") || "";
+async function loadSip() {
+  const { data } = await supabase.from("app_secrets").select("key,value").in("key", ["twilio_sip_username", "twilio_sip_password"]);
+  const m: Record<string, string> = Object.fromEntries((data || []).map((r: any) => [r.key, String(r.value || "")]));
+  if (m.twilio_sip_username && m.twilio_sip_password) { SIP_USERNAME = m.twilio_sip_username; SIP_PASSWORD = m.twilio_sip_password; }
+}
+function randomPassword(len = 32): string {
+  const alphabet = "ABCDEFGHJKLMNPQRSTUVWXYZabcdefghjkmnpqrstuvwxyz23456789"; const bytes = new Uint8Array(len); crypto.getRandomValues(bytes);
+  return Array.from(bytes, (b) => alphabet[b % alphabet.length]).join("");
+}
 const CRED_LIST_SID = "CL03a135cfb5f1f04e3ee60ee644c12261";
 const TERMINATION_URI = "sidekick-donna.pstn.twilio.com";
 const json = (o: unknown, s = 200) => new Response(JSON.stringify(o), { status: s, headers: { "Content-Type": "application/json" } });
@@ -43,6 +55,42 @@ async function retellNumber(n: string): Promise<any> {
   return { ok: r.ok, status: r.status, number: n, nickname: j?.nickname ?? null, type: j?.phone_number_type ?? null, sip_outbound_trunk_config: masked, legacy_username: j?.sip_trunk_auth_username ?? null, error: r.ok ? undefined : j };
 }
 
+async function reimportNumbers(nums: string[]) {
+  const results: any[] = [];
+  for (const n of nums) {
+    const g = await fetch(`https://api.retellai.com/get-phone-number/${encodeURIComponent(n)}`, { headers: rh() });
+    const cur: any = await g.json().catch(() => ({}));
+    if (!g.ok) { results.push({ number: n, ok: false, step: "get", error: cur }); continue; }
+    const inboundAgents = Array.isArray(cur.inbound_agents) && cur.inbound_agents.length ? cur.inbound_agents : [{ agent_id: Deno.env.get("RETELL_AGENT_ID") || "agent_7e8792e07df78b6e366decb52a", weight: 1 }];
+    const payload: any = { phone_number: n, termination_uri: TERMINATION_URI, sip_trunk_auth_username: SIP_USERNAME, sip_trunk_auth_password: SIP_PASSWORD, inbound_agents: inboundAgents, inbound_webhook_url: cur.inbound_webhook_url || `${Deno.env.get("SUPABASE_URL")}/functions/v1/retell-inbound`, nickname: cur.nickname || "Donna" };
+    if (Array.isArray(cur.outbound_agents) && cur.outbound_agents.length) payload.outbound_agents = cur.outbound_agents;
+    const d = await fetch(`https://api.retellai.com/delete-phone-number/${encodeURIComponent(n)}`, { method: "DELETE", headers: rh() });
+    if (!d.ok && d.status !== 404) { results.push({ number: n, ok: false, step: "delete", status: d.status, error: await d.text() }); continue; }
+    let imp: Response | null = null; let impBody: any = null;
+    for (let attempt = 0; attempt < 3; attempt++) {
+      imp = await fetch("https://api.retellai.com/import-phone-number", { method: "POST", headers: rh(), body: JSON.stringify(payload) });
+      impBody = await imp.json().catch(() => ({}));
+      if (imp.ok) break;
+      await new Promise((r) => setTimeout(r, 1500));
+    }
+    if (!imp || !imp.ok) { results.push({ number: n, ok: false, step: "import", status: imp?.status, error: impBody, payload_sans_secret: { ...payload, sip_trunk_auth_password: "•••" } }); continue; }
+    const after = await retellNumber(n);
+    results.push({ number: n, ok: after.ok && after.sip_outbound_trunk_config?.auth_username === SIP_USERNAME, username_now: after.sip_outbound_trunk_config?.auth_username ?? null, inbound_agents: inboundAgents.length, webhook: payload.inbound_webhook_url });
+  }
+  return results;
+}
+async function addCredential(username: string, password: string) {
+  const r = await fetch(`${credUrl}.json`, { method: "POST", headers: { Authorization: twAuth(), "Content-Type": "application/x-www-form-urlencoded" }, body: new URLSearchParams({ Username: username, Password: password }).toString() });
+  const j: any = await r.json().catch(() => ({}));
+  return { ok: r.ok, status: r.status, sid: j?.sid, error: r.ok ? undefined : (j?.message || j) };
+}
+async function removeCredential(username: string) {
+  const creds = await listCreds(); const c = creds.find((x) => x.username === username);
+  if (!c) return { ok: true, already_gone: true };
+  const r = await fetch(`${credUrl}/${c.sid}.json`, { method: "DELETE", headers: { Authorization: twAuth() } });
+  return { ok: r.ok || r.status === 204, status: r.status, removed: username };
+}
+
 Deno.serve(async (req: Request) => {
   if (req.method !== "POST") return json({ ok: false, reason: "method" }, 405);
   const { data: secretRow } = await supabase.from("app_secrets").select("value").eq("key", "cron_secret").maybeSingle();
@@ -51,6 +99,7 @@ Deno.serve(async (req: Request) => {
   if (!TWILIO_SID || !TWILIO_TOKEN || !RETELL_API_KEY) return json({ ok: false, error: "twilio/retell not configured" });
   let body: any = {}; try { body = await req.json(); } catch { /* */ }
   const action = String(body.action || "status");
+  await loadSip();
 
   if (action === "status") {
     const creds = await listCreds();
@@ -92,28 +141,31 @@ Deno.serve(async (req: Request) => {
     if (!creds.some((c) => c.username === SIP_USERNAME)) return json({ ok: false, error: `Twilio credential list has no "${SIP_USERNAME}" yet; run add_credential first.` });
     const nums: string[] = Array.isArray(body.numbers) && body.numbers.length ? body.numbers : [];
     if (!nums.length) return json({ ok: false, error: "numbers[] required (explicit, on purpose)" });
-    const results: any[] = [];
-    for (const n of nums) {
-      const g = await fetch(`https://api.retellai.com/get-phone-number/${encodeURIComponent(n)}`, { headers: rh() });
-      const cur: any = await g.json().catch(() => ({}));
-      if (!g.ok) { results.push({ number: n, ok: false, step: "get", error: cur }); continue; }
-      const inboundAgents = Array.isArray(cur.inbound_agents) && cur.inbound_agents.length ? cur.inbound_agents : [{ agent_id: Deno.env.get("RETELL_AGENT_ID") || "agent_7e8792e07df78b6e366decb52a", weight: 1 }];
-      const payload: any = { phone_number: n, termination_uri: TERMINATION_URI, sip_trunk_auth_username: SIP_USERNAME, sip_trunk_auth_password: SIP_PASSWORD, inbound_agents: inboundAgents, inbound_webhook_url: cur.inbound_webhook_url || `${Deno.env.get("SUPABASE_URL")}/functions/v1/retell-inbound`, nickname: cur.nickname || "Donna" };
-      if (Array.isArray(cur.outbound_agents) && cur.outbound_agents.length) payload.outbound_agents = cur.outbound_agents;
-      const d = await fetch(`https://api.retellai.com/delete-phone-number/${encodeURIComponent(n)}`, { method: "DELETE", headers: rh() });
-      if (!d.ok && d.status !== 404) { results.push({ number: n, ok: false, step: "delete", status: d.status, error: await d.text() }); continue; }
-      let imp: Response | null = null; let impBody: any = null;
-      for (let attempt = 0; attempt < 3; attempt++) {
-        imp = await fetch("https://api.retellai.com/import-phone-number", { method: "POST", headers: rh(), body: JSON.stringify(payload) });
-        impBody = await imp.json().catch(() => ({}));
-        if (imp.ok) break;
-        await new Promise((r) => setTimeout(r, 1500));
-      }
-      if (!imp || !imp.ok) { results.push({ number: n, ok: false, step: "import", status: imp?.status, error: impBody, payload_sans_secret: { ...payload, sip_trunk_auth_password: "•••" } }); continue; }
-      const after = await retellNumber(n);
-      results.push({ number: n, ok: after.ok && after.sip_outbound_trunk_config?.auth_username === SIP_USERNAME, username_now: after.sip_outbound_trunk_config?.auth_username ?? null, inbound_agents: inboundAgents.length, webhook: payload.inbound_webhook_url });
-    }
+    const results = await reimportNumbers(nums);
     return json({ ok: results.every((x) => x.ok), results });
+  }
+  // Full hands-off rotation. Generates a fresh username+password server-side, stores it in app_secrets, adds it to the
+  // Twilio credential list, re-imports every Retell number currently on the OLD username, verifies, then removes the old
+  // credential from Twilio. The password is never returned, logged, or echoed anywhere.
+  if (action === "rotate_auto") {
+    const oldUser = SIP_USERNAME;
+    if (!oldUser) return json({ ok: false, error: "no current SIP username known (app_secrets or edge secrets)" });
+    const stamp = new Date().toISOString().slice(0, 10).replace(/-/g, "");
+    let newUser = `retelldonna-${stamp}`; if (newUser === oldUser) newUser += "b";
+    const newPass = randomPassword(32);
+    const added = await addCredential(newUser, newPass);
+    if (!added.ok) return json({ ok: false, step: "twilio_add", error: added.error });
+    // Store first, so the function (and admin-api) read the new credential from here on even if a later step fails.
+    const up1 = await supabase.from("app_secrets").upsert({ key: "twilio_sip_username", value: newUser }, { onConflict: "key" });
+    const up2 = await supabase.from("app_secrets").upsert({ key: "twilio_sip_password", value: newPass }, { onConflict: "key" });
+    if (up1.error || up2.error) return json({ ok: false, step: "store", error: up1.error?.message || up2.error?.message, note: `Twilio now has "${newUser}" but app_secrets could not be written; remove it manually or retry.` });
+    SIP_USERNAME = newUser; SIP_PASSWORD = newPass;
+    const nums = await liveNumbers(); const targets: string[] = [];
+    for (const n of nums) { const cur = await retellNumber(n); if (cur.ok && cur.sip_outbound_trunk_config?.auth_username === oldUser) targets.push(n); }
+    const results = await reimportNumbers(targets);
+    const allOk = results.every((x) => x.ok);
+    const removed = allOk ? await removeCredential(oldUser) : { ok: false, skipped: true, reason: "a re-import failed; old credential left in place" };
+    return json({ ok: allOk && removed.ok, old_username: oldUser, new_username: newUser, password_stored_in: "app_secrets.twilio_sip_password", reimported: results, old_credential: removed });
   }
   // Outbound test: a real call FROM the number (this is the path that uses the SIP credential) TO a target that answers.
   if (action === "test_outbound") {
