@@ -2,12 +2,12 @@ import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { franc } from "https://esm.sh/franc@6";
 
-// Donna — retell-call-events (v21). Retell's call_started / call_ended / call_analyzed webhook → calls row,
+// Donna — retell-call-events (v22). Retell's call_started / call_ended / call_analyzed webhook → calls row,
 // transcript, language. v20: honors Retell's `direction`; an OUTBOUND call (Donna dialing out) is attributed to the
 // account that owns the FROM number and logged as direction "outbound". Before, every call was resolved by the called
 // number and stamped "inbound", which dropped outbound calls (customer numbers never match an assistant) and, when one
-// Donna number called another, logged the outbound leg under the callee. v21: no duplicate transcript lines when
-// call_ended and call_analyzed land together.
+// Donna number called another, logged the outbound leg under the callee. v22: transcript lines are upserted against a unique
+// (call, speaker, said_at) index, so call_ended and call_analyzed landing together can no longer double them.
 
 const supabase = createClient(
   Deno.env.get("SUPABASE_URL")!,
@@ -125,7 +125,7 @@ Deno.serve(async (req: Request) => {
     if (!callRowId) return;
     const arr = Array.isArray(call.transcript_object) ? call.transcript_object : [];
     if (arr.length === 0) return;
-    await supabase.from("transcript_messages").delete().eq("call_id", callRowId);
+    // No delete: lines are unique per (call, speaker, said_at), so concurrent writers simply skip what's already there.
     const rows = arr.map((u: any, i: number) => {
       const role = u.role === "agent" ? "donna" : (u.role === "user" ? "caller" : "system");
       const off = u.words?.[0]?.start;
@@ -134,7 +134,7 @@ Deno.serve(async (req: Request) => {
         : new Date(startMs + i * 1000).toISOString();
       return { account_id: asst.account_id, call_id: callRowId, speaker: role, text: String(u.content ?? ""), said_at: said };
     }).filter((r: any) => r.text.trim().length > 0);
-    if (rows.length) await supabase.from("transcript_messages").insert(rows);
+    if (rows.length) await supabase.from("transcript_messages").upsert(rows, { onConflict: "call_id,speaker,said_at", ignoreDuplicates: true });
   }
 
   function callerText(): string {
@@ -183,10 +183,7 @@ Deno.serve(async (req: Request) => {
   } else if (event === "call_analyzed") {
     const summary = call.call_analysis?.call_summary ?? null;
     await ensureRow({ summary, recording_url: call.recording_url ?? null });
-    // call_ended already wrote the transcript; only fill in if it didn't (the two webhooks can arrive together and the
-    // delete-then-insert in writeTranscript would double every line).
-    const { count } = await supabase.from("transcript_messages").select("*", { count: "exact", head: true }).eq("call_id", callRowId || "00000000-0000-0000-0000-000000000000");
-    if (!count) await writeTranscript();
+    await writeTranscript();
     await persistLanguage();
     if (callRowId) {
       fetch("https://hingbdtmxozbjetzwibj.supabase.co/functions/v1/donna-learn", {
