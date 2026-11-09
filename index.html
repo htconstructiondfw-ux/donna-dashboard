@@ -2218,7 +2218,8 @@ async function paintPaymentsCard(forceRefresh){
   if(st) st.textContent= live?'On':(connecting?'Almost there':'Off');
   const promise=`<div style="border:1px solid var(--line);border-radius:12px;padding:12px 14px;margin:12px 0;background:var(--bg-2,#fafaf9)">
       <b style="display:block;font-size:13px;margin-bottom:3px">Your money is yours.</b>
-      <span style="font-size:12.5px;color:var(--muted);line-height:1.6">Payments run through <b>your own Stripe account</b> and land in <b>your bank</b>. Sidekick and ${esc(aName())} never hold, touch or route a dollar of it. Stripe's standard card fee applies; ${esc(aName())} adds nothing on top. Refunds, disputes and payouts are handled in your Stripe dashboard, same as any card reader.</span></div>`;
+      <span style="font-size:12.5px;color:var(--muted);line-height:1.6">Payments run through <b>your own Stripe account</b> and land in <b>your bank</b>. Sidekick and ${esc(aName())} never hold, touch or route a dollar of it. Stripe's standard card fee applies; ${esc(aName())} adds nothing on top. Refunds, disputes and payouts are handled in your Stripe dashboard, same as any card reader.</span>
+      <span style="display:block;font-size:12.5px;color:var(--muted);line-height:1.6;margin-top:8px"><b>Receipts:</b> ${esc(aName())} texts (and emails, when she has an address) the customer a receipt every time an invoice is paid, card or cash. Stripe can send its own email receipt too; to avoid customers getting two, leave <b>Stripe &rarr; Settings &rarr; Customer emails &rarr; "Successful payments"</b> turned off.</span></div>`;
   if(!d.configured){
     body.innerHTML=`<p style="font-size:13px;color:var(--muted)">Online card payments are coming soon. Until then, ${esc(aName())} still sends invoices by text and you mark them paid when the customer pays you by cash, check or your own card reader.</p>${promise}`;
     return;
