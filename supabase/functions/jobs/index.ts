@@ -1,7 +1,7 @@
 import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 
-// Donna jobs (v4): the contractor's day. A job wraps an appointment (created lazily) and carries the
+// Donna jobs (v5): the contractor's day. A job wraps an appointment (created lazily) and carries the
 // on-my-way / started / done timeline, proposed invoice lines, notes and photos.
 // Actions (user JWT, or service role + user_id from the text-command layer):
 //   today {date?}                      -> this user's jobs for the day (managers: whole company)
@@ -10,6 +10,9 @@ import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 //   start {job}                        -> in progress
 //   done {job}                         -> status done, returns proposed lines + menu for the confirm step
 //   finalize {job, lines, notes?}      -> builds the invoice (via payments), returns total + pay_url (nothing sent yet)
+//   reschedule {job, new_date, new_time} -> moves it (via donna-reschedule), texts the customer
+//   cancel {job, reason?, silent?}      -> cancels it (via donna-cancel), texts the customer
+//   photos {job}                       -> signed URLs for the job's photos (copies Twilio media into storage on first view)
 //   note {job, text}                   -> append a note
 //   text_me {text}                     -> text the signed-in user their own phone (app link, etc.)
 // Sending / marking paid stays in `payments` (invoice_send / invoice_mark_paid) so every vertical shares it.
@@ -129,12 +132,12 @@ Deno.serve(async (req: Request) => {
     const ids = (appts || []).map((a: any) => a.id);
     const { data: jobs } = ids.length ? await supabase.from("jobs").select("*").in("appointment_id", ids) : { data: [] as any[] };
     const byAppt = new Map((jobs || []).map((j: any) => [j.appointment_id, j]));
-    const out = (appts || []).map((a: any) => { const j: any = byAppt.get(a.id); return { appointment_id: a.id, job_id: j?.id || null, title: a.appointment_types?.name || a.title, price: a.appointment_types?.price || null, starts_at: a.starts_at, ends_at: a.ends_at, customer_name: a.contacts?.name || j?.customer_name || null, customer_phone: a.contacts?.phone || j?.customer_phone || null, address: a.location_address || j?.address || null, notes: a.notes, tech: a.users?.full_name || null, user_id: a.user_id, status: j?.status || (a.status === "completed" ? "done" : "scheduled"), invoice_id: j?.invoice_id || null, eta_minutes: j?.eta_minutes || null }; });
+    const out = (appts || []).map((a: any) => { const j: any = byAppt.get(a.id); return { appointment_id: a.id, job_id: j?.id || null, title: a.appointment_types?.name || a.title, price: a.appointment_types?.price || null, starts_at: a.starts_at, ends_at: a.ends_at, customer_name: a.contacts?.name || j?.customer_name || null, customer_phone: a.contacts?.phone || j?.customer_phone || null, address: a.location_address || j?.address || null, notes: a.notes, tech: a.users?.full_name || null, user_id: a.user_id, status: j?.status || (a.status === "completed" ? "done" : "scheduled"), invoice_id: j?.invoice_id || null, eta_minutes: j?.eta_minutes || null, photos: Array.isArray(j?.photos) ? j.photos.length : 0 }; });
     // Emergency / after-hours jobs opened by phone have no appointment yet; list them too (newest first, flagged).
     let qj = supabase.from("jobs").select("*").eq("account_id", acct.id).is("appointment_id", null).gte("scheduled_at", start).lt("scheduled_at", end).not("status", "in", "(cancelled,paid)").order("scheduled_at");
     if (!isAdmin(caller.role) || body.mine) qj = qj.eq("assigned_user_id", caller.userId);
     const { data: loose } = await qj;
-    for (const j of (loose || []) as any[]) out.push({ appointment_id: null, job_id: j.id, title: j.title || "After-hours call", price: null, starts_at: j.scheduled_at, ends_at: null, customer_name: j.customer_name, customer_phone: j.customer_phone, address: j.address, notes: j.notes, tech: null, user_id: j.assigned_user_id, status: j.status, invoice_id: j.invoice_id || null, eta_minutes: j.eta_minutes || null, kind: j.kind, priority: j.priority });
+    for (const j of (loose || []) as any[]) out.push({ appointment_id: null, job_id: j.id, title: j.title || "After-hours call", price: null, starts_at: j.scheduled_at, ends_at: null, customer_name: j.customer_name, customer_phone: j.customer_phone, address: j.address, notes: j.notes, tech: null, user_id: j.assigned_user_id, status: j.status, invoice_id: j.invoice_id || null, eta_minutes: j.eta_minutes || null, kind: j.kind, priority: j.priority, photos: Array.isArray(j.photos) ? j.photos.length : 0 });
     out.sort((a: any, b: any) => String(a.starts_at).localeCompare(String(b.starts_at)));
     return json({ ok: true, date: ymd, jobs: out });
   }
@@ -187,6 +190,67 @@ Deno.serve(async (req: Request) => {
     if (!j?.ok) return json({ ok: false, error: j?.error || "invoice_failed" }, 400);
     await supabase.from("jobs").update({ invoice_id: j.invoice.id, lines: j.invoice.lines, status: "done", updated_at: now }).eq("id", job.id);
     return json({ ok: true, invoice: j.invoice, total: money(j.invoice.total_cents), pay_url: j.pay_url });
+  }
+
+  // Tech moves the job: "move Maria to 3pm". Goes through donna-reschedule (checks the slot, moves the calendar event, texts the customer).
+  if (action === "reschedule") {
+    const newDate = String(body.new_date || "").trim(), newTime = String(body.new_time || "").trim();
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(newDate) || !/^\d{1,2}:\d{2}$/.test(newTime)) return json({ ok: false, error: "bad_time", message: "I need a day and a time, like 2026-11-12 15:00." }, 400);
+    if (!job.appointment_id) {
+      // Emergency / phone-opened jobs have no appointment yet; just move the job and tell the customer.
+      const { data: inst } = await supabase.rpc("donna_slot_instant", { p_date: newDate, p_time: newTime, p_tz: tz });
+      if (!inst) return json({ ok: false, error: "bad_time" }, 400);
+      const when = new Intl.DateTimeFormat("en-US", { timeZone: tz, weekday: "long", month: "long", day: "numeric", hour: "numeric", minute: "2-digit" }).format(new Date(inst as string));
+      const { data } = await supabase.from("jobs").update({ scheduled_at: new Date(inst as string).toISOString(), status: "scheduled", updated_at: now }).eq("id", job.id).select("*").maybeSingle();
+      const texted = await textCustomer(acct, job.customer_phone, `${acct.name}: your visit has been moved to ${when}. Reply here if that doesn't work.`);
+      return json({ ok: true, job: data, when_label: when, texted });
+    }
+    const r = await fetch(`${SELF}/donna-reschedule`, { method: "POST", headers: { "Content-Type": "application/json", Authorization: `Bearer ${SERVICE_ROLE}` }, body: JSON.stringify({ appointment_id: job.appointment_id, new_date: newDate, new_time: newTime, tz }) });
+    const j: any = await r.json().catch(() => ({}));
+    if (!j?.ok) return json({ ok: false, error: j?.reason || "reschedule_failed", when_label: j?.when_label || null, message: j?.reason === "slot_taken" || j?.reason === "calendar_busy" ? `${j.when_label} is already taken.` : j?.reason === "bad_time" ? "I couldn't read that time." : "Couldn't move it." });
+    const { data: a } = await supabase.from("appointments").select("starts_at").eq("id", job.appointment_id).maybeSingle();
+    const { data } = await supabase.from("jobs").update({ scheduled_at: (a as any)?.starts_at || job.scheduled_at, status: "scheduled", en_route_at: null, eta_minutes: null, updated_at: now }).eq("id", job.id).select("*").maybeSingle();
+    return json({ ok: true, job: data, when_label: j.when_label, old_label: j.old_label, texted: !!j.texted });
+  }
+
+  // Tech cancels the job (customer no-show, cancelled at the door, etc.). Frees the slot, texts the customer unless told not to.
+  if (action === "cancel") {
+    const reason = String(body.reason || "").trim().slice(0, 200);
+    if (job.appointment_id) {
+      const r = await fetch(`${SELF}/donna-cancel`, { method: "POST", headers: { "Content-Type": "application/json", Authorization: `Bearer ${SERVICE_ROLE}` }, body: JSON.stringify({ appointment_id: job.appointment_id, silent: body.silent === true }) });
+      const j: any = await r.json().catch(() => ({})); if (!j?.ok) return json({ ok: false, error: j?.reason || "cancel_failed" });
+    }
+    const notes = (job.notes ? job.notes + "\n" : "") + `[cancelled by tech${reason ? ": " + reason : ""}]`;
+    const { data } = await supabase.from("jobs").update({ status: "cancelled", notes, updated_at: now }).eq("id", job.id).select("*").maybeSingle();
+    const texted = body.silent === true ? false : await textCustomer(acct, job.customer_phone, `${acct.name}: your ${String(job.title || "visit").toLowerCase()} has been cancelled${reason && body.tell_reason ? ` (${reason})` : ""}. Call or text us any time to rebook.`);
+    return json({ ok: true, job: data, texted });
+  }
+
+  // Photos: techs text them in (Twilio media needs auth to view). First view copies the file into private storage, then
+  // everyone gets short-lived signed URLs. Returns all photos for the job.
+  if (action === "photos") {
+    const photos: any[] = Array.isArray(job.photos) ? [...job.photos] : [];
+    const SID = Deno.env.get("TWILIO_ACCOUNT_SID") || "", TOK = Deno.env.get("TWILIO_AUTH_TOKEN") || "";
+    let changed = false;
+    for (let i = 0; i < photos.length; i++) {
+      const ph = photos[i]; if (ph.path || !ph.url || !SID) continue;
+      try {
+        const r = await fetch(ph.url, { headers: { Authorization: "Basic " + btoa(`${SID}:${TOK}`) }, redirect: "follow" });
+        if (!r.ok) continue;
+        const ct = r.headers.get("content-type") || "image/jpeg"; const ext = ct.includes("png") ? "png" : ct.includes("gif") ? "gif" : ct.includes("webp") ? "webp" : "jpg";
+        const path = `${acct.id}/${job.id}/${Date.now()}-${i}.${ext}`;
+        const buf = new Uint8Array(await r.arrayBuffer());
+        const { error } = await supabase.storage.from("job-photos").upload(path, buf, { contentType: ct, upsert: true });
+        if (!error) { photos[i] = { ...ph, path, content_type: ct }; changed = true; }
+      } catch { /* leave it; try again next view */ }
+    }
+    if (changed) await supabase.from("jobs").update({ photos, updated_at: now }).eq("id", job.id);
+    const out: any[] = [];
+    for (const ph of photos) {
+      if (ph.path) { const { data: su } = await supabase.storage.from("job-photos").createSignedUrl(ph.path, 3600); out.push({ url: su?.signedUrl || null, at: ph.at, by: ph.by, caption: ph.caption || null }); }
+      else out.push({ url: null, at: ph.at, by: ph.by, caption: ph.caption || null, pending: true });
+    }
+    return json({ ok: true, photos: out });
   }
 
   if (action === "note") {

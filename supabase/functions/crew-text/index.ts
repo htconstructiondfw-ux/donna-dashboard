@@ -1,7 +1,7 @@
 import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 
-// Donna crew-text (v7): the contractor runs his day by texting Donna's number from his own phone.
+// Donna crew-text (v9): the contractor runs his day by texting Donna's number from his own phone.
 // Called by msg-inbound when the sender is a user (owner or tech) on the account. Returns { handled, reply }.
 // Commands (forgiving, case-insensitive):
 //   omw / on my way [20]      -> customer gets "on the way, about 20 min"
@@ -40,7 +40,13 @@ function pickCurrent(jobs: any[]): any | null {
 }
 function linesSummary(lines: any[]) { return lines.map((l) => `${l.desc}${l.qty > 1 ? ` x${l.qty}` : ""}: ${l.cents === 0 ? "no charge" : money(l.cents)}`).join("\n"); }
 function total(lines: any[]) { return lines.reduce((s, l) => s + (Number(l.cents) || 0), 0); }
+function quotePrompt(st: any) {
+  const menu = (st.menu || []).slice(0, 6);
+  const tot = st.lines.filter((l: any) => l.kind !== "optional").reduce((a: number, l: any) => a + (Number(l.cents) || 0), 0);
+  return `Estimate so far:\n${st.lines.map((l: any) => `${l.kind === "optional" ? "(optional) " : ""}${l.desc}: ${money(l.cents)}`).join("\n") || "(nothing yet)"}\nTotal ${money(tot)}.${menu.length ? `\nFrom your price list, reply a number:\n${menu.map((x: any, i: number) => `${i + 1}. ${x.name}${x.cents != null ? " " + money(x.cents) : ""}`).join("\n")}` : ""}\nOr "add <what> <price>", "optional <what> <price>", "price <amount>", "discount <amount>".\nReply OK to send it.`;
+}
 function addonPrompt(st: any) {
+  if (st.step === "quote") return quotePrompt(st);
   const menu = (st.menu || []).slice(0, 6);
   const m = menu.length ? `\nAdd-ons? Reply a number:\n${menu.map((x: any, i: number) => `${i + 1}. ${x.name}${x.cents != null ? " " + money(x.cents) : ""}`).join("\n")}\nor "add <what> <price>" (add filter 45).` : `\nAnything extra? Reply "add <what> <price>" (add filter 45).`;
   return `${linesSummary(st.lines)}\nTotal ${money(total(st.lines))}.${m}\nReply OK when it's right.`;
@@ -51,19 +57,20 @@ function addonPrompt(st: any) {
 // something needed is missing (which job, how many minutes, what price). The last few turns are kept so answers
 // to those questions land in context.
 const ANTHROPIC_KEY = Deno.env.get("ANTHROPIC_API_KEY") || "";
-const CMD_RE = /^(omw|on my way|otw|here|arrived|done|finished|finish|complete|completed|all done|wrapped up|wrapping up|bill it|invoice|late|running late|today|next|note|notes|help|\?|commands|menu|ok|okay|yes|no|send|later|hold|paid|got paid|they paid|cash|check|card|venmo|zelle|add|remove|discount|price|trip|cancel|nevermind|never mind|stop|\d+)\b/;
+const CMD_RE = /^(omw|on my way|otw|here|arrived|done|finished|finish|complete|completed|all done|wrapped up|wrapping up|bill it|invoice|late|running late|today|next|note|notes|help|\?|commands|menu|ok|okay|yes|no|send|later|hold|paid|got paid|they paid|cash|check|card|venmo|zelle|add|remove|discount|price|trip|cancel|nevermind|never mind|stop|move|reschedule|ack|got it|on it|taking it|quote|estimate|bid|schedule|optional|\d+)\b/;
 async function interpret(text: string, jobs: any[], acct: any, tz: string, chat: any[], flow: string): Promise<{ command?: string; answer?: string; ask?: string } | null> {
   if (!ANTHROPIC_KEY) return null;
   const now = new Intl.DateTimeFormat("en-US", { timeZone: tz, weekday: "short", hour: "numeric", minute: "2-digit" }).format(new Date());
   const fmt = (iso: string) => { try { return new Intl.DateTimeFormat("en-US", { timeZone: tz, hour: "numeric", minute: "2-digit" }).format(new Date(iso)); } catch { return ""; } };
   const list = jobs.map((j: any, i: number) => `#${i + 1} ${fmt(j.starts_at)} ${j.title} — ${j.customer_name || "no name"}${j.address ? ", " + j.address : ""} [${j.status}]${j.kind === "emergency" ? " (after-hours call)" : ""}`).join("\n") || "(nothing scheduled today)";
   const system = `You are Donna, the dispatcher/assistant for a small trade business, texting with one of its technicians. Reply with JSON only, one of:
-{"command": "..."}  when the tech clearly wants you to DO something. Allowed commands (exact strings, fill the blanks): "omw <minutes>", "here", "done", "late <minutes>", "today", "next", "note <text>", "help", "send", "later", "paid cash", "paid check", "paid card", "add <what> <price>", "remove <what>", "discount <amount>", "price <amount>", "trip on", "trip off", "ok", "cancel". Commands act on the current job (in progress, or the next one up). To aim at a different job from the list, append " #<n>" (e.g. "omw 10 #2").
+{"command": "..."}  when the tech clearly wants you to DO something. Allowed commands (exact strings, fill the blanks): "omw <minutes>", "here", "done", "late <minutes>", "today", "next", "note <text>", "help", "send", "later", "paid cash", "paid check", "paid card", "add <what> <price>", "remove <what>", "discount <amount>", "price <amount>", "trip on", "trip off", "ok", "cancel", "move <YYYY-MM-DD> <HH:MM>" (24h; moves the job to a new day/time), "cancel job" (cancels the job itself and tells the customer), "ack" (take the after-hours call you were paged for), "quote" (start an estimate for the current job; the tech supplies all prices), "optional <what> <price>" (an optional line while building an estimate), "schedule <EST-number> <YYYY-MM-DD> <HH:MM>" (book an approved estimate). Commands act on the current job (in progress, or the next one up). To aim at a different job from the list, append " #<n>" (e.g. "omw 10 #2").
 {"answer": "..."}  (1-2 short friendly sentences, no markdown) when they ask a question you can answer from the schedule or the conversation: what's next, when, where, who, how many left, what's on the invoice so far.
 {"ask": "..."}  ONE short question when they want an action but something needed is missing or ambiguous: which job (name the choices briefly), how many minutes, what price, what to add. Don't ask when a sensible default exists (no minutes given → "omw 0" is fine; "done" needs nothing).
 Never invent jobs, prices, times or customers. Times are already in the shop's local time zone. If it's small talk or off-topic, give a one-line friendly answer and say what you can help with.`;
   const hist = (chat || []).slice(-8).map((m: any) => `${m.r === "t" ? "Tech" : "Donna"}: ${m.t}`).join("\n");
-  const user = `Business: ${acct.name}\nNow: ${now}\nToday's jobs for this tech:\n${list}\n${flow ? `\nRight now: ${flow}\n` : ""}${hist ? `\nRecent conversation:\n${hist}\n` : ""}\nTech just texted: "${text}"`;
+  const today = new Intl.DateTimeFormat("en-CA", { timeZone: tz }).format(new Date());
+  const user = `Business: ${acct.name}\nNow: ${now} (today is ${today}; "tomorrow" = the next calendar day)\nToday's jobs for this tech:\n${list}\n${flow ? `\nRight now: ${flow}\n` : ""}${hist ? `\nRecent conversation:\n${hist}\n` : ""}\nTech just texted: "${text}"`;
   try {
     const r = await fetch("https://api.anthropic.com/v1/messages", { method: "POST", headers: { "x-api-key": ANTHROPIC_KEY, "anthropic-version": "2023-06-01", "content-type": "application/json" }, body: JSON.stringify({ model: "claude-haiku-4-5-20251001", max_tokens: 220, system, messages: [{ role: "user", content: user }] }) });
     if (!r.ok) return null;
@@ -115,7 +122,7 @@ Deno.serve(async (req: Request) => {
   // "#2" on the end of a command aims it at job 2 on today's list instead of the current one.
   let forced = 0;
   const current = (jobs: any[]) => (forced && jobs[forced - 1]) ? jobs[forced - 1] : pickCurrent(jobs);
-  const flowCtx = () => st.step === "addons" ? `building the invoice for ${st.customer || "the customer"}: ${linesSummary(st.lines || [])} (total ${money(total(st.lines || []))}); add-on menu: ${(st.menu || []).map((x: any, i: number) => `${i + 1}. ${x.name}`).join(", ") || "none"}. Tech can add/remove lines, set a price or discount, toggle the trip fee, say ok to finish, or cancel.` : st.step === "send" ? `invoice ready for ${st.customer || "the customer"} (${money(st.total_cents || 0)}); waiting for: send, later, or paid (cash/check/card).` : "";
+  const flowCtx = () => st.step === "quote" ? `writing an ESTIMATE for ${st.customer || "the customer"}: ${linesSummary(st.lines || [])}; the tech sets every price (add/optional/price/discount/remove), says ok to send, or cancel.` : st.step === "addons" ? `building the invoice for ${st.customer || "the customer"}: ${linesSummary(st.lines || [])} (total ${money(total(st.lines || []))}); add-on menu: ${(st.menu || []).map((x: any, i: number) => `${i + 1}. ${x.name}`).join(", ") || "none"}. Tech can add/remove lines, set a price or discount, toggle the trip fee, say ok to finish, or cancel.` : st.step === "send" ? `invoice ready for ${st.customer || "the customer"} (${money(st.total_cents || 0)}); waiting for: send, later, or paid (cash/check/card).` : "";
 
   async function dispatch(lowIn: string): Promise<Response | null> {
     let low = lowIn;
@@ -123,8 +130,21 @@ Deno.serve(async (req: Request) => {
 
 
     // ---- Mid-flow states ----
-    if (st.step === "addons" && st.job_id) {
-      if (/^(cancel|nevermind|never mind|stop)$/.test(low)) { await clear(); return reply("Okay, left it alone. Text DONE again when you're ready."); }
+    if ((st.step === "addons" || st.step === "quote") && st.job_id) {
+      if (/^(cancel|nevermind|never mind|stop)$/.test(low)) { await clear(); return reply(st.step === "quote" ? "Okay, dropped that estimate." : "Okay, left it alone. Text DONE again when you're ready."); }
+      if (st.step === "quote" && /^(ok|okay|k|yes|y|good|none|no|nope|that's it|thats it|right|correct|looks good|send)$/.test(low)) {
+        // Estimate: Donna writes nothing herself; these are the tech's lines. Over the owner's review limit it waits for the owner.
+        const lines = st.lines.filter((l: any) => !(l.kind === "trip_fee" && l.cents === 0));
+        const cr = await call("estimates", { action: "create", user_id: userId, job_id: st.job_id, lines, notes: st.quote_notes || null });
+        if (!cr?.ok) { await clear(); return reply("Couldn't save the estimate. Try from the app."); }
+        await clear();
+        if (cr.needs_review) return reply(`Estimate ${cr.estimate.number} for ${money(cr.estimate.total_cents)} is saved and waiting for the owner's okay (it's over the review limit). It goes out as soon as they approve it.`);
+        const sr = await call("estimates", { action: "send", user_id: userId, id: cr.estimate.id });
+        if (!sr?.ok) return reply(`Estimate ${cr.estimate.number} for ${money(cr.estimate.total_cents)} is saved, but I couldn't send it: ${sr?.message || "no phone or email"}. Send it from the app.`);
+        return reply(`Sent estimate ${cr.estimate.number} for ${money(cr.estimate.total_cents)} to ${st.customer || "the customer"}${sr.sent?.sms ? " by text" : " by email"}. They tap Approve and I'll let you know.`);
+      }
+      const opt = st.step === "quote" ? low.match(/^(?:optional|if needed|maybe)\s+(.+?)\s+\$?(\d+(?:\.\d{1,2})?)\s*$/) : null;
+      if (opt) { st.lines.push({ desc: opt[1].replace(/\b\w/g, (c: string) => c.toUpperCase()), qty: 1, unit_cents: parseMoney(opt[2]) || 0, cents: parseMoney(opt[2]) || 0, kind: "optional" }); await save(st); return reply(quotePrompt(st)); }
       if (/^(ok|okay|k|yes|y|good|none|no|nope|that's it|thats it|right|correct|looks good|send)$/.test(low)) {
         const fin = await call("jobs", { action: "finalize", user_id: userId, job_id: st.job_id, lines: st.lines });
         if (!fin?.ok) { await clear(); return reply("Couldn't build the invoice. Open the app and try from there."); }
@@ -232,6 +252,44 @@ Deno.serve(async (req: Request) => {
       return reply(lead + addonPrompt(st));
     }
 
+    // Estimate: "quote" starts one for the current job; the tech supplies every number.
+    if (/^(quote|estimate|write (an? )?(estimate|quote)|bid)$/.test(low)) {
+      const jobs = await todays(); const cur = current(jobs); if (!cur) return reply("No job on your schedule today to estimate. Open the app to write one from scratch.");
+      const r = await call("jobs", { action: "job", user_id: userId, appointment_id: cur.appointment_id, job_id: cur.job_id || undefined });
+      if (!r?.ok) return reply("Couldn't open that job.");
+      const lines = (r.proposed || []).filter((l: any) => l.kind !== "trip_fee" && l.kind !== "addon").map((l: any) => ({ ...l, cents: l.needs_price ? 0 : l.cents }));
+      await save({ step: "quote", job_id: r.job.id, lines, menu: r.menu, customer: cur.customer_name, phone: cur.customer_phone });
+      return reply(`Estimate for ${first(cur.customer_name)} (${cur.title}). Build it line by line; I don't set prices.\n` + quotePrompt(st));
+    }
+    const sch = low.match(/^schedule\s+(est-\d+)\s+(\d{4}-\d{2}-\d{2})\s+(\d{1,2}:\d{2})\s*$/);
+    if (sch) {
+      const { data: est } = await supabase.from("estimates").select("id, number, status").eq("account_id", accountId).ilike("number", sch[1]).maybeSingle();
+      if (!est) return reply(`I don't see ${sch[1].toUpperCase()}.`);
+      const r = await call("estimates", { action: "convert", user_id: userId, id: est.id, new_date: sch[2], new_time: sch[3] });
+      if (!r?.ok) return reply(r?.message || "Couldn't schedule it.");
+      return reply(`Booked ${est.number} for ${r.when_label}.${r.texted ? " Told the customer." : ""}`);
+    }
+
+    // Move a job: "move 2026-11-12 15:00" (Donna's interpreter turns "push Maria to 3 tomorrow" into this).
+    const mv = low.match(/^(?:move|reschedule)\s+(\d{4}-\d{2}-\d{2})\s+(\d{1,2}:\d{2})\s*$/);
+    if (mv) {
+      const jobs = await todays(); const cur = current(jobs); if (!cur) return reply("No job on your schedule today to move.");
+      const r = await call("jobs", { action: "reschedule", user_id: userId, appointment_id: cur.appointment_id, job_id: cur.job_id || undefined, new_date: mv[1], new_time: mv[2] });
+      if (!r?.ok) return reply(r?.message || "Couldn't move it.");
+      return reply(`Moved ${cur.title} for ${first(cur.customer_name)} to ${r.when_label}.${r.texted ? " Told them by text." : ""}`);
+    }
+    if (/^(cancel (the )?job|cancel it|cancel (the )?(appointment|visit|call))$/.test(low)) {
+      const jobs = await todays(); const cur = current(jobs); if (!cur) return reply("No job on your schedule today to cancel.");
+      const r = await call("jobs", { action: "cancel", user_id: userId, appointment_id: cur.appointment_id, job_id: cur.job_id || undefined });
+      return reply(r?.ok ? `Cancelled ${cur.title} for ${first(cur.customer_name)}.${r.texted ? " Told them by text." : ""}` : "Couldn't cancel it.");
+    }
+    // Acknowledge an after-hours page: stops the ladder, assigns the job to this tech.
+    if (/^(ack|got it|on it|taking it|i('ll| will) take it|i got it)$/.test(low)) {
+      const r = await call("oncall", { action: "ack", account_id: accountId, user_id: userId });
+      if (!r?.ok) return reply("Nothing waiting to be acknowledged right now.");
+      return reply("It's yours. Text OMW when you head out; the customer gets the heads-up.");
+    }
+
     // Outside the Done flow: "paid cash" / "send" on a job that already has an open invoice.
     const paidTop = low.match(/^(?:paid|got paid|they paid)\b\s*(cash|check|card|venmo|zelle)?\s*$/);
     const sendTop = /^(send|send it|send the invoice|resend)$/.test(low);
@@ -263,7 +321,7 @@ Deno.serve(async (req: Request) => {
     if (!out && it?.answer) out = await reply(it.answer);
   }
   if (!out) {
-    if (st.step === "addons") out = await reply(`Didn't catch that.\n${addonPrompt(st)}`);
+    if (st.step === "addons" || st.step === "quote") out = await reply(`Didn't catch that.\n${addonPrompt(st)}`);
     else if (st.step === "send") out = await reply(`Reply SEND, LATER, or PAID.`);
     else return ok({ handled: false });
   }
