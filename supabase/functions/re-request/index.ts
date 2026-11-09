@@ -36,7 +36,7 @@ function describe(l: any, brief = false): string {
   if (l.property_type === "commercial") return `${where}: ${l.sqft ? Number(l.sqft).toLocaleString() + " square feet of " : ""}commercial space${price ? ", " + price : ""}${brief ? "" : l.description ? ". " + l.description : ""}`;
   const rooms = [l.beds != null ? `${spokenNum(Number(l.beds))} bedroom${Number(l.beds) === 1 ? "" : "s"}${l.office ? " plus an office" : ""}` : "", l.baths != null ? `${spokenNum(Number(l.baths))}${l.half_baths ? " and a half" : ""} bath${Number(l.baths) === 1 && !l.half_baths ? "" : "s"}` : "", l.sqft ? `about ${Number(l.sqft).toLocaleString()} square feet` : ""].filter(Boolean).join(", ");
   const extras = brief ? "" : [l.year_built ? `built in ${l.year_built}` : "", l.garage ? `${l.garage}-car garage` : "", l.pool ? "pool" : "", l.listing_type === "for_rent" && l.pets ? ({ no: "no pets", cats: "cats okay", dogs: "dogs okay", cats_dogs: "cats and dogs okay", case_by_case: "pets case by case" } as any)[l.pets] || "" : "", l.listing_type === "for_rent" && l.available_on ? `available ${new Date(l.available_on + "T12:00:00").toLocaleDateString("en-US", { month: "long", day: "numeric" })}` : ""].filter(Boolean).join(", ");
-  return `${where}: ${rooms}${price ? ", " + price : ""}${extras ? ". " + extras.charAt(0).toUpperCase() + extras.slice(1) : ""}${brief || !l.description ? "" : ". " + l.description}`;
+  return `${where}: ${rooms}${price ? ", " + price : ""}${extras ? ". " + extras.charAt(0).toUpperCase() + extras.slice(1) : ""}${brief || !l.description ? "" : ". " + String(l.description).replace(/\.\s*$/, "")}`;
 }
 async function sendText(accountId: string, to: string, body: string): Promise<boolean> { try { const r = await fetch(`${SELF}/msg-send`, { method: "POST", headers: { "Content-Type": "application/json", Authorization: `Bearer ${SERVICE_ROLE}` }, body: JSON.stringify({ account_id: accountId, to, body }) }); const j: any = await r.json().catch(() => ({})); return !!j?.ok; } catch { return false; } }
 async function callFn(fn: string, body: any): Promise<any> { try { const r = await fetch(`${SELF}/${fn}`, { method: "POST", headers: { "Content-Type": "application/json", Authorization: `Bearer ${SERVICE_ROLE}` }, body: JSON.stringify(body) }); return await r.json().catch(() => ({})); } catch { return {}; } }
@@ -49,9 +49,18 @@ async function agentPhones(accountId: string, agentUserId: string | null): Promi
 async function findListings(accountId: string, args: any): Promise<any[]> {
   const q = String(args.query || args.address || args.q || "").trim();
   const type = ["for_sale", "for_rent", "for_lease"].includes(args.listing_type) ? args.listing_type : (/rent|lease|rental/i.test(String(args.intent || "")) ? "for_rent" : /buy|sale|purchase/i.test(String(args.intent || "")) ? "for_sale" : null);
-  const { data, error } = await supabase.rpc("re_find_listings", { p_account: accountId, p_q: q || null, p_type: type, p_zip: String(args.zip || "").replace(/\D/g, "").slice(0, 5) || null, p_min_beds: num(args.min_beds), p_max_price: cents(args.max_price), p_limit: 6 });
-  if (error) { console.error("re_find_listings", error.message); return []; }
-  let rows = data || [];
+  const zip = String(args.zip || "").replace(/\D/g, "").slice(0, 5) || null;
+  const find = async (pq: string | null, minBeds: number | null) => { const { data, error } = await supabase.rpc("re_find_listings", { p_account: accountId, p_q: pq, p_type: type, p_zip: zip, p_min_beds: minBeds, p_max_price: cents(args.max_price), p_limit: 20 }); if (error) console.error("re_find_listings", error.message); return (data || []) as any[]; };
+  const mb = num(args.min_beds);
+  let rows = await find(q || null, mb);
+  // A descriptive query ("5 bedroom", "something with a pool") isn't an address: fall back to criteria only.
+  let usedQ = q || null;
+  if (!rows.length && q && !/\d{3,}/.test(q)) { rows = await find(null, mb); usedQ = null; }
+  // "5 bedroom" with nothing exact: a 4-bedroom with an office counts (Donna says so out loud).
+  if (!rows.length && mb && mb >= 5) {
+    const alt = await find(usedQ, mb - 1);
+    rows = alt.filter((r: any) => r.office); for (const r of rows) r._office_as_bed = true;
+  }
   // Street-number match ("3903") beats everything when the caller gives one.
   const sn = q.match(/\b(\d{3,6})\b/); if (sn && rows.length > 1) { const hit = rows.filter((r: any) => String(r.address).startsWith(sn[1] + " ")); if (hit.length) rows = hit; }
   return rows;
@@ -105,19 +114,20 @@ Deno.serve(async (req: Request) => {
   let accountId: string | null = body.account_id || null;
   if (!accountId && toNumber) { const { data: asst } = await supabase.from("assistants").select("account_id").eq("twilio_number", toNumber).maybeSingle(); accountId = asst?.account_id || null; }
   if (!accountId) return say("Sorry, I'm having trouble looking that up right now. Let me take your name and number and have the agent call you.");
-  const { data: acct } = await supabase.from("accounts").select("id, name, settings, timezone, industry").eq("id", accountId).maybeSingle();
+  const { data: acct } = await supabase.from("accounts").select("id, name, settings, industry").eq("id", accountId).maybeSingle();
   if (!acct) return say("Sorry, I'm having trouble looking that up right now.");
-  const s = acct.settings?.real_estate || {}; const tz = acct.timezone || acct.settings?.timezone || "America/Chicago";
+  const s = acct.settings?.real_estate || {}; const tz = acct.settings?.timezone || "America/Chicago";
   const agentName = s.agent_name || acct.name;
 
   // ---------- listing_lookup ----------
   if (tool === "listing_lookup") {
     const rows = await findListings(acct.id, args);
     if (!rows.length) { const { count } = await supabase.from("re_listings").select("id", { count: "exact", head: true }).eq("account_id", acct.id).in("status", ["coming_soon", "active", "pending"]); return say(count ? `I don't see one matching that. Could you give me the street address, or tell me what you're looking for — how many bedrooms, the area, and your budget — and I'll check what we have?` : `We don't have any listings on the books right now, but ${agentName} can help you find one. Can I take your name and number so they can reach you?`, { found: 0 }); }
-    if (rows.length === 1) { const l = rows[0]; const showing = l.occupied ? " It's currently occupied, so showings need a little notice." : ""; return say(`${describe(l)}.${l.status === "pending" ? " It's pending right now, but I can note your interest in case that changes." : ""}${showing} Would you like to set up a showing?`, { found: 1, listing_id: l.id, address: l.address, listing_type: l.listing_type, status: l.status }); }
+    if (rows.length === 1) { const l = rows[0]; const officeNote = l._office_as_bed ? " It has four true bedrooms plus a separate office that many people use as a fifth bedroom." : ""; const showing = l.occupied ? " It's currently occupied, so showings need a little notice." : ""; return say(`${describe(l)}.${officeNote}${l.status === "pending" ? " It's pending right now, but I can note your interest in case that changes." : ""}${showing} Would you like to set up a showing?`, { found: 1, listing_id: l.id, address: l.address, listing_type: l.listing_type, status: l.status }); }
     const same = rows.every((r: any) => r.beds === rows[0].beds && r.baths === rows[0].baths && r.price_cents === rows[0].price_cents && r.sqft === rows[0].sqft);
     const list = rows.slice(0, 4).map((r: any) => same ? r.address : describe(r, true)).join("; ");
-    return say(same ? `I have ${rows.length} that fit: ${list}${rows.length > 4 ? ", and more" : ""}. They're all ${describe(rows[0], true).split(": ")[1]}. Which one would you like to hear about or see?` : `Here's what I have: ${list}${rows.length > 4 ? ", and a couple more" : ""}. Which one would you like to hear more about?`, { found: rows.length, listings: rows.map((r: any) => ({ id: r.id, address: r.address, listing_type: r.listing_type })) });
+    const officeNote = rows[0]._office_as_bed ? " They have four true bedrooms plus a separate office that many people use as a fifth bedroom." : "";
+    return say(same ? `I have ${rows.length} that fit: ${list}${rows.length > 4 ? `, and ${rows.length - 4} more` : ""}. They're all ${describe(rows[0], true).split(": ")[1]}.${officeNote} Which one would you like to hear about or see?` : `Here's what I have: ${list}${rows.length > 4 ? ", and a couple more" : ""}. Which one would you like to hear more about?`, { found: rows.length, listings: rows.map((r: any) => ({ id: r.id, address: r.address, listing_type: r.listing_type })) });
   }
 
   // ---------- re_lead ----------

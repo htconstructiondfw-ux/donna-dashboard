@@ -48,7 +48,7 @@ async function sendEmail(to: string, from: string, subject: string, text: string
   if (!RESEND_KEY || !to) return false;
   try { const payload: any = { from, to: [to], subject, text }; if (attachment) payload.attachments = [attachment]; const r = await fetch("https://api.resend.com/emails", { method: "POST", headers: { Authorization: `Bearer ${RESEND_KEY}`, "Content-Type": "application/json" }, body: JSON.stringify(payload) }); return r.ok; } catch { return false; }
 }
-async function loadAccount(id: string) { const { data } = await supabase.from("accounts").select("id, name, settings, timezone").eq("id", id).maybeSingle(); return data as any; }
+async function loadAccount(id: string) { const { data } = await supabase.from("accounts").select("id, name, settings").eq("id", id).maybeSingle(); return data as any; }
 async function agentPhones(accountId: string, agentUserId: string | null): Promise<string[]> {
   const out = new Set<string>();
   if (agentUserId) { const { data } = await supabase.from("users").select("phone").eq("id", agentUserId).maybeSingle(); if ((data as any)?.phone) out.add((data as any).phone); }
@@ -231,7 +231,7 @@ Deno.serve(async (req: Request) => {
     const token = String(body.token || "").trim(); if (!token) return json({ ok: false, error: "no_token" }, 400);
     const d = await loadDocByToken(token); if (!d) return json({ ok: false, error: "not_found" }, 404);
     const acct = await loadAccount(d.account_id); if (!acct) return json({ ok: false, error: "not_found" }, 404);
-    const tz = acct.timezone || "America/Chicago";
+    const tz = acct.settings?.timezone || "America/Chicago";
     const expired = d.expires_at && new Date(d.expires_at).getTime() < Date.now() && ["sent", "viewed", "verified"].includes(d.status);
     if (expired) { await supabase.from("re_documents").update({ status: "expired", updated_at: now() }).eq("id", d.id); d.status = "expired"; }
     const save = async (patch: any) => { await supabase.from("re_documents").update({ ...patch, audit: d.audit, updated_at: now() }).eq("id", d.id); };
@@ -334,7 +334,7 @@ Deno.serve(async (req: Request) => {
   // ================= Agent / internal =================
   const caller = await resolveCaller(req, body); if (!caller) return json({ ok: false, error: "unauthorized" }, 401);
   const acct = await loadAccount(caller.accountId); if (!acct) return json({ ok: false, error: "no_account" }, 404);
-  const tz = acct.timezone || "America/Chicago";
+  const tz = acct.settings?.timezone || "America/Chicago";
 
   if (action === "doc_send") {
     const kind = String(body.kind || ""); if (!KIND_TITLES[kind]) return json({ ok: false, error: "bad_kind" }, 400);
