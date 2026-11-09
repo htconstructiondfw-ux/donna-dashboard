@@ -13,6 +13,7 @@ import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 //   rotate_auto                 -> generate+store a new credential (app_secrets), reimport all numbers, drop the old one; nothing echoed
 //   twilio_numbers              -> each Twilio number's SMS webhook / messaging service / trunk
 //   messaging_services          -> each Messaging Service's inbound URL + sender pool (the toll-free lives here)
+//   remove_from_service {service_sid,number} -> take a number out of a Messaging Service's sender pool
 //   set_sms_webhook {number,url?}-> point a number's inbound SMS at msg-inbound
 //   remove_credential {username}-> delete that username from the Twilio list (refuses the current secret username)
 // Secrets are never echoed back.
@@ -215,6 +216,15 @@ Deno.serve(async (req: Request) => {
       services.push({ sid: sv.sid, name: sv.friendly_name, inbound_request_url: sv.inbound_request_url || null, inbound_method: sv.inbound_method || null, fallback_url: sv.fallback_url || null, use_inbound_webhook_on_number: sv.use_inbound_webhook_on_number ?? null, senders: (pj?.phone_numbers || []).map((p: any) => p.phone_number) });
     }
     return json({ ok: r.ok, services, error: r.ok ? undefined : j });
+  }
+  if (action === "remove_from_service") {
+    const service = String(body.service_sid || ""); const number = String(body.number || "");
+    if (!service || !number) return json({ ok: false, error: "service_sid and number required" });
+    const pn = await fetch(`https://messaging.twilio.com/v1/Services/${service}/PhoneNumbers?PageSize=50`, { headers: { Authorization: twAuth() } });
+    const pj: any = await pn.json().catch(() => ({})); const hit = (pj?.phone_numbers || []).find((p: any) => p.phone_number === number);
+    if (!hit) return json({ ok: true, already_gone: true });
+    const r = await fetch(`https://messaging.twilio.com/v1/Services/${service}/PhoneNumbers/${hit.sid}`, { method: "DELETE", headers: { Authorization: twAuth() } });
+    return json({ ok: r.ok || r.status === 204, status: r.status, removed: number, from_service: service });
   }
   if (action === "set_sms_webhook") {
     const number = String(body.number || ""); if (!number) return json({ ok: false, error: "number required" });
