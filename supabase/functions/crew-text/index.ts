@@ -1,7 +1,7 @@
 import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 
-// Donna crew-text (v2): the contractor runs his day by texting Donna's number from his own phone.
+// Donna crew-text (v7): the contractor runs his day by texting Donna's number from his own phone.
 // Called by msg-inbound when the sender is a user (owner or tech) on the account. Returns { handled, reply }.
 // Commands (forgiving, case-insensitive):
 //   omw / on my way [20]      -> customer gets "on the way, about 20 min"
@@ -46,6 +46,38 @@ function addonPrompt(st: any) {
   return `${linesSummary(st.lines)}\nTotal ${money(total(st.lines))}.${m}\nReply OK when it's right.`;
 }
 
+// Conversation layer. A tech types however he talks ("when's my next one", "tell her I'm 10 out", "bill it").
+// Claude turns that into one of Donna's commands, answers from today's schedule, or asks ONE short question when
+// something needed is missing (which job, how many minutes, what price). The last few turns are kept so answers
+// to those questions land in context.
+const ANTHROPIC_KEY = Deno.env.get("ANTHROPIC_API_KEY") || "";
+const CMD_RE = /^(omw|on my way|otw|here|arrived|done|finished|finish|complete|completed|all done|wrapped up|wrapping up|bill it|invoice|late|running late|today|next|note|notes|help|\?|commands|menu|ok|okay|yes|no|send|later|hold|paid|got paid|they paid|cash|check|card|venmo|zelle|add|remove|discount|price|trip|cancel|nevermind|never mind|stop|\d+)\b/;
+async function interpret(text: string, jobs: any[], acct: any, tz: string, chat: any[], flow: string): Promise<{ command?: string; answer?: string; ask?: string } | null> {
+  if (!ANTHROPIC_KEY) return null;
+  const now = new Intl.DateTimeFormat("en-US", { timeZone: tz, weekday: "short", hour: "numeric", minute: "2-digit" }).format(new Date());
+  const fmt = (iso: string) => { try { return new Intl.DateTimeFormat("en-US", { timeZone: tz, hour: "numeric", minute: "2-digit" }).format(new Date(iso)); } catch { return ""; } };
+  const list = jobs.map((j: any, i: number) => `#${i + 1} ${fmt(j.starts_at)} ${j.title} — ${j.customer_name || "no name"}${j.address ? ", " + j.address : ""} [${j.status}]${j.kind === "emergency" ? " (after-hours call)" : ""}`).join("\n") || "(nothing scheduled today)";
+  const system = `You are Donna, the dispatcher/assistant for a small trade business, texting with one of its technicians. Reply with JSON only, one of:
+{"command": "..."}  when the tech clearly wants you to DO something. Allowed commands (exact strings, fill the blanks): "omw <minutes>", "here", "done", "late <minutes>", "today", "next", "note <text>", "help", "send", "later", "paid cash", "paid check", "paid card", "add <what> <price>", "remove <what>", "discount <amount>", "price <amount>", "trip on", "trip off", "ok", "cancel". Commands act on the current job (in progress, or the next one up). To aim at a different job from the list, append " #<n>" (e.g. "omw 10 #2").
+{"answer": "..."}  (1-2 short friendly sentences, no markdown) when they ask a question you can answer from the schedule or the conversation: what's next, when, where, who, how many left, what's on the invoice so far.
+{"ask": "..."}  ONE short question when they want an action but something needed is missing or ambiguous: which job (name the choices briefly), how many minutes, what price, what to add. Don't ask when a sensible default exists (no minutes given → "omw 0" is fine; "done" needs nothing).
+Never invent jobs, prices, times or customers. Times are already in the shop's local time zone. If it's small talk or off-topic, give a one-line friendly answer and say what you can help with.`;
+  const hist = (chat || []).slice(-8).map((m: any) => `${m.r === "t" ? "Tech" : "Donna"}: ${m.t}`).join("\n");
+  const user = `Business: ${acct.name}\nNow: ${now}\nToday's jobs for this tech:\n${list}\n${flow ? `\nRight now: ${flow}\n` : ""}${hist ? `\nRecent conversation:\n${hist}\n` : ""}\nTech just texted: "${text}"`;
+  try {
+    const r = await fetch("https://api.anthropic.com/v1/messages", { method: "POST", headers: { "x-api-key": ANTHROPIC_KEY, "anthropic-version": "2023-06-01", "content-type": "application/json" }, body: JSON.stringify({ model: "claude-haiku-4-5-20251001", max_tokens: 220, system, messages: [{ role: "user", content: user }] }) });
+    if (!r.ok) return null;
+    const j: any = await r.json().catch(() => ({}));
+    const t = String((j?.content || []).find((b: any) => b.type === "text")?.text || "").trim();
+    const m = t.match(/\{[\s\S]*\}/); if (!m) return null;
+    const out = JSON.parse(m[0]);
+    if (out && typeof out.command === "string" && CMD_RE.test(out.command.toLowerCase().trim())) return { command: out.command.toLowerCase().trim() };
+    if (out && typeof out.ask === "string" && out.ask.trim()) return { ask: out.ask.trim().slice(0, 300) };
+    if (out && typeof out.answer === "string" && out.answer.trim()) return { answer: out.answer.trim().slice(0, 400) };
+    return null;
+  } catch { return null; }
+}
+
 Deno.serve(async (req: Request) => {
   if (req.method === "OPTIONS") return new Response(null, { headers: CORS });
   // Callers: msg-inbound (service role), a cron/test caller with the shared secret, or a signed-in crew member (the phone app).
@@ -65,128 +97,158 @@ Deno.serve(async (req: Request) => {
       userId = (me as any).id; accountId = (me as any).account_id;
     }
   }
-  const text = String(body.body || "").trim(); const media: string[] = Array.isArray(body.media) ? body.media : [];
+  let text = String(body.body || "").trim(); const media: string[] = Array.isArray(body.media) ? body.media : [];
   if (!accountId || !userId) return ok({ handled: false });
   const { data: acct } = await supabase.from("accounts").select("id, name, settings, industry").eq("id", accountId).maybeSingle();
   if (!acct) return ok({ handled: false });
   const tz = acct.settings?.timezone || "America/Chicago";
-  const low = text.toLowerCase().replace(/[.!]+$/, "").trim();
+  let low = text.toLowerCase().replace(/[.!]+$/, "").trim();
   const { data: sess } = await supabase.from("crew_sessions").select("state").eq("user_id", userId).maybeSingle();
   let st: any = (sess as any)?.state || {};
-  const save = async (s: any) => { st = s; await supabase.from("crew_sessions").upsert({ user_id: userId, account_id: accountId, state: s, updated_at: new Date().toISOString() }, { onConflict: "user_id" }); };
+  const save = async (s: any) => { st = { ...s, chat: s.chat ?? st.chat }; await supabase.from("crew_sessions").upsert({ user_id: userId, account_id: accountId, state: st, updated_at: new Date().toISOString() }, { onConflict: "user_id" }); };
   const clear = () => save({});
   const todays = async () => { const r = await call("jobs", { action: "today", user_id: userId, mine: true }); return r?.jobs || []; };
-  const reply = (r: string) => ok({ handled: true, reply: r });
+  // Keep the last few turns so Donna can hold a short conversation (answers to her questions land in context).
+  const pushChat = async (role: "t" | "d", t: string) => { const chat = [...(st.chat || []), { r: role, t: String(t).slice(0, 300) }].slice(-10); await save({ ...st, chat }); };
+  const reply = async (r: string) => { await pushChat("d", r); return ok({ handled: true, reply: r }); };
+  if (text) await pushChat("t", text);
+  // "#2" on the end of a command aims it at job 2 on today's list instead of the current one.
+  let forced = 0;
+  const current = (jobs: any[]) => (forced && jobs[forced - 1]) ? jobs[forced - 1] : pickCurrent(jobs);
+  const flowCtx = () => st.step === "addons" ? `building the invoice for ${st.customer || "the customer"}: ${linesSummary(st.lines || [])} (total ${money(total(st.lines || []))}); add-on menu: ${(st.menu || []).map((x: any, i: number) => `${i + 1}. ${x.name}`).join(", ") || "none"}. Tech can add/remove lines, set a price or discount, toggle the trip fee, say ok to finish, or cancel.` : st.step === "send" ? `invoice ready for ${st.customer || "the customer"} (${money(st.total_cents || 0)}); waiting for: send, later, or paid (cash/check/card).` : "";
 
-  // ---- Mid-flow states ----
-  if (st.step === "addons" && st.job_id) {
-    if (/^(cancel|nevermind|never mind|stop)$/.test(low)) { await clear(); return reply("Okay, left it alone. Text DONE again when you're ready."); }
-    if (/^(ok|okay|k|yes|y|good|none|no|nope|that's it|thats it|right|correct|looks good|send)$/.test(low)) {
-      const fin = await call("jobs", { action: "finalize", user_id: userId, job_id: st.job_id, lines: st.lines });
-      if (!fin?.ok) { await clear(); return reply("Couldn't build the invoice. Open the app and try from there."); }
-      await save({ step: "send", job_id: st.job_id, invoice_id: fin.invoice.id, total_cents: fin.invoice.total_cents, customer: st.customer, phone: st.phone });
-      return reply(`Invoice ${fin.invoice.number}: ${money(fin.invoice.total_cents)} for ${st.customer || "the customer"}.\nReply SEND to text it to them now, LATER to hold it, or PAID if they already paid you${st.online ? "" : " (cash/check)"}.`);
+  async function dispatch(lowIn: string): Promise<Response | null> {
+    let low = lowIn;
+    const tag = low.match(/\s#(\d{1,2})$/); if (tag) { forced = parseInt(tag[1], 10); low = low.slice(0, tag.index).trim(); }
+
+
+    // ---- Mid-flow states ----
+    if (st.step === "addons" && st.job_id) {
+      if (/^(cancel|nevermind|never mind|stop)$/.test(low)) { await clear(); return reply("Okay, left it alone. Text DONE again when you're ready."); }
+      if (/^(ok|okay|k|yes|y|good|none|no|nope|that's it|thats it|right|correct|looks good|send)$/.test(low)) {
+        const fin = await call("jobs", { action: "finalize", user_id: userId, job_id: st.job_id, lines: st.lines });
+        if (!fin?.ok) { await clear(); return reply("Couldn't build the invoice. Open the app and try from there."); }
+        await save({ step: "send", job_id: st.job_id, invoice_id: fin.invoice.id, total_cents: fin.invoice.total_cents, customer: st.customer, phone: st.phone });
+        return reply(`Invoice ${fin.invoice.number}: ${money(fin.invoice.total_cents)} for ${st.customer || "the customer"}.\nReply SEND to text it to them now, LATER to hold it, or PAID if they already paid you${st.online ? "" : " (cash/check)"}.`);
+      }
+      const nums = low.match(/^\s*(\d+(?:\s*[, ]\s*\d+)*)\s*$/);
+      if (nums) {
+        const picks = nums[1].split(/[, ]+/).map((n) => parseInt(n, 10)).filter((n) => n >= 1 && n <= (st.menu || []).length);
+        if (!picks.length) return reply(`That number isn't on the list.\n${addonPrompt(st)}`);
+        for (const n of picks) { const m = st.menu[n - 1]; st.lines.push({ desc: m.name, qty: 1, unit_cents: m.cents || 0, cents: m.cents || 0, kind: "addon" }); }
+        await save(st); return reply(addonPrompt(st));
+      }
+      const add = low.match(/^(?:add|plus|\+)\s+(.+?)\s+\$?(\d+(?:\.\d{1,2})?)\s*$/) || low.match(/^(?:add|plus|\+)\s+\$?(\d+(?:\.\d{1,2})?)\s+(?:for\s+)?(.+)$/);
+      if (add) {
+        const desc = /^\d/.test(add[1]) ? add[2] : add[1]; const cents = parseMoney(/^\d/.test(add[1]) ? add[1] : add[2]) || 0;
+        st.lines.push({ desc: desc.replace(/\b\w/g, (c: string) => c.toUpperCase()), qty: 1, unit_cents: cents, cents, kind: "addon" }); await save(st); return reply(addonPrompt(st));
+      }
+      const rm = low.match(/^(?:remove|drop|delete|minus|-)\s+(.+)$/);
+      if (rm) { const before = st.lines.length; st.lines = st.lines.filter((l: any, i: number) => !(String(l.desc).toLowerCase().includes(rm[1]) && i > 0 && l.kind !== "trip_fee")); await save(st); return reply(before === st.lines.length ? `Didn't find that line.\n${addonPrompt(st)}` : addonPrompt(st)); }
+      const disc = low.match(/^(?:discount|off|take off)\s+\$?(\d+(?:\.\d{1,2})?)/);
+      if (disc) { const c = parseMoney(disc[1]) || 0; st.lines.push({ desc: "Discount", qty: 1, unit_cents: c, cents: -c, kind: "discount" }); await save(st); return reply(addonPrompt(st)); }
+      const price = low.match(/^(?:price|charge|total)\s+\$?(\d+(?:\.\d{1,2})?)/);
+      if (price && st.lines[0]) { const c = parseMoney(price[1]) || 0; st.lines[0].cents = c; st.lines[0].unit_cents = c; st.lines[0].desc = String(st.lines[0].desc).replace(/ \(after hours\)$/, ""); delete st.lines[0].needs_price; await save(st); return reply(addonPrompt(st)); }
+      const tf = low.match(/^(?:trip fee|trip)\s*(on|yes|charge|off|no|waive)?/);
+      if (tf) { const t = st.lines.find((l: any) => l.kind === "trip_fee"); if (t) { const on = /on|yes|charge/.test(tf[1] || "on"); t.cents = on ? t.unit_cents : 0; t.desc = on ? "Trip fee" : "Trip fee (waived)"; await save(st); return reply(addonPrompt(st)); } }
+      return null;
     }
-    const nums = low.match(/^\s*(\d+(?:\s*[, ]\s*\d+)*)\s*$/);
-    if (nums) {
-      const picks = nums[1].split(/[, ]+/).map((n) => parseInt(n, 10)).filter((n) => n >= 1 && n <= (st.menu || []).length);
-      if (!picks.length) return reply(`That number isn't on the list.\n${addonPrompt(st)}`);
-      for (const n of picks) { const m = st.menu[n - 1]; st.lines.push({ desc: m.name, qty: 1, unit_cents: m.cents || 0, cents: m.cents || 0, kind: "addon" }); }
-      await save(st); return reply(addonPrompt(st));
+    if (st.step === "send" && st.invoice_id) {
+      if (/^(send|send it|yes|y|ok|go)$/.test(low)) {
+        const { customer, total_cents } = st;
+        const r = await call("payments", { action: "invoice_send", user_id: userId, id: st.invoice_id });
+        await clear();
+        if (!r?.ok) return reply(r?.message || "Couldn't send it. The invoice is saved; send it from the app.");
+        return reply(`Sent to ${customer || "the customer"}${r.sent?.sms ? " by text" : " by email"}: ${money(total_cents)}${r.online ? " with a Pay button" : ""}.${r.online ? " I'll text you when it's paid." : ""}`);
+      }
+      if (/^(later|hold|wait|not yet|no)$/.test(low)) { await clear(); return reply(`Holding it. It's under Jobs in the app whenever you want to send it.`); }
+      const paid = low.match(/^(paid|got paid|they paid|cash|check|card|venmo|zelle)\b\s*(cash|check|card|venmo|zelle)?/);
+      if (paid) {
+        const how = (paid[2] || paid[1]); const method = /check/.test(how) ? "check" : /card/.test(how) ? "card" : /venmo|zelle/.test(how) ? "other" : "cash";
+        const { total_cents } = st;
+        const r = await call("payments", { action: "invoice_mark_paid", user_id: userId, id: st.invoice_id, method, note: /venmo|zelle/.test(how) ? how : null });
+        await clear(); return reply(r?.ok ? `Marked paid (${/venmo|zelle/.test(how) ? how : method}), ${money(total_cents)}. Nice work.` : "Couldn't mark it paid. Try from the app.");
+      }
+      return null;
     }
-    const add = low.match(/^(?:add|plus|\+)\s+(.+?)\s+\$?(\d+(?:\.\d{1,2})?)\s*$/) || low.match(/^(?:add|plus|\+)\s+\$?(\d+(?:\.\d{1,2})?)\s+(?:for\s+)?(.+)$/);
-    if (add) {
-      const desc = /^\d/.test(add[1]) ? add[2] : add[1]; const cents = parseMoney(/^\d/.test(add[1]) ? add[1] : add[2]) || 0;
-      st.lines.push({ desc: desc.replace(/\b\w/g, (c: string) => c.toUpperCase()), qty: 1, unit_cents: cents, cents, kind: "addon" }); await save(st); return reply(addonPrompt(st));
+
+    // ---- Photo by text: attach to the current job ----
+    if (media.length) {
+      const jobs = await todays(); const cur = current(jobs);
+      if (!cur) return reply("Got the photo, but there's no job on your schedule today to pin it to.");
+      const j = cur.job_id ? { ok: true, job: { id: cur.job_id } } : await call("jobs", { action: "job", user_id: userId, appointment_id: cur.appointment_id });
+      if (j?.ok) { const { data: row } = await supabase.from("jobs").select("photos").eq("id", j.job.id).maybeSingle(); const photos = [...((row as any)?.photos || []), ...media.map((u) => ({ url: u, at: new Date().toISOString(), by: userId, caption: text || null }))]; await supabase.from("jobs").update({ photos, updated_at: new Date().toISOString() }).eq("id", j.job.id); }
+      if (!text) return reply(`Saved ${media.length > 1 ? media.length + " photos" : "the photo"} to ${cur.title} for ${first(cur.customer_name)}.`);
     }
-    const rm = low.match(/^(?:remove|drop|delete|minus|-)\s+(.+)$/);
-    if (rm) { const before = st.lines.length; st.lines = st.lines.filter((l: any, i: number) => !(String(l.desc).toLowerCase().includes(rm[1]) && i > 0 && l.kind !== "trip_fee")); await save(st); return reply(before === st.lines.length ? `Didn't find that line.\n${addonPrompt(st)}` : addonPrompt(st)); }
-    const disc = low.match(/^(?:discount|off|take off)\s+\$?(\d+(?:\.\d{1,2})?)/);
-    if (disc) { const c = parseMoney(disc[1]) || 0; st.lines.push({ desc: "Discount", qty: 1, unit_cents: c, cents: -c, kind: "discount" }); await save(st); return reply(addonPrompt(st)); }
-    const price = low.match(/^(?:price|charge|total)\s+\$?(\d+(?:\.\d{1,2})?)/);
-    if (price && st.lines[0]) { const c = parseMoney(price[1]) || 0; st.lines[0].cents = c; st.lines[0].unit_cents = c; st.lines[0].desc = String(st.lines[0].desc).replace(/ \(after hours\)$/, ""); delete st.lines[0].needs_price; await save(st); return reply(addonPrompt(st)); }
-    const tf = low.match(/^(?:trip fee|trip)\s*(on|yes|charge|off|no|waive)?/);
-    if (tf) { const t = st.lines.find((l: any) => l.kind === "trip_fee"); if (t) { const on = /on|yes|charge/.test(tf[1] || "on"); t.cents = on ? t.unit_cents : 0; t.desc = on ? "Trip fee" : "Trip fee (waived)"; await save(st); return reply(addonPrompt(st)); } }
-    return reply(`Didn't catch that.\n${addonPrompt(st)}`);
-  }
-  if (st.step === "send" && st.invoice_id) {
-    if (/^(send|send it|yes|y|ok|go)$/.test(low)) {
-      const { customer, total_cents } = st;
-      const r = await call("payments", { action: "invoice_send", user_id: userId, id: st.invoice_id });
-      await clear();
-      if (!r?.ok) return reply(r?.message || "Couldn't send it. The invoice is saved; send it from the app.");
-      return reply(`Sent to ${customer || "the customer"}${r.sent?.sms ? " by text" : " by email"}: ${money(total_cents)}${r.online ? " with a Pay button" : ""}.${r.online ? " I'll text you when it's paid." : ""}`);
+
+    // ---- Commands ----
+    if (/^(help|\?|commands|menu)$/.test(low)) return reply(`Text me:\nOMW 20 - tell the customer you're on the way\nHERE - started\nDONE - finish up and bill\nLATE 15 - running behind\nTODAY - your jobs\nNEXT - next stop + map\nNOTE <text> - note on this job\nSend a photo to save it to the job.`);
+
+    if (/^(today|jobs|schedule|what's today|whats today|list)$/.test(low)) {
+      const jobs = await todays(); if (!jobs.length) return reply("Nothing on the books today.");
+      return reply(`Today:\n` + jobs.map((j: any, i: number) => `${i + 1}. ${fmtTime(j.starts_at, tz)} ${j.title} - ${j.customer_name || "walk-in"}${j.address ? ", " + j.address.split(",")[0] : ""}${j.status !== "scheduled" ? ` (${j.status.replace("_", " ")})` : ""}`).join("\n"));
     }
-    if (/^(later|hold|wait|not yet|no)$/.test(low)) { await clear(); return reply(`Holding it. It's under Jobs in the app whenever you want to send it.`); }
-    const paid = low.match(/^(paid|got paid|they paid|cash|check|card|venmo|zelle)\b\s*(cash|check|card|venmo|zelle)?/);
-    if (paid) {
-      const how = (paid[2] || paid[1]); const method = /check/.test(how) ? "check" : /card/.test(how) ? "card" : /venmo|zelle/.test(how) ? "other" : "cash";
-      const { total_cents } = st;
-      const r = await call("payments", { action: "invoice_mark_paid", user_id: userId, id: st.invoice_id, method, note: /venmo|zelle/.test(how) ? how : null });
-      await clear(); return reply(r?.ok ? `Marked paid (${/venmo|zelle/.test(how) ? how : method}), ${money(total_cents)}. Nice work.` : "Couldn't mark it paid. Try from the app.");
+    if (/^(next|next job|where next|next stop)$/.test(low)) {
+      const jobs = await todays(); const open = jobs.filter((j: any) => !["done", "invoiced", "paid", "cancelled"].includes(j.status)); const n = open[0];
+      if (!n) return reply(jobs.length ? "That was your last one today." : "Nothing on the books today.");
+      return reply(`Next: ${fmtTime(n.starts_at, tz)} ${n.title}\n${n.customer_name || ""}${n.customer_phone ? " " + n.customer_phone : ""}\n${n.address ? n.address + "\n" + mapLink(n.address) : "No address on file"}${n.notes ? "\nNotes: " + n.notes : ""}`);
     }
-    return reply(`Reply SEND, LATER, or PAID.`);
+
+    const omw = low.match(/^(?:omw|otw|on my way|on the way|heading over|leaving now|en route)\b\s*(\d{1,3})?/);
+    if (omw) {
+      const jobs = await todays(); const cur = current(jobs); if (!cur) return reply("No job on your schedule today to head to.");
+      const r = await call("jobs", { action: "en_route", user_id: userId, appointment_id: cur.appointment_id, job_id: cur.job_id || undefined, minutes: omw[1] ? parseInt(omw[1], 10) : 0 });
+      if (!r?.ok) return reply("Couldn't update that job.");
+      return reply(`${r.texted ? `Told ${first(cur.customer_name)} you're on the way${omw[1] ? `, about ${omw[1]} min` : ""}.` : `Marked on the way (no mobile number to text for ${first(cur.customer_name)}).`}\n${cur.address ? cur.address + "\n" + mapLink(cur.address) : ""}`.trim());
+    }
+    if (/^(here|start|started|starting|arrived|on site|onsite)$/.test(low)) {
+      const jobs = await todays(); const cur = current(jobs); if (!cur) return reply("No job on your schedule today.");
+      const r = await call("jobs", { action: "start", user_id: userId, appointment_id: cur.appointment_id, job_id: cur.job_id || undefined });
+      return reply(r?.ok ? `Started ${cur.title} for ${first(cur.customer_name)}. Text DONE when you finish.` : "Couldn't update that job.");
+    }
+    const late = low.match(/^(?:late|running late|running behind|behind)\b\s*(\d{1,3})?\s*$/);
+    if (late) {
+      const jobs = await todays(); const cur = current(jobs); if (!cur) return reply("No job on your schedule today.");
+      const mins = late[1] ? parseInt(late[1], 10) : 15;
+      const who = first(cur.customer_name);
+      const r = await call("msg-send", { account_id: accountId, to: cur.customer_phone, body: `${acct.name}: running about ${mins} minutes behind for your ${cur.title.toLowerCase()} today. Sorry for the wait; reply here if that's a problem.` });
+      return reply(r?.ok ? `Told ${who} you're about ${mins} minutes behind.` : `Couldn't text ${who} (no mobile number or texting is off).`);
+    }
+    const note = low.match(/^(?:note|notes)\s+(.+)/s);
+    if (note) {
+      const jobs = await todays(); const cur = current(jobs); if (!cur) return reply("No job today to put that on.");
+      const r = await call("jobs", { action: "note", user_id: userId, appointment_id: cur.appointment_id, job_id: cur.job_id || undefined, text: text.replace(/^notes?\s+/i, "") });
+      return reply(r?.ok ? `Noted on ${cur.title} for ${first(cur.customer_name)}.` : "Couldn't save the note.");
+    }
+    if (/^(done|finished|finish|complete|completed|all done|wrapped up|wrapping up|bill it|invoice)$/.test(low)) {
+      const jobs = await todays(); const cur = current(jobs); if (!cur) return reply("No job on your schedule today to finish.");
+      const r = await call("jobs", { action: "done", user_id: userId, appointment_id: cur.appointment_id, job_id: cur.job_id || undefined });
+      if (!r?.ok) return reply("Couldn't close that job.");
+      if (r.has_invoice) { const { data: inv } = await supabase.from("invoices").select("id, number, total_cents, status, paid_at").eq("id", r.job.invoice_id).maybeSingle(); if (inv && !inv.paid_at && inv.status !== "void") { await save({ step: "send", job_id: r.job.id, invoice_id: inv.id, total_cents: inv.total_cents, customer: cur.customer_name, phone: cur.customer_phone }); return reply(`${cur.title} for ${first(cur.customer_name)} already has invoice ${inv.number} (${money(inv.total_cents)}). Reply SEND, LATER, or PAID.`); } }
+      const pa = await supabase.from("payment_accounts").select("charges_enabled").eq("account_id", accountId).maybeSingle();
+      const online = acct.settings?.payments?.enabled === true && !!(pa.data as any)?.charges_enabled;
+      await save({ step: "addons", job_id: r.job.id, lines: r.proposed, menu: r.menu, customer: cur.customer_name, phone: cur.customer_phone, online });
+      const lead = r.proposed.some((l: any) => l.needs_price) ? `Finished ${cur.title} for ${first(cur.customer_name)}. I don't have a price for it; reply "price 150" to set it.\n` : `Finished ${cur.title} for ${first(cur.customer_name)}. Here's what I have:\n`;
+      return reply(lead + addonPrompt(st));
+    }
+
+
+    return null;
   }
 
-  // ---- Photo by text: attach to the current job ----
-  if (media.length) {
-    const jobs = await todays(); const cur = pickCurrent(jobs);
-    if (!cur) return reply("Got the photo, but there's no job on your schedule today to pin it to.");
-    const j = cur.job_id ? { ok: true, job: { id: cur.job_id } } : await call("jobs", { action: "job", user_id: userId, appointment_id: cur.appointment_id });
-    if (j?.ok) { const { data: row } = await supabase.from("jobs").select("photos").eq("id", j.job.id).maybeSingle(); const photos = [...((row as any)?.photos || []), ...media.map((u) => ({ url: u, at: new Date().toISOString(), by: userId, caption: text || null }))]; await supabase.from("jobs").update({ photos, updated_at: new Date().toISOString() }).eq("id", j.job.id); }
-    if (!text) return reply(`Saved ${media.length > 1 ? media.length + " photos" : "the photo"} to ${cur.title} for ${first(cur.customer_name)}.`);
+  // 1) Try it as a command. 2) Otherwise let Donna interpret it (unless it's an obvious command that just failed).
+  let out = await dispatch(low);
+  if (!out) {
+    const jobs = await todays();
+    const it = await interpret(text, jobs, acct, tz, st.chat || [], flowCtx());
+    if (it?.command) { if (/^notes?\s/.test(it.command)) text = it.command; out = await dispatch(it.command); }
+    if (!out && it?.ask) out = await reply(it.ask);
+    if (!out && it?.answer) out = await reply(it.answer);
   }
-
-  // ---- Commands ----
-  if (/^(help|\?|commands|menu)$/.test(low)) return reply(`Text me:\nOMW 20 - tell the customer you're on the way\nHERE - started\nDONE - finish up and bill\nLATE 15 - running behind\nTODAY - your jobs\nNEXT - next stop + map\nNOTE <text> - note on this job\nSend a photo to save it to the job.`);
-
-  if (/^(today|jobs|schedule|what's today|whats today|list)$/.test(low)) {
-    const jobs = await todays(); if (!jobs.length) return reply("Nothing on the books today.");
-    return reply(`Today:\n` + jobs.map((j: any, i: number) => `${i + 1}. ${fmtTime(j.starts_at, tz)} ${j.title} - ${j.customer_name || "walk-in"}${j.address ? ", " + j.address.split(",")[0] : ""}${j.status !== "scheduled" ? ` (${j.status.replace("_", " ")})` : ""}`).join("\n"));
+  if (!out) {
+    if (st.step === "addons") out = await reply(`Didn't catch that.\n${addonPrompt(st)}`);
+    else if (st.step === "send") out = await reply(`Reply SEND, LATER, or PAID.`);
+    else return ok({ handled: false });
   }
-  if (/^(next|next job|where next|next stop)$/.test(low)) {
-    const jobs = await todays(); const open = jobs.filter((j: any) => !["done", "invoiced", "paid", "cancelled"].includes(j.status)); const n = open[0];
-    if (!n) return reply(jobs.length ? "That was your last one today." : "Nothing on the books today.");
-    return reply(`Next: ${fmtTime(n.starts_at, tz)} ${n.title}\n${n.customer_name || ""}${n.customer_phone ? " " + n.customer_phone : ""}\n${n.address ? n.address + "\n" + mapLink(n.address) : "No address on file"}${n.notes ? "\nNotes: " + n.notes : ""}`);
-  }
-
-  const omw = low.match(/^(?:omw|otw|on my way|on the way|heading over|leaving now|en route)\b\s*(\d{1,3})?/);
-  if (omw) {
-    const jobs = await todays(); const cur = pickCurrent(jobs); if (!cur) return reply("No job on your schedule today to head to.");
-    const r = await call("jobs", { action: "en_route", user_id: userId, appointment_id: cur.appointment_id, job_id: cur.job_id || undefined, minutes: omw[1] ? parseInt(omw[1], 10) : 0 });
-    if (!r?.ok) return reply("Couldn't update that job.");
-    return reply(`${r.texted ? `Told ${first(cur.customer_name)} you're on the way${omw[1] ? `, about ${omw[1]} min` : ""}.` : `Marked on the way (no mobile number to text for ${first(cur.customer_name)}).`}\n${cur.address ? cur.address + "\n" + mapLink(cur.address) : ""}`.trim());
-  }
-  if (/^(here|start|started|starting|arrived|on site|onsite)$/.test(low)) {
-    const jobs = await todays(); const cur = pickCurrent(jobs); if (!cur) return reply("No job on your schedule today.");
-    const r = await call("jobs", { action: "start", user_id: userId, appointment_id: cur.appointment_id, job_id: cur.job_id || undefined });
-    return reply(r?.ok ? `Started ${cur.title} for ${first(cur.customer_name)}. Text DONE when you finish.` : "Couldn't update that job.");
-  }
-  const late = low.match(/^(?:late|running late|running behind|behind)\s*(\d{1,3})?/);
-  if (late) {
-    const jobs = await todays(); const cur = pickCurrent(jobs); if (!cur) return reply("No job on your schedule today.");
-    const mins = late[1] ? parseInt(late[1], 10) : 15;
-    const who = first(cur.customer_name);
-    const r = await call("msg-send", { account_id: accountId, to: cur.customer_phone, body: `${acct.name}: running about ${mins} minutes behind for your ${cur.title.toLowerCase()} today. Sorry for the wait; reply here if that's a problem.` });
-    return reply(r?.ok ? `Told ${who} you're about ${mins} minutes behind.` : `Couldn't text ${who} (no mobile number or texting is off).`);
-  }
-  const note = low.match(/^(?:note|notes)\s+(.+)/s);
-  if (note) {
-    const jobs = await todays(); const cur = pickCurrent(jobs); if (!cur) return reply("No job today to put that on.");
-    const r = await call("jobs", { action: "note", user_id: userId, appointment_id: cur.appointment_id, job_id: cur.job_id || undefined, text: text.replace(/^notes?\s+/i, "") });
-    return reply(r?.ok ? `Noted on ${cur.title} for ${first(cur.customer_name)}.` : "Couldn't save the note.");
-  }
-  if (/^(done|finished|finish|complete|completed|all done|wrapped up|wrapping up|bill it|invoice)$/.test(low)) {
-    const jobs = await todays(); const cur = pickCurrent(jobs); if (!cur) return reply("No job on your schedule today to finish.");
-    const r = await call("jobs", { action: "done", user_id: userId, appointment_id: cur.appointment_id, job_id: cur.job_id || undefined });
-    if (!r?.ok) return reply("Couldn't close that job.");
-    if (r.has_invoice) { const { data: inv } = await supabase.from("invoices").select("id, number, total_cents, status, paid_at").eq("id", r.job.invoice_id).maybeSingle(); if (inv && !inv.paid_at && inv.status !== "void") { await save({ step: "send", job_id: r.job.id, invoice_id: inv.id, total_cents: inv.total_cents, customer: cur.customer_name, phone: cur.customer_phone }); return reply(`${cur.title} for ${first(cur.customer_name)} already has invoice ${inv.number} (${money(inv.total_cents)}). Reply SEND, LATER, or PAID.`); } }
-    const pa = await supabase.from("payment_accounts").select("charges_enabled").eq("account_id", accountId).maybeSingle();
-    const online = acct.settings?.payments?.enabled === true && !!(pa.data as any)?.charges_enabled;
-    await save({ step: "addons", job_id: r.job.id, lines: r.proposed, menu: r.menu, customer: cur.customer_name, phone: cur.customer_phone, online });
-    const lead = r.proposed.some((l: any) => l.needs_price) ? `Finished ${cur.title} for ${first(cur.customer_name)}. I don't have a price for it; reply "price 150" to set it.\n` : `Finished ${cur.title} for ${first(cur.customer_name)}. Here's what I have:\n`;
-    return reply(lead + addonPrompt(st));
-  }
-
-  return ok({ handled: false });
+  return out;
 });
