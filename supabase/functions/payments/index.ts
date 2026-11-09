@@ -76,6 +76,13 @@ async function resolveCaller(req: Request, body?: any): Promise<{ userId: string
   return { userId: user.id, accountId: (me as any).account_id, role: (me as any).role };
 }
 const isAdmin = (role: string) => ["owner", "admin", "manager"].includes(String(role || "").toLowerCase());
+// A team member may act on an invoice they created or whose job is assigned to them; admins on any.
+async function canTouchInvoice(caller: any, inv: any): Promise<boolean> {
+  if (isAdmin(caller.role)) return true;
+  if (inv.created_by && inv.created_by === caller.userId) return true;
+  if (inv.job_id) { const { data: j } = await supabase.from("jobs").select("assigned_user_id").eq("id", inv.job_id).maybeSingle(); if (j?.assigned_user_id === caller.userId) return true; }
+  return false;
+}
 
 async function loadAccount(accountId: string) {
   const { data } = await supabase.from("accounts").select("id, name, industry, settings").eq("id", accountId).maybeSingle();
@@ -322,6 +329,8 @@ Deno.serve(async (req: Request) => {
   if (action === "invoice_update") {
     const id = String(body.id || ""); const { data: inv } = await supabase.from("invoices").select("*").eq("id", id).eq("account_id", acct.id).maybeSingle();
     if (!inv) return json({ ok: false, error: "not_found" }, 404); if (inv.paid_at) return json({ ok: false, error: "already_paid" });
+    if (!(await canTouchInvoice(caller, inv))) return json({ ok: false, error: "not_yours", message: "That invoice belongs to someone else on the team." }, 403);
+    if (body.lines && inv.status !== "draft" && !isAdmin(caller.role)) return json({ ok: false, error: "admins_only", message: "Only an owner or manager can change a sent invoice." }, 403);
     const upd: any = { updated_at: new Date().toISOString() };
     if (body.lines) { const lines = normLines(body.lines); if (!lines.length) return json({ ok: false, error: "no_lines" }, 400); upd.lines = lines; }
     for (const k of ["notes", "customer_name", "customer_phone", "customer_email", "service_address"]) if (body[k] !== undefined) upd[k] = String(body[k] || "").trim() || null;
@@ -332,6 +341,7 @@ Deno.serve(async (req: Request) => {
   if (action === "invoice_send") {
     const id = String(body.id || ""); const { data: inv } = await supabase.from("invoices").select("*").eq("id", id).eq("account_id", acct.id).maybeSingle();
     if (!inv) return json({ ok: false, error: "not_found" }, 404); if (inv.paid_at) return json({ ok: false, error: "already_paid" });
+    if (!(await canTouchInvoice(caller, inv))) return json({ ok: false, error: "not_yours", message: "That invoice belongs to someone else on the team." }, 403);
     const to = String(body.to || inv.customer_phone || "").trim(); const email = String(body.email || inv.customer_email || "").trim();
     const pa = await loadPA(acct.id); const online = acct.settings?.payments?.enabled === true && pa?.charges_enabled === true;
     const link = payUrl(inv.pay_token); const total = money(inv.total_cents);
@@ -355,6 +365,7 @@ Deno.serve(async (req: Request) => {
   if (action === "invoice_mark_paid") {
     const id = String(body.id || ""); const { data: inv } = await supabase.from("invoices").select("*").eq("id", id).eq("account_id", acct.id).maybeSingle();
     if (!inv) return json({ ok: false, error: "not_found" }, 404);
+    if (!(await canTouchInvoice(caller, inv))) return json({ ok: false, error: "not_yours", message: "That invoice belongs to someone else on the team." }, 403);
     const method = ["cash", "check", "card", "other"].includes(body.method) ? body.method : "cash";
     const upd = await markPaid(inv, method, "manual", null, String(body.note || "").slice(0, 200) || null);
     return json({ ok: true, invoice: upd });
@@ -390,6 +401,7 @@ Deno.serve(async (req: Request) => {
   if (action === "invoice_charge_card") {
     const id = String(body.id || ""); const { data: inv } = await supabase.from("invoices").select("*").eq("id", id).eq("account_id", acct.id).maybeSingle();
     if (!inv) return json({ ok: false, error: "not_found" }, 404); if (inv.paid_at) return json({ ok: false, error: "already_paid" });
+    if (!(await canTouchInvoice(caller, inv))) return json({ ok: false, error: "not_yours", message: "That invoice belongs to someone else on the team." }, 403);
     const pa = await loadPA(acct.id);
     if (!stripe || !pa?.charges_enabled || !pa?.stripe_account_id) return json({ ok: false, error: "online_payments_off" });
     const { data: job } = inv.job_id ? await supabase.from("jobs").select("card, customer_name").eq("id", inv.job_id).maybeSingle() : { data: null as any };
@@ -406,6 +418,7 @@ Deno.serve(async (req: Request) => {
   }
 
   if (action === "invoice_void") {
+    if (!isAdmin(caller.role)) return json({ ok: false, error: "admins_only", message: "Only an owner or manager can void an invoice." }, 403);
     const id = String(body.id || ""); const { data: inv } = await supabase.from("invoices").select("*").eq("id", id).eq("account_id", acct.id).maybeSingle();
     if (!inv) return json({ ok: false, error: "not_found" }, 404); if (inv.paid_at) return json({ ok: false, error: "already_paid" });
     const { data } = await supabase.from("invoices").update({ status: "void", updated_at: new Date().toISOString() }).eq("id", id).select("*").maybeSingle();
@@ -416,6 +429,12 @@ Deno.serve(async (req: Request) => {
     const status = body.status ? String(body.status) : null; const limit = Math.min(200, Number(body.limit) || 50);
     let q = supabase.from("invoices").select("*").eq("account_id", acct.id).order("created_at", { ascending: false }).limit(limit);
     if (status) q = q.eq("status", status);
+    // Team members see their own invoices (created by them or on a job assigned to them); owners/managers see all.
+    if (!isAdmin(caller.role) || body.mine) {
+      const { data: myJobs } = await supabase.from("jobs").select("id").eq("account_id", acct.id).eq("assigned_user_id", caller.userId);
+      const ids = (myJobs || []).map((j: any) => j.id);
+      q = ids.length ? q.or(`created_by.eq.${caller.userId},job_id.in.(${ids.join(",")})`) : q.eq("created_by", caller.userId);
+    }
     const { data } = await q; return json({ ok: true, invoices: (data || []).map((i: any) => ({ ...i, pay_url: payUrl(i.pay_token) })) });
   }
 

@@ -131,6 +131,7 @@ Deno.serve(async (req: Request) => {
   if (action === "list") {
     let q = supabase.from("estimates").select("*").eq("account_id", acct.id).order("created_at", { ascending: false }).limit(Math.min(200, Number(body.limit) || 50));
     if (body.status) q = q.eq("status", String(body.status));
+    if (!isAdmin(caller.role) || body.mine) q = q.eq("created_by", caller.userId); // team members see their own estimates
     const { data } = await q; return json({ ok: true, estimates: (data || []).map((e: any) => ({ ...e, url: quoteUrl(e.approve_token) })) });
   }
 
@@ -171,7 +172,7 @@ Deno.serve(async (req: Request) => {
     if (body.to || body.email) await supabase.from("estimates").update({ customer_phone: est.customer_phone, customer_email: est.customer_email }).eq("id", id);
     return json(await doSend(acct, est));
   }
-  if (action === "void") { const { data } = await supabase.from("estimates").update({ status: "void", updated_at: now }).eq("id", id).select("*").maybeSingle(); return json({ ok: true, estimate: data }); }
+  if (action === "void") { if (!isAdmin(caller.role)) return json({ ok: false, error: "admins_only", message: "Only an owner or manager can void an estimate." }, 403); const { data } = await supabase.from("estimates").update({ status: "void", updated_at: now }).eq("id", id).select("*").maybeSingle(); return json({ ok: true, estimate: data }); }
 
   // Approved estimate -> a booked job at exactly the approved lines. new_date YYYY-MM-DD, new_time HH:MM (shop time).
   if (action === "convert") {

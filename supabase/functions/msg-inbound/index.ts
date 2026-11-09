@@ -71,7 +71,7 @@ async function invoke(fn: string, payload: unknown): Promise<any> {
 // Crew detection: is this phone a user on an account that runs by text? (contractors, or features.crew_text)
 async function findCrew(sb: any, from: string, accountId?: string): Promise<{ user_id: string; account_id: string } | null> {
   const l10 = last10(from); if (l10.length !== 10) return null;
-  let q = sb.from("users").select("id, account_id, phone, updated_at, accounts!inner(industry, settings)").not("phone", "is", null).order("updated_at", { ascending: false }).limit(200);
+  let q = sb.from("users").select("id, account_id, phone, updated_at, accounts!inner(industry, settings)").not("phone", "is", null).eq("is_active", true).order("updated_at", { ascending: false }).limit(200);
   if (accountId) q = q.eq("account_id", accountId);
   const { data } = await q;
   const hits = (data || []).filter((u: any) => last10(u.phone) === l10 && (u.accounts?.industry === "contractor" || u.accounts?.settings?.features?.crew_text === true));

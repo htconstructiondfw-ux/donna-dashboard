@@ -252,7 +252,7 @@ Deno.serve(async (req: Request) => {
 
   const providerPath = isSalon || feats.property_management !== true;
   if (providerPath) {
-    const { data: bookable } = await supabase.from("users").select("id, full_name, role, trades, service_zips").eq("account_id", asst.account_id).eq("is_bookable", true).order("created_at");
+    const { data: bookable } = await supabase.from("users").select("id, full_name, role, trades, service_zips").eq("account_id", asst.account_id).eq("is_bookable", true).eq("is_active", true).order("created_at");
     let people = (bookable || []) as any[];
     if (!people.length) {
       // solo shop with nobody flagged bookable: the owner is the stylist and the dashboard hours are theirs

@@ -210,7 +210,7 @@ try { window.sessionStorage.setItem('__t','1'); window.sessionStorage.removeItem
 const db = IMP
   ? supabase.createClient(SUPABASE_URL, SUPABASE_KEY, { auth:{ persistSession:true, autoRefreshToken:true, detectSessionInUrl:false, storageKey:'sb-donna-imp', storage: impStore } })
   : supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
-let pendingRecovery = !IMP && /type=recovery/i.test(location.hash || "");
+let pendingRecovery = !IMP && (/type=(recovery|invite|magiclink)/i.test(location.hash || "") || /[?&]invited=1/.test(location.search||""));
 
 const DEFAULT_NAME = "Donna";
 const DAYS = ["Sunday","Monday","Tuesday","Wednesday","Thursday","Friday","Saturday"];
@@ -431,16 +431,17 @@ function reSettings(){ return (state.account&&state.account.settings&&state.acco
 // Solo vs team is driven by the plan: starter is solo, Pro/Enterprise is a team.
 function salonMode(){ return teamAllowed() ? 'team' : 'solo'; }
 function isSolo(){ return salonOn() && salonMode()==='solo'; }
-function showStaff(){ return salonOn() && isManager() && salonMode()==='team'; }
+function showStaff(){ return isManager() && teamAllowed(); }
 // What this salon calls the people who take appointments (stylist/technician/barber/…).
-function providerLabel(){ return String((state.account&&state.account.settings&&state.account.settings.provider_label)||'stylist').toLowerCase(); }
+function providerLabel(){ const ac=state.account||{}; const s=ac.settings||{}; if(s.provider_label) return String(s.provider_label).toLowerCase(); const ind=String(s.industry||ac.industry||'').toLowerCase(); const f=s.features||{}; if(ind==='contractor') return 'technician'; if(ind==='real_estate'||f.real_estate) return 'agent'; if(f.property_management||ind==='property_management') return 'property manager'; if(f.salon||ind==='salon') return 'stylist'; return 'team member'; }
+function bookableLabel(){ const ac=state.account||{}; const s=ac.settings||{}; const ind=String(s.industry||ac.industry||'').toLowerCase(); const f=s.features||{}; if(ind==='contractor') return ['Takes jobs', `${aName()} can book and dispatch jobs to this person.`]; if(ind==='real_estate'||f.real_estate) return ['Takes showings', `${aName()} can book showings and route leads to this agent.`]; if(f.property_management||ind==='property_management') return ['Takes visits', `${aName()} can book inspections and visits with this manager.`]; return ['Takes appointments', `${aName()} can book clients with this person.`]; }
 function providerLabelCap(){ const s=providerLabel(); return s.charAt(0).toUpperCase()+s.slice(1); }
 function providerLabelPlural(){ return providerLabel()+'s'; }
 // Team mode (multiple providers) is a Pro feature; starter is solo-only.
 function teamAllowed(){ const p=String((state.account&&state.account.plan)||'').toLowerCase(); return p==='pro'||p==='enterprise'; }
 function renderApp(){
   const mgr=isManager();
-  if(!mgr && !['today','schedule','appointments','clients','messages','waitlist','mylink','jobs','account'].includes(state.view)) state.view='today';
+  if(!mgr && !['today','schedule','appointments','clients','messages','waitlist','mylink','jobs','account','listings','leads','requests','properties'].includes(state.view)) state.view='today';
   // A solo owner lives in their day; land there on first load, then leave navigation free.
   if(mgr && isSolo() && !state._homed){ state._homed=true; if(state.view==='assistant') state.view='today'; }
   if(mgr && new URLSearchParams(location.search).get('calendar')) state.view='settings';
@@ -449,7 +450,7 @@ function renderApp(){
   if(mgr){
     const pm=pmMode();
     navConfig=[["assistant","Assistant",I.bot],["schedule","Schedule",I.cal],["types",pm?"Visit types":(salonOn()?"Services":"Appointment types"),I.tag]];
-    if(showStaff()) navConfig.push(["staff","Staff",I.users]);
+    if(showStaff()) navConfig.push(["staff","Team",I.users]);
     navConfig.push(["knowledge","Knowledge",I.book],["booking",pm?"Self-scheduling":"Booking page",I.link]);
     if(!pm) navConfig.push(["intake","Intake forms",I.clip],["promotions","Promotions",I.promo]);
     navConfig.push(["notifications","Notifications",I.bell],["settings","Settings",I.gear]);
@@ -470,6 +471,9 @@ function renderApp(){
     if(salonOn()) navConfig.splice(3,0,["waitlist","Waitlist",I.clock]);
     if(salonOn()) navConfig.push(["mylink","My booking link",I.link]);
     if(paymentsOn()) navConfig.splice(1,0,["jobs","Jobs & money",I.card]);
+    // Agents: their listings, leads and documents. Property managers: their properties and requests. (Rows are filtered server-side.)
+    if(realEstateOn()){ navConfig.splice(1,0,["listings","My listings",I.home],["leads","My leads & documents",I.sign]); navConfig=navConfig.filter(n=>n[0]!=='clients'); }
+    if(propertyOn()){ navConfig.splice(1,0,["requests",realEstateOn()?"Maintenance requests":"Service requests",I.wrench],["properties","My properties",I.building]); }
     navConfig.push(["account","My account",I.gear]);
     navActivity=[];
   }
@@ -491,7 +495,7 @@ function renderApp(){
     </aside>
     <main class="main">
       <div class="topbar">
-        <div class="crumbs">${['settings','notifications','account'].includes(state.view)?'Account':(['today','messages','appointments','waitlist','calls','contacts','clients','gaps','conversations','requests','leads'].includes(state.view)?'Activity':'Configure')} · <b>${esc(({today:"Today",assistant:"Assistant",schedule:"Schedule",types:(pmMode()?"Visit types":(salonOn()?"Services":"Appointment types")),staff:"Staff",messages:"Phone messages",appointments:(pmMode()?"Visits & appointments":"Appointments"),settings:"Settings",notifications:"Notifications",calls:"Calls",knowledge:"Knowledge",contacts:(salonOn()?"Clients":"Contacts"),clients:"Clients",gaps:"Open questions",conversations:"Inbox",waitlist:"Waitlist",promotions:"Promotions",booking:(pmMode()?"Self-scheduling":"Booking page"),mylink:"My booking link",intake:"Intake forms",properties:"Properties",contractors:"Contractors",requests:"Service requests",listings:"Listings",leads:"Leads & documents",account:"My account"})[state.view])}</b></div>
+        <div class="crumbs">${['settings','notifications','account'].includes(state.view)?'Account':(['today','messages','appointments','waitlist','calls','contacts','clients','gaps','conversations','requests','leads'].includes(state.view)?'Activity':'Configure')} · <b>${esc(({today:"Today",assistant:"Assistant",schedule:"Schedule",types:(pmMode()?"Visit types":(salonOn()?"Services":"Appointment types")),staff:"Team",messages:"Phone messages",appointments:(pmMode()?"Visits & appointments":"Appointments"),settings:"Settings",notifications:"Notifications",calls:"Calls",knowledge:"Knowledge",contacts:(salonOn()?"Clients":"Contacts"),clients:"Clients",gaps:"Open questions",conversations:"Inbox",waitlist:"Waitlist",promotions:"Promotions",booking:(pmMode()?"Self-scheduling":"Booking page"),mylink:"My booking link",intake:"Intake forms",properties:"Properties",contractors:"Contractors",requests:"Service requests",listings:"Listings",leads:"Leads & documents",account:"My account"})[state.view])}</b></div>
         <div class="acct-chip"><span class="av">${initials}</span><div class="who"><b>${esc(state.account.company)}</b><span>${esc((state.account.status||'trial'))} · ${esc(state.account.plan||'starter')}</span></div></div>
       </div>
       <div id="approve-banner"></div>
@@ -504,11 +508,11 @@ function renderApp(){
   paintApproveBanner();
 }
 function renderPage(){
-  if(!isManager() && !['today','schedule','appointments','clients','messages','waitlist','mylink','jobs','account'].includes(state.view)) state.view='today';
+  if(!isManager() && !['today','schedule','appointments','clients','messages','waitlist','mylink','jobs','account','listings','leads','requests','properties'].includes(state.view)) state.view='today';
   if('speechSynthesis' in window) window.speechSynthesis.cancel();
   teardownRealtime();
   document.querySelectorAll(".nav-item[data-v]").forEach(b=>b.classList.toggle("active",b.dataset.v===state.view));
-  $(".crumbs").innerHTML=`${['settings','notifications','account'].includes(state.view)?'Account':(['today','messages','appointments','waitlist','calls','contacts','clients','gaps','conversations','requests','leads'].includes(state.view)?'Activity':'Configure')} · <b>${esc(({today:"Today",assistant:"Assistant",schedule:"Schedule",types:(pmMode()?"Visit types":(salonOn()?"Services":"Appointment types")),staff:"Staff",messages:"Phone messages",appointments:(pmMode()?"Visits & appointments":"Appointments"),settings:"Settings",notifications:"Notifications",calls:"Calls",knowledge:"Knowledge",contacts:(salonOn()?"Clients":"Contacts"),clients:"Clients",gaps:"Open questions",conversations:"Email inbox",waitlist:"Waitlist",promotions:"Promotions",booking:(pmMode()?"Self-scheduling":"Booking page"),mylink:"My booking link",intake:"Intake forms",properties:"Properties",contractors:"Contractors",requests:"Service requests",listings:"Listings",leads:"Leads & documents",account:"My account"})[state.view])}</b>`;
+  $(".crumbs").innerHTML=`${['settings','notifications','account'].includes(state.view)?'Account':(['today','messages','appointments','waitlist','calls','contacts','clients','gaps','conversations','requests','leads'].includes(state.view)?'Activity':'Configure')} · <b>${esc(({today:"Today",assistant:"Assistant",schedule:"Schedule",types:(pmMode()?"Visit types":(salonOn()?"Services":"Appointment types")),staff:"Team",messages:"Phone messages",appointments:(pmMode()?"Visits & appointments":"Appointments"),settings:"Settings",notifications:"Notifications",calls:"Calls",knowledge:"Knowledge",contacts:(salonOn()?"Clients":"Contacts"),clients:"Clients",gaps:"Open questions",conversations:"Email inbox",waitlist:"Waitlist",promotions:"Promotions",booking:(pmMode()?"Self-scheduling":"Booking page"),mylink:"My booking link",intake:"Intake forms",properties:"Properties",contractors:"Contractors",requests:"Service requests",listings:"Listings",leads:"Leads & documents",account:"My account"})[state.view])}</b>`;
   const PAGES={today:pageToday, assistant:pageAssistant, schedule:pageSchedule, types:pageTypes, staff:pageStaff, messages:pageMessages, appointments:renderAppts, settings:pageSettings, notifications:pageNotifications, calls:pageCalls, knowledge:pageKnowledge, contacts:pageContacts, clients:pageClients, gaps:pageGaps, conversations:pageConversations, waitlist:pageWaitlist, promotions:pagePromotions, booking:pageBookingPage, mylink:pageMyLink, intake:pageIntakeForms, properties:pageProperties, contractors:pageContractors, requests:pageServiceRequests, jobs:pageJobs, listings:pageListings, leads:pageLeads, account:pageMyAccount};
   const LOADERS={today:loadAppointments, appointments:loadAppointments, messages:loadMessages, calls:loadCalls, contacts:loadContacts, clients:loadContacts, gaps:loadGaps, conversations:loadConversations, staff:loadStaff, waitlist:loadWaitlist};
   const v=state.view;
@@ -1018,7 +1022,7 @@ async function seedPmVisitTypes(){
 
 /* ===================== STAFF PAGE (salon) ===================== */
 async function loadStaff(){
-  const { data } = await db.from('users').select('id,full_name,email,title,role,is_bookable,phone,pronunciation,trades,service_zips').eq('account_id', state.account.id).order('created_at');
+  const { data } = await db.from('users').select('id,full_name,email,title,role,is_bookable,phone,pronunciation,trades,service_zips,is_active,deactivated_at').eq('account_id', state.account.id).order('created_at');
   state.staff = data||[];
 }
 function contractorOn(){ const s=(state.account&&state.account.settings)||{}; return String(s.industry||state.account&&state.account.industry||'')==='contractor'; }
@@ -1039,18 +1043,23 @@ async function saveDispatch(id){
   if(!error){ const r=(state.staff||[]).find(s=>s.id===id); if(r){ r.trades=trades; r.service_zips=zips; } if(m){ m.style.color='var(--ok)'; m.textContent='Saved'; setTimeout(()=>{ if(m) m.textContent=''; },1400); } }
   else if(m){ m.style.color='var(--danger)'; m.textContent='Error'; }
 }
-function roleLabel(u){ return ['owner','admin'].includes(u.role) ? (u.role==='owner'?'Owner':'Manager') : providerLabelCap(); }
+// People on the team who can own listings / properties / jobs (active, any role). Loaded lazily for assignment selects.
+async function ensureTeam(){ if(!(state.staff&&state.staff.length)){ try{ await loadStaff(); }catch(_e){} } return (state.staff||[]).filter(u=>u.is_active!==false); }
+function teamOpts(sel, blank){ return `<option value="">${esc(blank||'—')}</option>`+(state.staff||[]).filter(u=>u.is_active!==false||u.id===sel).map(u=>`<option value="${u.id}" ${sel===u.id?'selected':''}>${esc(u.full_name||u.email)}${u.role==='owner'?' (owner)':''}</option>`).join(''); }
+function teamName(id){ if(!id) return ''; const u=(state.staff||[]).find(x=>x.id===id); return u?(u.full_name||u.email):''; }
+function roleLabel(u){ return ['owner','admin'].includes(u.role) ? (u.role==='owner'?'Owner':'Manager') : (u.title||providerLabelCap()); }
 function staffRowHTML(u){
-  const you=u.id===state.owner.id, mgr=['owner','admin'].includes(u.role), lbl=roleLabel(u);
-  const book = u.is_bookable ? '<span class="pill ok">Takes bookings</span>' : '<span class="pill">Not bookable</span>';
-  const toggle = `<button class="btn sm" data-book="${u.id}" data-val="${u.is_bookable?'0':'1'}">${u.is_bookable?'Stop bookings':'Make bookable'}</button>`;
-  const xfer=`<div style="margin-top:7px;display:flex;gap:6px;align-items:center;flex-wrap:wrap"><span style="font-size:11.5px;color:var(--muted)">Transfer calls to</span><input class="inp" data-phone="${u.id}" value="${esc(u.phone||'')}" placeholder="+18175551234" style="max-width:168px;font-size:12.5px;padding:5px 9px"><button class="btn sm" data-savephone="${u.id}">Save</button><span class="phone-msg" data-msg="${u.id}" style="font-size:11.5px;color:var(--muted)"></span></div>`
+  const you=u.id===state.owner.id, mgr=['owner','admin'].includes(u.role), lbl=roleLabel(u), off=u.is_active===false;
+  const book = off ? '' : (u.is_bookable ? `<span class="pill ok">${esc(bookableLabel()[0])}</span>` : '<span class="pill">Not bookable</span>');
+  const toggle = off ? '' : `<button class="btn sm" data-book="${u.id}" data-val="${u.is_bookable?'0':'1'}">${u.is_bookable?'Stop bookings':'Make bookable'}</button>`;
+  const act = (you||u.role==='owner') ? '' : (off ? `<button class="btn sm" data-react="${u.id}">Reactivate</button>` : `<button class="btn sm" data-resend="${u.id}" title="Email them a link to set a new password">Send login link</button><button class="btn sm danger" data-deact="${u.id}">Deactivate</button>`);
+  const xfer= off ? '' : `<div style="margin-top:7px;display:flex;gap:6px;align-items:center;flex-wrap:wrap"><span style="font-size:11.5px;color:var(--muted)">Transfer calls to</span><input class="inp" data-phone="${u.id}" value="${esc(u.phone||'')}" placeholder="+18175551234" style="max-width:168px;font-size:12.5px;padding:5px 9px"><button class="btn sm" data-savephone="${u.id}">Save</button><span class="phone-msg" data-msg="${u.id}" style="font-size:11.5px;color:var(--muted)"></span></div>`
     + (u.is_bookable?`<div style="margin-top:6px;display:flex;gap:6px;align-items:center;flex-wrap:wrap"><span style="font-size:11.5px;color:var(--muted)" title="How ${esc(aName())} says the first name on the phone">Said like</span><input class="inp" data-pron="${u.id}" value="${esc(u.pronunciation||'')}" placeholder="e.g. ahn, twong" style="max-width:168px;font-size:12.5px;padding:5px 9px"><button class="btn sm" data-savepron="${u.id}">Save</button><span data-pronmsg="${u.id}" style="font-size:11.5px;color:var(--muted)"></span></div>`:'')
     + dispatchRowHTML(u);
-  return `<div class="staff-row">
-    <div class="staff-main"><b>${esc(u.full_name||u.email)}${you?' <small style="display:inline;color:var(--muted-2)">(you)</small>':''}</b><small>${esc(u.email)}${u.title?' · '+esc(u.title):''}</small>${xfer}</div>
-    <div class="staff-meta"><span class="pill ${mgr?'mgr':''}">${lbl}</span>${book}</div>
-    <div class="staff-act">${toggle}</div>
+  return `<div class="staff-row" style="${off?'opacity:.55':''}">
+    <div class="staff-main"><b>${esc(u.full_name||u.email)}${you?' <small style="display:inline;color:var(--muted-2)">(you)</small>':''}</b><small>${esc(u.email)}${off?' · deactivated':''}</small>${xfer}</div>
+    <div class="staff-meta"><span class="pill ${mgr?'mgr':''}">${esc(lbl)}</span>${book}</div>
+    <div class="staff-act" style="display:flex;gap:6px;flex-wrap:wrap;justify-content:flex-end">${toggle}${act}</div>
   </div>`;
 }
 function normPhone(s){ let v=String(s||'').trim(); if(!v) return ''; if(v[0]==='+') return '+'+v.slice(1).replace(/\D/g,''); const d=v.replace(/\D/g,''); return d.length===10 ? '+1'+d : (d?('+'+d):''); }
@@ -1062,36 +1071,68 @@ async function saveStaffPhone(id){
   if(!error){ const r=(state.staff||[]).find(s=>s.id===id); if(r) r.phone=val; if(id===state.owner.id) state.owner.phone=val; if(m){ m.style.color='var(--ok)'; m.textContent=val?'Saved':'Cleared'; setTimeout(()=>{ if(m) m.textContent=''; },1400); } }
   else if(m){ m.style.color='var(--danger)'; m.textContent='Error'; }
 }
+function teamIntro(){
+  const ac=state.account||{}; const s=ac.settings||{}; const ind=String(s.industry||ac.industry||'').toLowerCase(); const f=s.features||{};
+  if(ind==='contractor') return `Give each technician their own login. They get the phone app with their own jobs for the day, send invoices that pay into the company account, and see only their own work; you see everyone's jobs and money. Managers see everything but can't change company settings.`;
+  if(ind==='real_estate'||f.real_estate) return `Give each agent their own login. Assign listings to an agent and ${esc(aName())} texts that agent when a showing is booked or a document is signed; agents see their own listings, leads and documents, the broker sees everything.`;
+  if(f.property_management||ind==='property_management') return `Give each property manager their own login. Assign properties to a manager on the property page; they see their properties' requests, residents and meetings and get paged for them. Owners and managers with the Manager role see the whole portfolio.`;
+  return `Give each ${providerLabel()} their own login. They see only their own schedule and bookings; you see everyone's. Mark who takes appointments so ${esc(aName())} books the right person, and add how to say a name when it isn't obvious.`;
+}
 function pageStaff(){
-  const staff=state.staff||[];
+  const staff=state.staff||[]; const [bl,bs]=bookableLabel();
   $("#page").innerHTML=`
   <div class="page">
-    <div class="page-head"><h1>Staff</h1><p>Give each ${providerLabel()} their own login. They see only their own schedule and bookings; you see everyone's. Mark who takes appointments so ${esc(aName())} books the right person, and add how to say a name when it isn't obvious so ${esc(aName())} pronounces it right on the phone.</p></div>
+    <div class="page-head"><h1>Team</h1><p>${teamIntro()}</p></div>
     <div class="card"><div class="card-h"><h2>Your team</h2><button class="btn sm" id="st-refresh">Refresh</button></div>
       <div id="staff-list">${staff.length?staff.map(staffRowHTML).join(""):`<div class="empty">${I.users}<div>Loading your team…</div></div>`}</div>
+      <div id="st-list-msg" style="font-size:12.5px;color:var(--muted);min-height:16px;margin-top:6px"></div>
     </div>
     <div class="card">
-      <div class="card-h"><h2>Add a ${providerLabel()}</h2></div>
+      <div class="card-h"><h2>Add someone</h2></div>
       <div class="grid-2">
         <div class="field"><label class="lab">Full name</label><input class="inp" id="st-name" placeholder="e.g. Jordan Lee"></div>
-        <div class="field"><label class="lab">Login email</label><input class="inp" id="st-email" type="email" placeholder="jordan@yoursalon.com"></div>
+        <div class="field"><label class="lab">Login email</label><input class="inp" id="st-email" type="email" placeholder="jordan@yourcompany.com"></div>
       </div>
       <div class="grid-2">
-        <div class="field"><label class="lab">Temporary password <span class="sub">Share it with them; they can change it later</span></label>
-          <div style="display:flex;gap:8px"><input class="inp" id="st-pass" placeholder="at least 8 characters"><button class="btn sm" id="st-gen" type="button">Generate</button></div>
+        <div class="field"><label class="lab">Role</label><select class="inp" id="st-role"><option value="member">${esc(providerLabelCap())} — sees their own work</option><option value="admin">Manager — sees everything</option></select></div>
+        <div class="field"><label class="lab">Cell phone <span class="sub">for transfers and pages (optional)</span></label><input class="inp" id="st-phone" placeholder="+18175551234"></div>
+      </div>
+      <div class="grid-2">
+        <div class="field"><label class="lab">How they sign in</label>
+          <select class="inp" id="st-how"><option value="invite">Email them a link to set their own password</option><option value="password">I'll give them a temporary password</option></select>
+          <div id="st-pass-wrap" style="display:none;margin-top:8px"><div style="display:flex;gap:8px"><input class="inp" id="st-pass" placeholder="at least 8 characters"><button class="btn sm" id="st-gen" type="button">Generate</button></div></div>
         </div>
-        <div class="field"><label class="switch" style="margin-top:22px"><input type="checkbox" id="st-book" checked><span class="track"></span><span class="txt">Takes appointments<small>${esc(aName())} can book clients with this person.</small></span></label></div>
+        <div class="field"><label class="switch" style="margin-top:22px"><input type="checkbox" id="st-book" checked><span class="track"></span><span class="txt">${esc(bl)}<small>${bs}</small></span></label></div>
       </div>
       <div id="st-msg" style="font-size:12.5px;color:var(--muted);min-height:16px;margin:4px 0"></div>
-      <div><button class="btn primary" id="st-add">+ Add ${providerLabel()}</button></div>
+      <div><button class="btn primary" id="st-add">+ Add to the team</button></div>
     </div>
   </div>`;
   $("#st-refresh").onclick=async()=>{ const b=$("#st-refresh"); b.disabled=true; b.textContent="…"; await loadStaff(); pageStaff(); };
   $("#st-gen").onclick=()=>{ $("#st-pass").value=genPassword(); };
+  $("#st-how").onchange=()=>{ $("#st-pass-wrap").style.display=$("#st-how").value==='password'?'block':'none'; };
   $("#st-add").onclick=addStaff;
   bindBookToggles();
 }
-function bindBookToggles(){ document.querySelectorAll('#staff-list [data-book]').forEach(b=>b.onclick=()=>toggleBookable(b.dataset.book, b.dataset.val==='1')); document.querySelectorAll('#staff-list [data-savephone]').forEach(b=>b.onclick=()=>saveStaffPhone(b.dataset.savephone)); document.querySelectorAll('#staff-list [data-savepron]').forEach(b=>b.onclick=()=>saveStaffPron(b.dataset.savepron)); document.querySelectorAll('#staff-list [data-savedispatch]').forEach(b=>b.onclick=()=>saveDispatch(b.dataset.savedispatch)); }
+function bindBookToggles(){
+  document.querySelectorAll('#staff-list [data-book]').forEach(b=>b.onclick=()=>toggleBookable(b.dataset.book, b.dataset.val==='1'));
+  document.querySelectorAll('#staff-list [data-savephone]').forEach(b=>b.onclick=()=>saveStaffPhone(b.dataset.savephone));
+  document.querySelectorAll('#staff-list [data-savepron]').forEach(b=>b.onclick=()=>saveStaffPron(b.dataset.savepron));
+  document.querySelectorAll('#staff-list [data-savedispatch]').forEach(b=>b.onclick=()=>saveDispatch(b.dataset.savedispatch));
+  document.querySelectorAll('#staff-list [data-deact]').forEach(b=>b.onclick=()=>staffAction(b,'deactivate'));
+  document.querySelectorAll('#staff-list [data-react]').forEach(b=>b.onclick=()=>staffAction(b,'reactivate'));
+  document.querySelectorAll('#staff-list [data-resend]').forEach(b=>b.onclick=()=>staffAction(b,'resend_invite'));
+}
+async function staffAction(btn, action){
+  const id=btn.dataset.deact||btn.dataset.react||btn.dataset.resend; const o=btn.textContent; btn.disabled=true; btn.textContent='…';
+  let r=null; try{ r=(await db.functions.invoke("create-staff",{body:{action, user_id:id}})).data; }catch(_e){ r=null; }
+  btn.disabled=false; btn.textContent=o;
+  const m=$("#st-list-msg"); const say=(t,c)=>{ if(m){ m.style.color=c||'var(--muted)'; m.textContent=t; setTimeout(()=>{ if(m&&m.textContent===t) m.textContent=''; },4000); } };
+  if(!(r&&r.ok)){ say((r&&r.error)||"That didn't go through.",'var(--danger)'); return; }
+  if(action==='resend_invite'){ say('Login link sent.','var(--ok)'); return; }
+  say(action==='deactivate'?'Deactivated — they can no longer sign in.':'Reactivated.','var(--ok)');
+  await loadStaff(); const el=$("#staff-list"); if(el){ el.innerHTML=(state.staff||[]).map(staffRowHTML).join(""); bindBookToggles(); }
+}
 async function saveStaffPron(id){
   const inp=document.querySelector(`[data-pron="${id}"]`); const m=document.querySelector(`[data-pronmsg="${id}"]`);
   if(!inp) return; const val=inp.value.trim().toLowerCase().slice(0,40); inp.value=val;
@@ -1103,19 +1144,19 @@ async function saveStaffPron(id){
 function genPassword(){ const c="ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnpqrstuvwxyz23456789"; let s=""; const a=crypto.getRandomValues(new Uint32Array(12)); for(let i=0;i<12;i++) s+=c[a[i]%c.length]; return s; }
 async function toggleBookable(id,val){ await db.from('users').update({is_bookable:val}).eq('id',id); if(id===state.owner.id) state.owner.bookable=val; await loadStaff(); const el=$("#staff-list"); if(el){ el.innerHTML=(state.staff||[]).map(staffRowHTML).join(""); bindBookToggles(); } }
 async function addStaff(){
-  const name=$("#st-name").value.trim(), email=$("#st-email").value.trim().toLowerCase(), pass=$("#st-pass").value, book=$("#st-book").checked;
+  const name=$("#st-name").value.trim(), email=$("#st-email").value.trim().toLowerCase(), how=$("#st-how").value, pass=$("#st-pass").value, book=$("#st-book").checked, role=$("#st-role").value, phone=normPhone($("#st-phone").value);
   const msg=$("#st-msg"); const set=(t,c)=>{ if(msg){ msg.style.color=c||"var(--muted)"; msg.textContent=t; } };
   if(!name){ set("Enter their name.","var(--danger)"); return; }
   if(!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)){ set("Enter a valid login email.","var(--danger)"); return; }
-  if((pass||"").length<8){ set("Password must be at least 8 characters.","var(--danger)"); return; }
-  const btn=$("#st-add"); btn.disabled=true; btn.textContent="Adding…"; set("Creating the login…");
-  let r=null; try{ r=(await db.functions.invoke("create-staff",{body:{full_name:name,email,password:pass,is_bookable:book}})).data; }catch(_e){ r=null; }
-  btn.disabled=false; btn.textContent="+ Add "+providerLabel();
+  if(how==='password' && (pass||"").length<8){ set("Password must be at least 8 characters.","var(--danger)"); return; }
+  const btn=$("#st-add"); btn.disabled=true; btn.textContent="Adding…"; set(how==='invite'?"Creating the login and emailing the link…":"Creating the login…");
+  let r=null; try{ r=(await db.functions.invoke("create-staff",{body:{full_name:name,email,password:how==='password'?pass:undefined,invite:how==='invite',is_bookable:book,role,phone:phone||undefined}})).data; }catch(_e){ r=null; }
+  btn.disabled=false; btn.textContent="+ Add to the team";
   if(r&&r.ok){
-    set(`Added ${name}. Share these so they can sign in — email: ${email}  ·  password: ${pass}`,"var(--ok)");
-    $("#st-name").value=""; $("#st-email").value=""; $("#st-pass").value="";
+    set(how==='invite' ? `Added ${name}. They've been emailed a link to set their password (check spam if it doesn't show up in a few minutes).` : `Added ${name}. Share these so they can sign in — email: ${email}  ·  password: ${pass}`,"var(--ok)");
+    $("#st-name").value=""; $("#st-email").value=""; $("#st-pass").value=""; $("#st-phone").value="";
     await loadStaff(); const el=$("#staff-list"); if(el){ el.innerHTML=(state.staff||[]).map(staffRowHTML).join(""); bindBookToggles(); }
-  } else { set((r&&r.error)||("Couldn't add the "+providerLabel()+". Try again."),"var(--danger)"); }
+  } else { set((r&&r.error)||("Couldn't add them. Try again."),"var(--danger)"); }
 }
 
 /* ===================== MESSAGES PAGE ===================== */
@@ -1473,7 +1514,7 @@ function pageContacts(){
     .c-meta b{color:var(--ink-2);font-weight:500}
     .c-sum{color:var(--muted);font-size:12.5px;margin-top:6px;font-style:italic}
     .c-actions{display:flex;gap:7px;margin-top:11px;flex-wrap:wrap}
-    .c-actions .btn.danger{color:var(--danger);border-color:#e7bcb2}
+    .c-actions .btn.danger,.staff-act .btn.danger{color:var(--danger);border-color:#e7bcb2}
     .c-edit{margin-top:12px;padding-top:12px;border-top:1px solid var(--line-2);display:none;grid-template-columns:1fr 1fr;gap:9px}
     .c-edit.open{display:grid}
     .c-edit label{font-size:11px;color:var(--muted);font-weight:600;text-transform:uppercase;letter-spacing:.05em;display:block;margin-bottom:3px}
@@ -2277,7 +2318,7 @@ async function pageJobs(){
     }catch(e){ el.innerHTML='<p style="font-size:13px;color:var(--danger)">Could not load.</p>'; } };
   $("#rt-new").onclick=()=>showRouteForm(null); $("#jb-est-filter").onchange=loadEst;
   const loadInv=async()=>{ const el=$("#jb-inv"); const f=$("#jb-filter").value; try{ const { data }=await db.functions.invoke('payments',{ body:{ action:'invoice_list', limit:120 } }); let inv=(data&&data.invoices)||[]; if(f==='open') inv=inv.filter(i=>['draft','sent'].includes(i.status)); if(f==='paid') inv=inv.filter(i=>i.status==='paid'); if(!inv.length){ el.innerHTML=`<p style="font-size:13px;color:var(--muted)">${f==='open'?'Nothing waiting. When a job is done, tap Done on the phone (or text DONE) and the invoice lands here.':'Nothing yet.'}</p>`; return; }
-      el.innerHTML=`<table class="tbl" style="width:100%"><thead><tr><th>Invoice</th><th>Customer</th><th>Work</th><th style="text-align:right">Total</th><th>Status</th><th></th></tr></thead><tbody>${inv.map(i=>`<tr><td><b>${esc(i.number)}</b><div style="font-size:12px;color:var(--muted)">${esc(new Date(i.created_at).toLocaleDateString())}</div></td><td>${esc(i.customer_name||'')}<div style="font-size:12px;color:var(--muted)">${esc(i.customer_phone||i.customer_email||'')}</div></td><td style="font-size:12.5px">${(i.lines||[]).map(l=>esc(l.desc)).join(', ')}</td><td style="text-align:right;font-weight:700">${money(i.total_cents)}</td><td><span class="pill">${i.status==='draft'?'not sent':esc(i.status)}${i.paid_method?' · '+esc(i.paid_method):''}</span></td><td style="white-space:nowrap;text-align:right"><a class="btn sm" href="${esc(i.pay_url)}" target="_blank" rel="noopener">View</a> ${['draft','sent'].includes(i.status)?`<button class="btn sm" data-send="${i.id}">${i.status==='draft'?'Send':'Send again'}</button> <button class="btn sm primary" data-paid="${i.id}">Mark paid</button> <button class="btn sm" data-void="${i.id}" title="Cancel this invoice">Void</button>`:''}</td></tr>`).join('')}</tbody></table>`;
+      el.innerHTML=`<table class="tbl" style="width:100%"><thead><tr><th>Invoice</th><th>Customer</th><th>Work</th><th style="text-align:right">Total</th><th>Status</th><th></th></tr></thead><tbody>${inv.map(i=>`<tr><td><b>${esc(i.number)}</b><div style="font-size:12px;color:var(--muted)">${esc(new Date(i.created_at).toLocaleDateString())}</div></td><td>${esc(i.customer_name||'')}<div style="font-size:12px;color:var(--muted)">${esc(i.customer_phone||i.customer_email||'')}</div></td><td style="font-size:12.5px">${(i.lines||[]).map(l=>esc(l.desc)).join(', ')}</td><td style="text-align:right;font-weight:700">${money(i.total_cents)}</td><td><span class="pill">${i.status==='draft'?'not sent':esc(i.status)}${i.paid_method?' · '+esc(i.paid_method):''}</span></td><td style="white-space:nowrap;text-align:right"><a class="btn sm" href="${esc(i.pay_url)}" target="_blank" rel="noopener">View</a> ${['draft','sent'].includes(i.status)?`<button class="btn sm" data-send="${i.id}">${i.status==='draft'?'Send':'Send again'}</button> <button class="btn sm primary" data-paid="${i.id}">Mark paid</button> ${isManager()?`<button class="btn sm" data-void="${i.id}" title="Cancel this invoice">Void</button>`:''}`:''}</td></tr>`).join('')}</tbody></table>`;
       el.querySelectorAll('[data-send]').forEach(b=>b.onclick=async()=>{ b.disabled=true; const { data }=await db.functions.invoke('payments',{ body:{ action:'invoice_send', id:b.dataset.send } }); if(!(data&&data.ok)){ alert((data&&data.message)||'Could not send.'); b.disabled=false; } loadInv(); });
       el.querySelectorAll('[data-paid]').forEach(b=>b.onclick=async()=>{ const how=prompt('How did they pay? cash / check / card','cash'); if(how===null) return; await db.functions.invoke('payments',{ body:{ action:'invoice_mark_paid', id:b.dataset.paid, method:['cash','check','card'].includes(how.trim().toLowerCase())?how.trim().toLowerCase():'other' } }); loadInv(); });
       el.querySelectorAll('[data-void]').forEach(b=>b.onclick=async()=>{ if(!confirm('Void this invoice? The customer link will show it as cancelled.')) return; await db.functions.invoke('payments',{ body:{ action:'invoice_void', id:b.dataset.void } }); loadInv(); });
@@ -3584,16 +3625,19 @@ async function loadListings(){
   if(error){ el.innerHTML=`<p style="font-size:13px;color:var(--danger)">${esc(error.message)}</p>`; return; }
   state.re.listings=data||[];
   if(!data.length){ el.innerHTML=`<div class="empty">${I.building}<div>No listings here yet. Add one, or import your spreadsheet.</div></div>`; return; }
-  el.innerHTML=`<table class="tbl" style="width:100%"><thead><tr><th>Address</th><th>Type</th><th style="text-align:right">Price</th><th>Beds / baths</th><th>Sq ft</th><th>Status</th><th></th></tr></thead><tbody>${data.map(l=>`<tr>
+  const team=teamAllowed(); if(team) await ensureTeam();
+  el.innerHTML=`<table class="tbl" style="width:100%"><thead><tr><th>Address</th><th>Type</th><th style="text-align:right">Price</th><th>Beds / baths</th><th>Sq ft</th>${team?'<th>Agent</th>':''}<th>Status</th><th></th></tr></thead><tbody>${data.map(l=>`<tr>
     <td><b>${esc(l.address)}</b><div style="font-size:12px;color:var(--muted)">${esc([l.city,l.state,l.zip].filter(Boolean).join(', '))}${l.mls_number?' · MLS '+esc(l.mls_number):''}</div></td>
     <td style="font-size:12.5px">${esc(reLabel(RE_LISTING_TYPES,l.listing_type))}<div style="color:var(--muted)">${esc(reLabel(RE_PROPERTY_TYPES,l.property_type))}</div></td>
     <td style="text-align:right;font-weight:700">${esc(rePrice(l))}</td>
     <td>${l.beds!=null?esc(String(l.beds))+(l.office?' + office':''):'—'} / ${l.baths!=null?esc(String(l.baths))+(l.half_baths?'.'+l.half_baths:''):'—'}</td>
     <td>${l.sqft?Number(l.sqft).toLocaleString():(l.acres?esc(String(l.acres))+' ac':'—')}</td>
+    ${team?`<td>${isManager()?`<select class="inp" data-re-agent="${l.id}" style="display:inline-block;width:auto;padding:3px 6px;font-size:12px">${teamOpts(l.agent_user_id,'Unassigned')}</select>`:esc(teamName(l.agent_user_id)||'Unassigned')}</td>`:''}
     <td><span class="pill" ${l.status==='active'?'style="background:var(--ok);color:#fff"':''}>${esc(reLabel(RE_STATUSES,l.status))}</span>${l.available_on?`<div style="font-size:11.5px;color:var(--muted)">avail ${esc(l.available_on)}</div>`:''}</td>
     <td style="text-align:right;white-space:nowrap"><button class="btn sm" data-re-edit="${l.id}">Edit</button> <select class="inp" data-re-status="${l.id}" style="display:inline-block;width:auto;padding:3px 6px;font-size:12px">${reOpts(RE_STATUSES,l.status)}</select></td></tr>`).join('')}</tbody></table>`;
   el.querySelectorAll('[data-re-edit]').forEach(b=>b.onclick=()=>showListingForm(state.re.listings.find(x=>x.id===b.dataset.reEdit)));
   el.querySelectorAll('[data-re-status]').forEach(s=>s.onchange=async()=>{ await db.from('re_listings').update({ status:s.value, updated_at:new Date().toISOString() }).eq('id',s.dataset.reStatus); loadListings(); });
+  el.querySelectorAll('[data-re-agent]').forEach(s=>s.onchange=async()=>{ await db.from('re_listings').update({ agent_user_id:s.value||null, updated_at:new Date().toISOString() }).eq('id',s.dataset.reAgent); });
 }
 function showListingForm(l){
   l=l||{ listing_type:(reSettings().lines||[]).includes('rentals')&&!(reSettings().lines||[]).includes('residential')?'for_rent':'for_sale', property_type:'single_family', status:'active', state:'TX', features:[], aliases:[], photos:[] };
@@ -3619,6 +3663,7 @@ function showListingForm(l){
       ${!isRent&&!isLand?`<div class="field"><label class="lab">HOA dues <span class="sub">optional</span></label><div style="display:flex;align-items:center;gap:6px"><span style="color:var(--muted)">$</span><input class="inp" id="re-f-hoa" inputmode="decimal" value="${l.hoa_cents!=null?(l.hoa_cents/100):''}"><select class="inp" id="re-f-hoaper" style="max-width:120px">${reOpts([["month","/ month"],["quarter","/ quarter"],["year","/ year"]],l.hoa_period||'year')}</select></div></div>
       <div class="field"><label class="lab">Annual taxes <span class="sub">optional</span></label><div style="display:flex;align-items:center;gap:6px"><span style="color:var(--muted)">$</span><input class="inp" id="re-f-taxes" inputmode="decimal" value="${l.taxes_cents!=null?(l.taxes_cents/100):''}"></div></div>`:''}
       <div class="field"><label class="lab">MLS # <span class="sub">optional</span></label><input class="inp" id="re-f-mls" value="${esc(l.mls_number||'')}"></div>
+      ${teamAllowed()?`<div class="field"><label class="lab">Listing agent <span class="sub">${esc(aName())} texts this person about showings and signed documents</span></label><select class="inp" id="re-f-agent">${teamOpts(l.agent_user_id||(isManager()?'':state.owner.id),'Unassigned (the broker)')}</select></div>`:''}
       <div class="field"><label class="lab">Neighborhood / subdivision <span class="sub">optional</span></label><input class="inp" id="re-f-hood" value="${esc(l.neighborhood||'')}"></div>
       <div class="field" style="grid-column:1/-1"><label class="lab">Description <span class="sub">what ${esc(aName())} says when a caller asks "tell me about it"</span></label><textarea class="inp" id="re-f-desc" rows="3">${esc(l.description||'')}</textarea></div>
       <div class="field"><label class="lab">Features <span class="sub">comma-separated</span></label><input class="inp" id="re-f-features" value="${esc((l.features||[]).join(', '))}" placeholder="granite counters, fenced yard, 2-car garage"></div>
@@ -3657,6 +3702,7 @@ function readListingForm(l){
     mls_number:g('mls')||null, description:g('desc')||null, features:split(g('features'))||[], aliases:split(g('aliases'))||[],
     showing_instructions:g('show')||null, occupied:!!chk('occupied'), notes:g('notes')||null
   });
+  if(g('agent')!==undefined) out.agent_user_id=g('agent')||null; else if(l.agent_user_id!==undefined) out.agent_user_id=l.agent_user_id;
   const opt=(k,v)=>{ if(v!==undefined) out[k]=v; };
   opt('beds',reNum(g('beds'))); opt('baths',reNum(g('baths'))); opt('half_baths',reNum(g('half'))); opt('sqft',reNum(g('sqft'))); opt('year_built',reNum(g('year'))); opt('garage',reNum(g('garage')));
   opt('office',chk('office')); opt('pool',chk('pool'));
@@ -3687,6 +3733,7 @@ function reRowsToListings(rows){
     sqft:col('sqft','sq_ft','square_feet','living_area','livingarea','sqft_total','total_sqft','building_area_total'), lot:col('lot_sqft','lot_size','lot_size_square_feet','lotsizesquarefeet'), acres:col('acres','acreage','lot_size_acres','lotsizeacres'), year:col('year_built','yearbuilt','year'), garage:col('garage','garage_spaces','garagespaces'), office:col('office','study'), pool:col('pool','pool_yn','poolprivateyn','pool_private_yn','pool_features','poolfeatures'),
     pets:col('pets','pet_policy','pets_allowed','petsallowed'), deposit:col('deposit','security_deposit','deposit_amount'), avail:col('available','available_on','available_date','move_in','availability_date','availabilitydate'), lease:col('lease_min_months','min_lease','minimum_lease','lease_term','leaseterm'), status:col('status','standard_status','standardstatus','mls_status','listing_status'),
     mls:col('mls','mls_number','mls_','listing_id','listingid','mls_id'), desc:col('description','remarks','notes_public','public_remarks','publicremarks'), show:col('showing_instructions','showinginstructions','showing','showings'), aliases:col('aliases','also_called','nicknames'), hood:col('neighborhood','subdivision','subdivision_name','subdivisionname'), features:col('features','amenities','interior_features','interiorfeatures'),
+    agent:col('agent','listing_agent','list_agent','listing_agent_name','list_agent_full_name','listagentfullname','list_agent_name','agent_name','agent_email','list_agent_email','listagentemail'),
     // Matrix / RESO split the street address into parts.
     stNum:col('street_number','streetnumber','st_num'), stDirP:col('street_dir_prefix','streetdirprefix','street_direction'), stName:col('street_name','streetname'), stSuf:col('street_suffix','streetsuffix','street_type'), stDirS:col('street_dir_suffix','streetdirsuffix'), unit:col('unit_number','unitnumber','unit','suite') };
   if(ix.address<0&&ix.stName<0) throw new Error('Need an "address" column (or Matrix-style Street Number / Street Name columns).');
@@ -3698,6 +3745,8 @@ function reRowsToListings(rows){
   const composeAddress=r=>{ const parts=[get(r,ix.stNum),get(r,ix.stDirP),get(r,ix.stName),get(r,ix.stSuf),get(r,ix.stDirS)].filter(Boolean); const u=get(r,ix.unit); return parts.join(' ')+(u?(/^(#|apt|unit|ste|suite)/i.test(u)?' '+u:' #'+u):''); };
   const pets=v=>{ v=String(v||'').toLowerCase(); if(!v) return null; if(/no|none/.test(v)&&!/cat|dog/.test(v)) return 'no'; if(/cat/.test(v)&&/dog/.test(v)) return 'cats_dogs'; if(/cat/.test(v)) return 'cats'; if(/dog/.test(v)) return 'dogs'; if(/case|ask|negoti/.test(v)) return 'case_by_case'; return /yes|ok|allow/.test(v)?'case_by_case':null; };
   const get=(r,i)=>i>=0?String(r[i]??'').trim():'';
+  // "Listing Agent" → a login on the team, matched by full name or email; unknown names leave the listing unassigned.
+  const agentId=v=>{ v=String(v||'').trim().toLowerCase(); if(!v) return undefined; const u=(state.staff||[]).find(u=>String(u.full_name||'').toLowerCase()===v||String(u.email||'').toLowerCase()===v); return u?u.id:null; };
   const out=[];
   for(const r of rows.slice(1)){
     const address=get(r,ix.address)||composeAddress(r); if(!address) continue;
@@ -3710,13 +3759,14 @@ function reRowsToListings(rows){
       office:officeFlag, pool:ix.pool>=0?yes(get(r,ix.pool)):false, pets:pets(get(r,ix.pets)), deposit_cents:reCents(get(r,ix.deposit)), available_on:dateStr(get(r,ix.avail)), lease_min_months:reNum(get(r,ix.lease)),
       mls_number:get(r,ix.mls)||null, description:get(r,ix.desc)||null, showing_instructions:get(r,ix.show)||null, neighborhood:get(r,ix.hood)||null,
       aliases:get(r,ix.aliases)?get(r,ix.aliases).split(/[|;]/).map(x=>x.trim()).filter(Boolean):[], features:get(r,ix.features)?get(r,ix.features).split(/[|;,]/).map(x=>x.trim()).filter(Boolean):[] };
+    const ag=agentId(get(r,ix.agent)); if(ag!==undefined) li.agent_user_id=ag;
     out.push(li);
   }
   return out;
 }
 async function reCsvPick(ev){
   const f=ev.target.files&&ev.target.files[0]; if(!f) return; const msg=$("#re-csv-msg"), prev=$("#re-csv-preview");
-  try{ const text=await f.text(); const rows=reParseCsv(text); const items=reRowsToListings(rows);
+  try{ if(teamAllowed()) await ensureTeam(); const text=await f.text(); const rows=reParseCsv(text); const items=reRowsToListings(rows);
     if(!items.length) throw new Error('No rows found.');
     prev.innerHTML=`<div style="font-size:13px;margin-bottom:6px"><b>${items.length}</b> listing${items.length===1?'':'s'} found. First few:</div><table class="tbl" style="width:100%;font-size:12.5px"><thead><tr><th>Address</th><th>Type</th><th>Price</th><th>Beds/baths</th><th>Sq ft</th><th>Status</th></tr></thead><tbody>${items.slice(0,6).map(l=>`<tr><td>${esc(l.address)}, ${esc(l.city||'')} ${esc(l.zip||'')}</td><td>${esc(reLabel(RE_LISTING_TYPES,l.listing_type))} · ${esc(reLabel(RE_PROPERTY_TYPES,l.property_type))}</td><td>${esc(rePrice(l))}</td><td>${l.beds??'—'}${l.office?'+office':''} / ${l.baths??'—'}</td><td>${l.sqft??'—'}</td><td>${esc(reLabel(RE_STATUSES,l.status))}</td></tr>`).join('')}</tbody></table><button class="btn primary" id="re-csv-go" style="margin-top:8px">Import ${items.length}</button>`;
     $("#re-csv-go").onclick=async()=>{ const b=$("#re-csv-go"); b.disabled=true; msg.textContent='Importing…';
@@ -3733,9 +3783,10 @@ async function reCsvPick(ev){
 }
 async function reExportCsv(){
   const { data }=await db.from('re_listings').select('*').eq('account_id',state.account.id).order('address');
-  const cols=['address','city','state','zip','listing_type','property_type','status','price','beds','baths','half_baths','sqft','lot_sqft','acres','year_built','garage','office','pool','pets','deposit','available_on','lease_min_months','mls_number','neighborhood','description','features','aliases','showing_instructions','occupied','notes'];
+  await ensureTeam();
+  const cols=['address','city','state','zip','listing_type','property_type','status','price','beds','baths','half_baths','sqft','lot_sqft','acres','year_built','garage','office','pool','pets','deposit','available_on','lease_min_months','mls_number','neighborhood','description','features','aliases','showing_instructions','occupied','notes','agent'];
   const q=v=>{ v=v==null?'':String(v); return /[",\n]/.test(v)?'"'+v.replace(/"/g,'""')+'"':v; };
-  const lines=[cols.join(',')].concat((data||[]).map(l=>cols.map(c=>{ if(c==='price') return l.price_cents!=null?(l.price_cents/100):''; if(c==='deposit') return l.deposit_cents!=null?(l.deposit_cents/100):''; if(c==='features'||c==='aliases') return (l[c]||[]).join('|'); if(c==='office'||c==='pool'||c==='occupied') return l[c]?'yes':'no'; return l[c]; }).map(q).join(',')));
+  const lines=[cols.join(',')].concat((data||[]).map(l=>cols.map(c=>{ if(c==='price') return l.price_cents!=null?(l.price_cents/100):''; if(c==='deposit') return l.deposit_cents!=null?(l.deposit_cents/100):''; if(c==='features'||c==='aliases') return (l[c]||[]).join('|'); if(c==='office'||c==='pool'||c==='occupied') return l[c]?'yes':'no'; if(c==='agent') return teamName(l.agent_user_id); return l[c]; }).map(q).join(',')));
   const blob=new Blob([lines.join('\n')],{type:'text/csv'}); const a=document.createElement('a'); a.href=URL.createObjectURL(blob); a.download='listings.csv'; a.click();
 }
 
@@ -3765,14 +3816,16 @@ async function loadLeads(){
   const { data, error }=await q; if(error){ el.innerHTML=`<p style="font-size:13px;color:var(--danger)">${esc(error.message)}</p>`; return; }
   state.re.leads=data||[];
   if(!data.length){ el.innerHTML=`<p style="font-size:13px;color:var(--muted)">No leads yet. They appear here as ${esc(aName())} takes calls.</p>`; return; }
-  const money=c=>c==null?'':reMoney(c);
-  el.innerHTML=`<table class="tbl" style="width:100%"><thead><tr><th>Who</th><th>Looking for</th><th>Details</th><th>Status</th><th></th></tr></thead><tbody>${data.map(l=>`<tr>
+  const money=c=>c==null?'':reMoney(c); const team=teamAllowed(); if(team) await ensureTeam();
+  el.innerHTML=`<table class="tbl" style="width:100%"><thead><tr><th>Who</th><th>Looking for</th><th>Details</th>${team?'<th>Agent</th>':''}<th>Status</th><th></th></tr></thead><tbody>${data.map(l=>`<tr>
     <td>${l.hot?'<span class="pill" style="background:#b00020;color:#fff">hot</span> ':''}<b>${esc(l.name||'Unknown')}</b><div style="font-size:12px;color:var(--muted)">${esc(l.phone||'')}${l.email?' · '+esc(l.email):''}</div><div style="font-size:11.5px;color:var(--muted)">${esc(new Date(l.created_at).toLocaleDateString())} · ${esc(l.source||'phone')}${l.iabs_sent_at?' · IABS sent':''}</div></td>
     <td><span class="pill">${esc(reLabel(RE_LEAD_KINDS,l.kind))}</span>${l.re_listings?`<div style="font-size:12.5px;margin-top:3px">${esc(l.re_listings.address)}</div>`:''}${l.property_address?`<div style="font-size:12.5px;margin-top:3px">${esc(l.property_address)}</div>`:''}</td>
     <td style="font-size:12.5px">${[l.timeline?'Timeline: '+l.timeline:'', (l.price_min_cents||l.price_max_cents)?('Budget: '+[money(l.price_min_cents),money(l.price_max_cents)].filter(Boolean).join(' – ')):'', (l.areas||[]).length?'Areas: '+l.areas.join(', '):'', l.beds_wanted?l.beds_wanted+' bed':'', l.move_in?'Move-in '+l.move_in:'', l.preapproved===true?'Pre-approved':l.preapproved===false?'Not pre-approved':'', l.has_agent===true?'Has an agent':'', l.lender_referral?'Wants lender referral':'', l.pets?'Pets: '+l.pets:'', l.household_size?l.household_size+' in household':''].filter(Boolean).map(esc).join(' · ')}${l.notes?`<div style="color:var(--muted);margin-top:3px">${esc(l.notes)}</div>`:''}</td>
+    ${team?`<td>${isManager()?`<select class="inp" data-ld-agent="${l.id}" style="width:auto;padding:3px 6px;font-size:12px">${teamOpts(l.agent_user_id,'Unassigned')}</select>`:esc(teamName(l.agent_user_id)||'Unassigned')}</td>`:''}
     <td><select class="inp" data-ld-status="${l.id}" style="width:auto;padding:3px 6px;font-size:12px">${reOpts(RE_LEAD_STATUS,l.status)}</select></td>
     <td style="text-align:right;white-space:nowrap"><button class="btn sm" data-ld-edit="${l.id}">Edit</button> <button class="btn sm" data-ld-send="${l.id}">Send…</button></td></tr>`).join('')}</tbody></table>`;
   el.querySelectorAll('[data-ld-status]').forEach(s=>s.onchange=async()=>{ await db.from('re_leads').update({ status:s.value, updated_at:new Date().toISOString() }).eq('id',s.dataset.ldStatus); });
+  el.querySelectorAll('[data-ld-agent]').forEach(s=>s.onchange=async()=>{ await db.from('re_leads').update({ agent_user_id:s.value||null, updated_at:new Date().toISOString() }).eq('id',s.dataset.ldAgent); });
   el.querySelectorAll('[data-ld-edit]').forEach(b=>b.onclick=()=>showLeadForm(state.re.leads.find(x=>x.id===b.dataset.ldEdit)));
   el.querySelectorAll('[data-ld-send]').forEach(b=>b.onclick=()=>reSendMenu(state.re.leads.find(x=>x.id===b.dataset.ldSend)));
 }
@@ -3799,6 +3852,7 @@ function showLeadForm(l){
   $("#ld-close").onclick=()=>{ box.style.display='none'; };
   $("#ld-save").onclick=async()=>{ const v=id=>$("#ld-"+id).value.trim();
     const row={ account_id:state.account.id, name:v('name')||null, kind:v('kind'), phone:v('phone')||null, email:v('email')||null, timeline:v('timeline')||null, price_min_cents:reCents(v('min')), price_max_cents:reCents(v('max')), areas:v('areas')?v('areas').split(',').map(x=>x.trim()).filter(Boolean):[], property_address:v('paddr')||null, listing_id:v('listing')||null, hot:$("#ld-hot").checked, preapproved:$("#ld-pre").checked, has_agent:$("#ld-agent").checked, lender_referral:$("#ld-lender").checked, notes:v('notes')||null, source:l.source||'manual', updated_at:new Date().toISOString() };
+    if(!l.id && !isManager()) row.agent_user_id=state.owner.id;
     const res=l.id?await db.from('re_leads').update(row).eq('id',l.id):await db.from('re_leads').insert(row);
     if(res.error){ $("#ld-msg").style.color='var(--danger)'; $("#ld-msg").textContent=res.error.message; return; }
     box.style.display='none'; loadLeads(); };
@@ -3936,6 +3990,7 @@ async function addProperty(){
 async function openProperty(id){
   state.pm.sel=id; paintPropList();
   const box=$("#pm-detail"); if(box) box.innerHTML=`<div class="card"><div class="empty">Loading…</div></div>`;
+  if(teamAllowed()) await ensureTeam();
   const [pr,pe,ec,ci,kn]=await Promise.all([
     db.from('properties').select('*').eq('id',id).maybeSingle(),
     db.from('property_contacts').select('*').eq('property_id',id).order('created_at'),
@@ -3962,6 +4017,7 @@ async function openProperty(id){
     </div>
     ${p.parent_property_id?`<div style="font-size:12.5px;color:var(--muted);margin:-4px 0 10px">Part of <b>${esc(((state.pm.props||[]).find(x=>x.id===p.parent_property_id)||{}).name||'a community')}</b> — community matters route there.</div>`:''}
     ${isHoa&&children.length?`<div style="font-size:12.5px;color:var(--muted);margin:-4px 0 10px">Managed homes/suites inside this community: ${children.map(c=>`<b>${esc(c.name)}</b>`).join(', ')}.</div>`:''}
+    ${teamAllowed()&&isManager()?`<div class="field"><label class="lab">Property manager <span class="sub">${esc(aName())} pages this person for emergencies here; they see this property's requests, people and meetings</span></label><select class="inp" id="pd-manager">${teamOpts(p.manager_user_id,'Unassigned — everyone on the team')}</select></div>`:(p.manager_user_id?`<div style="font-size:12.5px;color:var(--muted);margin:-4px 0 10px">Manager: <b>${esc(teamName(p.manager_user_id)||'')}</b></div>`:'')}
     <div class="field"><label class="lab">Emergency instructions <span class="sub">what ${esc(aName())} should do / say for ${isHoa?'common-area ':''}emergencies here</span></label><textarea class="inp" id="pd-eins" rows="2" placeholder="${isHoa?'e.g. Gate stuck open: call the gate company first. Pool: lock and post closed. Main line break: call the water district.':isCom?'e.g. Elevator entrapment: call Otis 24/7 line, then building engineer. Fire alarm: evacuate, 911, then engineer.':'e.g. Shut-off valve is in the hall closet. Gas smell: leave and call 911 first.'}">${esc(p.emergency_instructions||'')}</textarea></div>
     <div id="pd-typefields">${pmTypeFields('pd', p.property_type, p)}</div>
     <div style="display:flex;align-items:center;gap:12px"><button class="btn primary" id="pd-save">Save details</button><span id="pd-msg" style="font-size:12.5px;color:var(--muted)"></span></div>
@@ -4072,7 +4128,8 @@ async function openProperty(id){
 }
 async function savePropertyDetails(id){
   const type=$("#pd-type").value;
-  const patch=Object.assign({ name:$("#pd-name").value.trim(), property_type:type, address:$("#pd-addr").value.trim()||null, units_count:pmNum($("#pd-units").value), emergency_instructions:$("#pd-eins").value.trim()||null }, pmReadTypeFields('pd', type));
+  const patch=Object.assign({ name:$("#pd-name").value.trim(), property_type:type, manager_user_id:($("#pd-manager")?($("#pd-manager").value||null):undefined), address:$("#pd-addr").value.trim()||null, units_count:pmNum($("#pd-units").value), emergency_instructions:$("#pd-eins").value.trim()||null }, pmReadTypeFields('pd', type));
+  if(patch.manager_user_id===undefined) delete patch.manager_user_id;
   const msg=$("#pd-msg"); msg.style.color='var(--muted)'; msg.textContent='Saving…';
   const { error }=await db.from('properties').update(patch).eq('id',id);
   if(error){ msg.style.color='var(--danger)'; msg.textContent=error.message; return; }
