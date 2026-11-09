@@ -29,9 +29,26 @@ const cents = (v: unknown): number | null => { const n = num(v); return n == nul
 const truthy = (v: unknown) => v === true || ["true", "yes", "1", "y"].includes(String(v ?? "").trim().toLowerCase());
 const money0 = (c: number) => `$${Math.round(c / 100).toLocaleString("en-US")}`;
 const spokenNum = (n: number) => Number.isInteger(n) ? String(n) : String(n).replace(".5", " and a half");
+// Addresses the way a person says them, for anything Donna SPEAKS (texts keep the written form): "3907 Belle Maison Dr"
+// -> "3907 Belle Maison Drive", "N" -> "North", "#204" -> "unit 204". Otherwise the voice reads "Dr" as "Doctor".
+const SUFFIX: Record<string, string> = { dr: "Drive", st: "Street", ave: "Avenue", av: "Avenue", blvd: "Boulevard", rd: "Road", ln: "Lane", ct: "Court", cir: "Circle", pl: "Place", pkwy: "Parkway", hwy: "Highway", trl: "Trail", ter: "Terrace", terr: "Terrace", way: "Way", loop: "Loop", xing: "Crossing", bnd: "Bend", cv: "Cove", pt: "Point", sq: "Square", holw: "Hollow", rdg: "Ridge", mdw: "Meadow", mdws: "Meadows", hts: "Heights", vly: "Valley", vw: "View", crk: "Creek", frk: "Fork", expy: "Expressway", fwy: "Freeway", ste: "suite", apt: "apartment", fm: "F M" };
+const DIR: Record<string, string> = { n: "North", s: "South", e: "East", w: "West", ne: "Northeast", nw: "Northwest", se: "Southeast", sw: "Southwest" };
+function spokenAddr(a: string): string {
+  const toks = String(a || "").replace(/,/g, " , ").split(/\s+/).filter(Boolean);
+  return toks.map((t, i) => {
+    const bare = t.replace(/\.$/, ""); const k = bare.toLowerCase();
+    if (/^#\d+/.test(bare)) return "unit " + bare.slice(1);
+    const next = (toks[i + 1] || "").replace(/\.$/, ""); const nk = next.toLowerCase();
+    const endOfStreet = i === toks.length - 1 || next === "," || /^#/.test(next) || ["ste", "suite", "apt", "unit", "bldg"].includes(nk) || !!DIR[nk];
+    if (i > 0 && SUFFIX[k] && (endOfStreet || ["ste", "apt"].includes(k))) return SUFFIX[k];
+    if (k === "st" && i > 0 && next && /^[A-Z]/.test(next) && !endOfStreet) return "Saint";
+    if (i > 0 && DIR[k] && (i === 1 || i === toks.length - 1 || SUFFIX[nk])) return DIR[k];
+    return t;
+  }).join(" ").replace(/\s,/g, ",");
+}
 function describe(l: any, brief = false): string {
   const price = l.price_cents == null ? "" : l.listing_type === "for_rent" ? `${money0(l.price_cents)} a month` : l.listing_type === "for_lease" ? (l.price_period === "sqft_year" ? `$${(l.price_cents / 100).toFixed(2)} per square foot per year` : `${money0(l.price_cents)} a month`) : money0(l.price_cents);
-  const where = `${l.address}${l.city ? " in " + l.city : ""}`;
+  const where = `${spokenAddr(l.address)}${l.city ? " in " + l.city : ""}`;
   if (l.property_type === "land" || l.property_type === "farm_ranch") return `${where}: ${l.acres ? spokenNum(Number(l.acres)) + " acres" : l.lot_sqft ? Number(l.lot_sqft).toLocaleString() + " square foot lot" : "land"}${price ? ", " + price : ""}${brief ? "" : l.description ? ". " + l.description : ""}`;
   if (l.property_type === "commercial") return `${where}: ${l.sqft ? Number(l.sqft).toLocaleString() + " square feet of " : ""}commercial space${price ? ", " + price : ""}${brief ? "" : l.description ? ". " + l.description : ""}`;
   const rooms = [l.beds != null ? `${spokenNum(Number(l.beds))} bedroom${Number(l.beds) === 1 ? "" : "s"}${l.office ? " plus an office" : ""}` : "", l.baths != null ? `${spokenNum(Number(l.baths))}${l.half_baths ? " and a half" : ""} bath${Number(l.baths) === 1 && !l.half_baths ? "" : "s"}` : "", l.sqft ? `about ${Number(l.sqft).toLocaleString()} square feet` : ""].filter(Boolean).join(", ");
@@ -125,7 +142,7 @@ Deno.serve(async (req: Request) => {
     if (!rows.length) { const { count } = await supabase.from("re_listings").select("id", { count: "exact", head: true }).eq("account_id", acct.id).in("status", ["coming_soon", "active", "pending"]); return say(count ? `I don't see one matching that. Could you give me the street address, or tell me what you're looking for — how many bedrooms, the area, and your budget — and I'll check what we have?` : `We don't have any listings on the books right now, but ${agentName} can help you find one. Can I take your name and number so they can reach you?`, { found: 0 }); }
     if (rows.length === 1) { const l = rows[0]; const officeNote = l._office_as_bed ? " It has four true bedrooms plus a separate office that many people use as a fifth bedroom." : ""; const showing = l.occupied ? " It's currently occupied, so showings need a little notice." : ""; return say(`${describe(l)}.${officeNote}${l.status === "pending" ? " It's pending right now, but I can note your interest in case that changes." : ""}${showing} Would you like to set up a showing?`, { found: 1, listing_id: l.id, address: l.address, listing_type: l.listing_type, status: l.status }); }
     const same = rows.every((r: any) => r.beds === rows[0].beds && r.baths === rows[0].baths && r.price_cents === rows[0].price_cents && r.sqft === rows[0].sqft);
-    const list = rows.slice(0, 4).map((r: any) => same ? r.address : describe(r, true)).join("; ");
+    const list = rows.slice(0, 4).map((r: any) => same ? spokenAddr(r.address) : describe(r, true)).join("; ");
     const officeNote = rows[0]._office_as_bed ? " They have four true bedrooms plus a separate office that many people use as a fifth bedroom." : "";
     return say(same ? `I have ${rows.length} that fit: ${list}${rows.length > 4 ? `, and ${rows.length - 4} more` : ""}. They're all ${describe(rows[0], true).split(": ")[1]}.${officeNote} Which one would you like to hear about or see?` : `Here's what I have: ${list}${rows.length > 4 ? ", and a couple more" : ""}. Which one would you like to hear more about?`, { found: rows.length, listings: rows.map((r: any) => ({ id: r.id, address: r.address, listing_type: r.listing_type })) });
   }
@@ -148,9 +165,9 @@ Deno.serve(async (req: Request) => {
     let listing: any = null; if (args.listing_id) { const { data } = await supabase.from("re_listings").select("*").eq("id", args.listing_id).eq("account_id", acct.id).maybeSingle(); listing = data; } if (!listing) { const rows = await findListings(acct.id, { query: args.address || args.listing_address || args.query }); listing = rows.length === 1 ? rows[0] : null; }
     if (!listing) return say("Which property is that for? Give me the street address and I'll set it up.", { need: "address" });
     const date = String(args.date || "").trim(), time = String(args.time || "").trim(); const callerName = String(args.caller_name || args.name || "").trim(); const phone = normPhone(args.phone || args.callback_number || fromNumber); const email = String(args.email || "").trim() || null;
-    if (!date || !time) return say(`Sure. When would you like to see ${listing.address}? Give me a day and a time.`, { need: "when" });
+    if (!date || !time) return say(`Sure. When would you like to see ${spokenAddr(listing.address)}? Give me a day and a time.`, { need: "when" });
     if (!callerName) return say("And who should I put the showing under?", { need: "name" });
-    if (listing.status === "pending" || listing.status === "under_contract") return say(`${listing.address} is ${listing.status === "pending" ? "pending" : "under contract"} right now, so I can't book a showing. I can let ${agentName} know you're interested in case it comes back, and they can show you similar homes. Want me to do that?`, { blocked: listing.status });
+    if (listing.status === "pending" || listing.status === "under_contract") return say(`${spokenAddr(listing.address)} is ${listing.status === "pending" ? "pending" : "under contract"} right now, so I can't book a showing. I can let ${agentName} know you're interested in case it comes back, and they can show you similar homes. Want me to do that?`, { blocked: listing.status });
     const dur = Number(s.showing_minutes || 30);
     // Appointment type: one named "Showing" if the account has it, else the first active in-person type, else none.
     let typeId: string | null = null;
@@ -175,7 +192,7 @@ Deno.serve(async (req: Request) => {
     if (call.call_id) { const { data: c } = await supabase.from("calls").select("id").eq("twilio_call_sid", call.call_id).maybeSingle(); if (c?.id) await supabase.from("calls").update({ outcome: "booked" }).eq("id", c.id); }
     for (const p of await agentPhones(acct.id, listing.agent_user_id)) await sendText(acct.id, p, `Showing booked: ${listing.address}, ${row.when_label} — ${callerName}${phone ? " " + phone : ""}.${listing.occupied ? " Property is occupied; give notice." : ""}${agreementSent ? " Showing agreement texted; you'll get a text when it's signed." : alreadySigned ? " Agreement already on file." : ""} ${APP}`);
     const agreementLine = agreementSent ? (requireAgreement ? ` I've texted you a short showing agreement to sign — it takes a minute, and the showing is confirmed once it's in.` : ` I've texted you a short showing agreement to sign before you go.`) : "";
-    return say(`You're set for ${row.when_label} at ${listing.address}.${agreementLine}${listing.occupied ? " The home is occupied, so the agent will confirm the time with the occupant." : ""} Please bring a photo ID.${iabs ? " I also texted you the Texas brokerage services notice — nothing to sign." : ""} Anything else?`, { booked: true, when: row.when_label, listing_id: listing.id, appointment_id: apptId, agreement_sent: agreementSent });
+    return say(`You're set for ${row.when_label} at ${spokenAddr(listing.address)}.${agreementLine}${listing.occupied ? " The home is occupied, so the agent will confirm the time with the occupant." : ""} Please bring a photo ID.${iabs ? " I also texted you the Texas brokerage services notice — nothing to sign." : ""} Anything else?`, { booked: true, when: row.when_label, listing_id: listing.id, appointment_id: apptId, agreement_sent: agreementSent });
   }
 
   // ---------- send_application ----------
@@ -191,7 +208,7 @@ Deno.serve(async (req: Request) => {
     if (!r?.ok) return say("I couldn't get the text out just now. Let me have the agent send it to you directly.", { sent: false });
     const fee = Number(s.application_fee_cents || 0);
     for (const p of await agentPhones(acct.id, listing.agent_user_id)) await sendText(acct.id, p, `Application sent: ${listing.address} — ${callerName} ${phone}. You'll get a text when it's signed. ${APP}`);
-    return say(`Done — I just texted you the application for ${listing.address}. It takes about five minutes on your phone${fee ? `, and there's a ${money0(fee)} application fee once you've signed, paid by card` : ""}. ${agentName} reviews it as soon as it's in.${iabs ? " I also texted you the Texas brokerage services notice." : ""} Anything else?`, { sent: true, fee_cents: fee });
+    return say(`Done — I just texted you the application for ${spokenAddr(listing.address)}. It takes about five minutes on your phone${fee ? `, and there's a ${money0(fee)} application fee once you've signed, paid by card` : ""}. ${agentName} reviews it as soon as it's in.${iabs ? " I also texted you the Texas brokerage services notice." : ""} Anything else?`, { sent: true, fee_cents: fee });
   }
 
   // ---------- send_iabs ----------
