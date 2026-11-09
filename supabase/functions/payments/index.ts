@@ -2,7 +2,7 @@ import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import Stripe from "https://esm.sh/stripe@14.25.0?target=denonext";
 
-// Donna shared payments module (v7). Any vertical can use it; the dashboard exposes it to contractors first.
+// Donna shared payments module (v8). Any vertical can use it; the dashboard exposes it to contractors first.
 // Tenants connect THEIR OWN Stripe account (Connect, Accounts v2, SaaS pattern). Donna never holds, touches or routes money:
 // Checkout Sessions are created directly on the tenant's account (Stripe-Account header), no application fee.
 //
@@ -154,6 +154,16 @@ async function markPaid(inv: any, method: string, provider: string, providerRef:
       }
     }
     if (provider === "stripe" && !paged && who?.phone && acct) await sendText(inv.account_id, who.phone, `${acct.name}: ${inv.customer_name || "Your customer"} paid invoice ${inv.number}, ${money(amountCents ?? inv.total_cents)} by card. It's on its way to your bank.`);
+    // Customer receipt, every payment method (card, cash, check, other): text and/or email, with the pay page as the itemized receipt.
+    if (acct) {
+      const amt = money(amountCents ?? inv.total_cents); const link = payUrl(inv.pay_token);
+      const how = method === "card" ? "card" : method === "check" ? "check" : method === "cash" ? "cash" : (note || "payment");
+      if (inv.customer_phone && acct.settings?.sms?.enabled === true) await sendText(inv.account_id, inv.customer_phone, `${acct.name}: paid, thank you. ${amt} on invoice ${inv.number} (${how}). Your receipt: ${link}`);
+      if (inv.customer_email) {
+        const lines = (inv.lines || []).map((l: any) => `  ${l.desc}${l.qty > 1 ? ` x${l.qty}` : ""}  ${money(l.cents)}`).join("\n");
+        await sendEmail(inv.customer_email, `${acct.name} via Donna <donna@sidekicklogistics.com>`, `Receipt from ${acct.name} - ${amt} - Invoice ${inv.number}`, `Hi${inv.customer_name ? " " + inv.customer_name : ""},\n\nThank you. We received ${amt} (${how}) on invoice ${inv.number}.\n\n${lines}\n\nTotal: ${money(inv.total_cents)}\nPaid: ${amt}\n\nYour receipt: ${link}\n\n${acct.name}`);
+      }
+    }
   } catch { /* non-fatal */ }
   return data || inv;
 }

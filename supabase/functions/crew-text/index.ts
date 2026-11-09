@@ -232,6 +232,23 @@ Deno.serve(async (req: Request) => {
       return reply(lead + addonPrompt(st));
     }
 
+    // Outside the Done flow: "paid cash" / "send" on a job that already has an open invoice.
+    const paidTop = low.match(/^(?:paid|got paid|they paid)\b\s*(cash|check|card|venmo|zelle)?\s*$/);
+    const sendTop = /^(send|send it|send the invoice|resend)$/.test(low);
+    if (paidTop || sendTop) {
+      const jobs = await todays(); const cur = current(jobs);
+      let inv: any = null;
+      if (cur?.invoice_id) { const { data } = await supabase.from("invoices").select("*").eq("id", cur.invoice_id).maybeSingle(); inv = data; }
+      if (!inv || inv.paid_at || inv.status === "void") { const { data } = await supabase.from("invoices").select("*").eq("account_id", accountId).in("status", ["sent", "draft"]).order("created_at", { ascending: false }).limit(1).maybeSingle(); inv = data; }
+      if (!inv) return reply("I don't see an open invoice to do that with. Text DONE on a job to bill it first.");
+      if (paidTop) {
+        const how = paidTop[1] || "cash"; const method = /check/.test(how) ? "check" : /card/.test(how) ? "card" : /venmo|zelle/.test(how) ? "other" : "cash";
+        const r = await call("payments", { action: "invoice_mark_paid", user_id: userId, id: inv.id, method, note: /venmo|zelle/.test(how) ? how : null });
+        return reply(r?.ok ? `Marked ${inv.number} paid (${how}), ${money(inv.total_cents)} from ${inv.customer_name || "the customer"}. I've sent them a receipt.` : "Couldn't mark it paid. Try from the app.");
+      }
+      const r = await call("payments", { action: "invoice_send", user_id: userId, id: inv.id });
+      return reply(r?.ok ? `Sent ${inv.number} (${money(inv.total_cents)}) to ${inv.customer_name || "the customer"}${r.online ? " with a Pay button" : ""}.` : (r?.message || "Couldn't send it."));
+    }
 
     return null;
   }
