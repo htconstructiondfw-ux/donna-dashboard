@@ -11,6 +11,9 @@ import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 //   test_outbound {from,to}     -> place a real call from a number (uses the credential); call_status {call_id} to check
 //   twilio_calls {from?,to?,minutes?} -> Twilio's call log for the trunk (proof the credential authenticated)
 //   rotate_auto                 -> generate+store a new credential (app_secrets), reimport all numbers, drop the old one; nothing echoed
+//   twilio_numbers              -> each Twilio number's SMS webhook / messaging service / trunk
+//   messaging_services          -> each Messaging Service's inbound URL + sender pool (the toll-free lives here)
+//   set_sms_webhook {number,url?}-> point a number's inbound SMS at msg-inbound
 //   remove_credential {username}-> delete that username from the Twilio list (refuses the current secret username)
 // Secrets are never echoed back.
 
@@ -193,6 +196,35 @@ Deno.serve(async (req: Request) => {
     const j: any = await r.json().catch(() => ({}));
     const calls = (j?.calls || []).map((c: any) => ({ sid: c.sid, from: c.from, to: c.to, status: c.status, direction: c.direction, duration: c.duration, start: c.start_time }));
     return json({ ok: r.ok, since, calls, error: r.ok ? undefined : j });
+  }
+  // Twilio-side wiring of each Donna number: SMS webhook / messaging service, voice trunk. Tenant numbers must post
+  // inbound texts to msg-inbound; a blank sms_url means texts to that number are silently dropped.
+  if (action === "twilio_numbers") {
+    const r = await fetch(`https://api.twilio.com/2010-04-01/Accounts/${TWILIO_SID}/IncomingPhoneNumbers.json?PageSize=100`, { headers: { Authorization: twAuth() } });
+    const j: any = await r.json().catch(() => ({}));
+    const numbers = (j?.incoming_phone_numbers || []).map((n: any) => ({ sid: n.sid, number: n.phone_number, name: n.friendly_name, sms_url: n.sms_url || null, sms_method: n.sms_method || null, messaging_service_sid: n.messaging_service_sid || null, trunk_sid: n.trunk_sid || null, voice_url: n.voice_url || null }));
+    return json({ ok: r.ok, numbers, error: r.ok ? undefined : j });
+  }
+  if (action === "messaging_services") {
+    const r = await fetch(`https://messaging.twilio.com/v1/Services?PageSize=20`, { headers: { Authorization: twAuth() } });
+    const j: any = await r.json().catch(() => ({}));
+    const services: any[] = [];
+    for (const sv of (j?.services || [])) {
+      const pn = await fetch(`https://messaging.twilio.com/v1/Services/${sv.sid}/PhoneNumbers?PageSize=50`, { headers: { Authorization: twAuth() } });
+      const pj: any = await pn.json().catch(() => ({}));
+      services.push({ sid: sv.sid, name: sv.friendly_name, inbound_request_url: sv.inbound_request_url || null, inbound_method: sv.inbound_method || null, fallback_url: sv.fallback_url || null, use_inbound_webhook_on_number: sv.use_inbound_webhook_on_number ?? null, senders: (pj?.phone_numbers || []).map((p: any) => p.phone_number) });
+    }
+    return json({ ok: r.ok, services, error: r.ok ? undefined : j });
+  }
+  if (action === "set_sms_webhook") {
+    const number = String(body.number || ""); if (!number) return json({ ok: false, error: "number required" });
+    const url = String(body.url || `${Deno.env.get("SUPABASE_URL")}/functions/v1/msg-inbound`);
+    const l = await fetch(`https://api.twilio.com/2010-04-01/Accounts/${TWILIO_SID}/IncomingPhoneNumbers.json?PhoneNumber=${encodeURIComponent(number)}`, { headers: { Authorization: twAuth() } });
+    const lj: any = await l.json().catch(() => ({})); const sid = lj?.incoming_phone_numbers?.[0]?.sid;
+    if (!sid) return json({ ok: false, error: "number not found in Twilio" });
+    const r = await fetch(`https://api.twilio.com/2010-04-01/Accounts/${TWILIO_SID}/IncomingPhoneNumbers/${sid}.json`, { method: "POST", headers: { Authorization: twAuth(), "Content-Type": "application/x-www-form-urlencoded" }, body: new URLSearchParams({ SmsUrl: url, SmsMethod: "POST" }).toString() });
+    const j: any = await r.json().catch(() => ({}));
+    return json({ ok: r.ok, number, sms_url: j?.sms_url ?? null, sms_method: j?.sms_method ?? null, error: r.ok ? undefined : (j?.message || j) });
   }
   if (action === "remove_credential") {
     const username = String(body.username || "");
