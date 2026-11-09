@@ -253,6 +253,8 @@ const I = {
   link:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10 13a5 5 0 0 0 7 0l2-2a5 5 0 0 0-7-7l-1 1"/><path d="M14 11a5 5 0 0 0-7 0l-2 2a5 5 0 0 0 7 7l1-1"/></svg>',
   building:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 21h18M5 21V5a2 2 0 0 1 2-2h7a2 2 0 0 1 2 2v16M19 21V11a1 1 0 0 0-1-1h-2M9 7h2M9 11h2M9 15h2"/></svg>',
   wrench:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14.7 6.3a4 4 0 0 0-5.4 5.4L3 18l3 3 6.3-6.3a4 4 0 0 0 5.4-5.4l-2.5 2.5-2.8-.4-.4-2.8z"/></svg>',
+  home:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 11 12 3l9 8"/><path d="M5 10v10a1 1 0 0 0 1 1h4v-6h4v6h4a1 1 0 0 0 1-1V10"/></svg>',
+  sign:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 21V8"/><rect x="4" y="3" width="16" height="7" rx="1.5"/><path d="M8 6.5h8M7 21h10"/></svg>',
   shield:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3 5 6v5c0 4 3 7 7 9 4-2 7-5 7-9V6z"/><path d="m9 12 2 2 4-4"/></svg>'
 };
 
@@ -455,8 +457,12 @@ function renderApp(){
     if(salonOn()) navActivity.splice(2,0,["waitlist","Waitlist",I.clock]);
     if(!pmMode()) navActivity.splice(0,0,["today","Today",I.clock]);
     if(paymentsOn()) navActivity.splice(1,0,["jobs","Jobs & money",I.card]);
-    if(realEstateOn()){ navConfig.splice(1,0,["listings","Listings",I.building]); navActivity.splice(1,0,["leads","Leads & documents",I.clip]); }
-    if(propertyOn()){ navConfig.splice(1,0,["properties","Properties",I.building]); navConfig.splice(2,0,["contractors","Contractors",I.users]); navActivity.splice(0,0,["requests","Service requests",I.wrench]); }
+    // Real estate + managed rentals on one account: say what each list IS, not two near-synonyms with the same icon.
+    //   Listings = what the agent is selling / leasing (house icon)   ·   Managed rentals = homes they manage for owners (building)
+    //   Vendors = the repair people for those managed homes (wrench)  ·   Leads & documents = buyers/sellers/renters + e-sign
+    const re=realEstateOn(), prop=propertyOn();
+    if(re){ navConfig.splice(1,0,["listings",prop?"Listings (for sale & rent)":"Listings",I.home]); navActivity.splice(1,0,["leads","Leads & documents",I.sign]); }
+    if(prop){ navConfig.splice(re?2:1,0,["properties",re?"Managed rentals":"Properties",I.building]); navConfig.splice(re?3:2,0,["contractors",re?"Vendors":"Contractors",I.wrench]); navActivity.splice(0,0,["requests",re?"Maintenance requests":"Service requests",I.wrench]); }
     soon=[["billing","Billing",I.card]];
   } else {
     // Stylist: focused view — their own bookings, messages, clients, and their own availability.
