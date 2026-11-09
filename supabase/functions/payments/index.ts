@@ -2,7 +2,7 @@ import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import Stripe from "https://esm.sh/stripe@14.25.0?target=denonext";
 
-// Donna shared payments module (v5). Any vertical can use it; the dashboard exposes it to contractors first.
+// Donna shared payments module (v7). Any vertical can use it; the dashboard exposes it to contractors first.
 // Tenants connect THEIR OWN Stripe account (Connect, Accounts v2, SaaS pattern). Donna never holds, touches or routes money:
 // Checkout Sessions are created directly on the tenant's account (Stripe-Account header), no application fee.
 //
@@ -135,17 +135,26 @@ async function markPaid(inv: any, method: string, provider: string, providerRef:
   const now = new Date().toISOString();
   const { data } = await supabase.from("invoices").update({ status: "paid", paid_at: now, paid_method: method, paid_note: note, stripe_payment_intent_id: providerRef && provider === "stripe" ? providerRef : inv.stripe_payment_intent_id, updated_at: now }).eq("id", inv.id).select("*").maybeSingle();
   await supabase.from("payments").insert({ account_id: inv.account_id, invoice_id: inv.id, amount_cents: amountCents ?? inv.total_cents, method, provider, provider_ref: providerRef, fee_cents: feeCents ?? null, note });
-  if (inv.job_id) { try { await supabase.from("jobs").update({ status: "paid", updated_at: now }).eq("id", inv.job_id); } catch { /* jobs may not exist yet */ } }
-  // Card payment landed: tell the person who sent the invoice (or the owner) by text.
-  if (provider === "stripe") {
-    try {
-      const acct = await loadAccount(inv.account_id);
-      let who: any = null;
-      if (inv.created_by) { const { data } = await supabase.from("users").select("phone, full_name").eq("id", inv.created_by).maybeSingle(); who = data; }
-      if (!who?.phone) { const { data } = await supabase.from("users").select("phone, full_name").eq("account_id", inv.account_id).eq("role", "owner").not("phone", "is", null).limit(1).maybeSingle(); who = data; }
-      if (who?.phone && acct) await sendText(inv.account_id, who.phone, `${acct.name}: ${inv.customer_name || "Your customer"} paid invoice ${inv.number}, ${money(amountCents ?? inv.total_cents)} by card. It's on its way to your bank.`);
-    } catch { /* non-fatal */ }
-  }
+  // Only the job's final invoice closes the job; an after-hours prepay invoice (job_id set, but not the job's invoice_id) leaves it open.
+  if (inv.job_id) { try { await supabase.from("jobs").update({ status: "paid", updated_at: now }).eq("id", inv.job_id).eq("invoice_id", inv.id); } catch { /* jobs may not exist yet */ } }
+  // After-hours prepay cleared (any method): page the on-call tech with the job, tell the customer. Card payments also text whoever sent the invoice.
+  try {
+    const acct = await loadAccount(inv.account_id);
+    let who: any = null;
+    if (inv.created_by) { const { data } = await supabase.from("users").select("phone, full_name").eq("id", inv.created_by).maybeSingle(); who = data; }
+    if (!who?.phone) { const { data } = await supabase.from("users").select("phone, full_name").eq("account_id", inv.account_id).eq("role", "owner").not("phone", "is", null).limit(1).maybeSingle(); who = data; }
+    let paged = false;
+    if (inv.job_id && acct) {
+      const { data: job } = await supabase.from("jobs").select("kind, customer_name, customer_phone, address, notes, invoice_id").eq("id", inv.job_id).maybeSingle();
+      if (job?.kind === "emergency" && job.invoice_id !== inv.id) {
+        const ctr: any = acct.settings?.contractor || {};
+        const pagePhone = String(ctr.after_hours_page_phone || who?.phone || "").trim();
+        if (pagePhone) { paged = await sendText(inv.account_id, pagePhone, `${acct.name} AFTER-HOURS, FEE PAID (${money(amountCents ?? inv.total_cents)}): ${job.customer_name || "Caller"}${job.customer_phone ? " " + job.customer_phone : ""}${job.address ? " at " + job.address : ""}. ${String(job.notes || "").slice(0, 300)}. Call them back now.`); }
+        if (job.customer_phone) await sendText(inv.account_id, job.customer_phone, `${acct.name}: got it, thank you. The on-call technician has been paged and will call you shortly.`);
+      }
+    }
+    if (provider === "stripe" && !paged && who?.phone && acct) await sendText(inv.account_id, who.phone, `${acct.name}: ${inv.customer_name || "Your customer"} paid invoice ${inv.number}, ${money(amountCents ?? inv.total_cents)} by card. It's on its way to your bank.`);
+  } catch { /* non-fatal */ }
   return data || inv;
 }
 
@@ -309,7 +318,7 @@ Deno.serve(async (req: Request) => {
     }
     if (!sentSms && !sentEmail) return json({ ok: false, error: "not_sent", message: to ? "The text didn't go through. Check the customer's number or that texting is on." : "No phone or email on this invoice.", pay_url: link });
     const { data } = await supabase.from("invoices").update({ status: "sent", sent_at: new Date().toISOString(), sent_channel: sentSms && sentEmail ? "sms+email" : (sentSms ? "sms" : "email"), customer_phone: to || inv.customer_phone, customer_email: email || inv.customer_email, updated_at: new Date().toISOString() }).eq("id", id).select("*").maybeSingle();
-    if (inv.job_id) { try { await supabase.from("jobs").update({ status: "invoiced", updated_at: new Date().toISOString() }).eq("id", inv.job_id); } catch { /* ok */ } }
+    if (inv.job_id) { try { await supabase.from("jobs").update({ status: "invoiced", updated_at: new Date().toISOString() }).eq("id", inv.job_id).eq("invoice_id", inv.id); } catch { /* ok */ } }
     return json({ ok: true, invoice: data, pay_url: link, sent: { sms: sentSms, email: sentEmail }, online });
   }
 

@@ -1,7 +1,7 @@
 import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 
-// Donna jobs (v1): the contractor's day. A job wraps an appointment (created lazily) and carries the
+// Donna jobs (v4): the contractor's day. A job wraps an appointment (created lazily) and carries the
 // on-my-way / started / done timeline, proposed invoice lines, notes and photos.
 // Actions (user JWT, or service role + user_id from the text-command layer):
 //   today {date?}                      -> this user's jobs for the day (managers: whole company)
@@ -79,12 +79,21 @@ async function proposeLines(acct: any, job: any) {
   const when = new Date(job.scheduled_at || Date.now());
   const hour = Number(new Intl.DateTimeFormat("en-US", { timeZone: tz, hour12: false, hour: "2-digit" }).format(when)) % 24;
   const dow = new Intl.DateTimeFormat("en-US", { timeZone: tz, weekday: "short" }).format(when);
-  const afterHours = Number(cfg.after_hours_multiplier || 0) > 1 && (hour < Number(cfg.day_start_hour ?? 7) || hour >= Number(cfg.day_end_hour ?? 19) || dow === "Sun");
+  // After hours = outside the shop's day hours or Sunday (or the job was opened as an emergency). Charged as a multiplier, a flat fee, or both.
+  const outside = hour < Number(cfg.day_start_hour ?? 7) || hour >= Number(cfg.day_end_hour ?? 19) || dow === "Sun" || job.kind === "emergency";
+  const mult = Number(cfg.after_hours_multiplier || 0); const flatFee = Number(cfg.after_hours_fee_cents || 0);
+  const afterHours = outside && cfg.after_hours_enabled !== false && (mult > 1 || flatFee > 0);
   if (booked) {
     const base = parsePrice(booked.price);
-    if (base != null) { const cents = afterHours ? Math.round(base * Number(cfg.after_hours_multiplier)) : base; lines.push({ desc: booked.name + (afterHours ? " (after hours)" : ""), qty: 1, unit_cents: cents, cents, kind: "service" }); }
+    if (base != null) { const cents = afterHours && mult > 1 ? Math.round(base * mult) : base; lines.push({ desc: booked.name + (afterHours && mult > 1 ? " (after hours)" : ""), qty: 1, unit_cents: cents, cents, kind: "service" }); }
     else lines.push({ desc: booked.name, qty: 1, unit_cents: 0, cents: 0, kind: "service", needs_price: true });
   } else if (job.title) lines.push({ desc: job.title, qty: 1, unit_cents: 0, cents: 0, kind: "service", needs_price: true });
+  if (afterHours && flatFee > 0) {
+    // Prepaid over the phone (emergency flow)? Show it as a credit line so the customer sees it applied.
+    let prepaid = false;
+    if (job.kind === "emergency") { const { data: pre } = await supabase.from("invoices").select("id").eq("job_id", job.id).eq("status", "paid").neq("id", job.invoice_id || "00000000-0000-0000-0000-000000000000").limit(1); prepaid = !!(pre && pre.length); }
+    lines.push({ desc: prepaid ? "After-hours fee (prepaid by phone)" : "After-hours fee", qty: 1, unit_cents: flatFee, cents: prepaid ? 0 : flatFee, kind: "addon" });
+  }
   const trip = Number(cfg.trip_fee_cents || 0);
   if (trip > 0) { const waived = cfg.trip_fee_waived_if_work !== false; lines.push({ desc: waived ? "Trip fee (waived, work done)" : "Trip fee", qty: 1, unit_cents: trip, cents: waived ? 0 : trip, kind: "trip_fee" }); }
   const menu = types.filter((t) => !booked || t.id !== booked.id).map((t) => ({ id: t.id, name: t.name, cents: parsePrice(t.price), category: t.category || null }));
@@ -121,6 +130,12 @@ Deno.serve(async (req: Request) => {
     const { data: jobs } = ids.length ? await supabase.from("jobs").select("*").in("appointment_id", ids) : { data: [] as any[] };
     const byAppt = new Map((jobs || []).map((j: any) => [j.appointment_id, j]));
     const out = (appts || []).map((a: any) => { const j: any = byAppt.get(a.id); return { appointment_id: a.id, job_id: j?.id || null, title: a.appointment_types?.name || a.title, price: a.appointment_types?.price || null, starts_at: a.starts_at, ends_at: a.ends_at, customer_name: a.contacts?.name || j?.customer_name || null, customer_phone: a.contacts?.phone || j?.customer_phone || null, address: a.location_address || j?.address || null, notes: a.notes, tech: a.users?.full_name || null, user_id: a.user_id, status: j?.status || (a.status === "completed" ? "done" : "scheduled"), invoice_id: j?.invoice_id || null, eta_minutes: j?.eta_minutes || null }; });
+    // Emergency / after-hours jobs opened by phone have no appointment yet; list them too (newest first, flagged).
+    let qj = supabase.from("jobs").select("*").eq("account_id", acct.id).is("appointment_id", null).gte("scheduled_at", start).lt("scheduled_at", end).not("status", "in", "(cancelled,paid)").order("scheduled_at");
+    if (!isAdmin(caller.role) || body.mine) qj = qj.eq("assigned_user_id", caller.userId);
+    const { data: loose } = await qj;
+    for (const j of (loose || []) as any[]) out.push({ appointment_id: null, job_id: j.id, title: j.title || "After-hours call", price: null, starts_at: j.scheduled_at, ends_at: null, customer_name: j.customer_name, customer_phone: j.customer_phone, address: j.address, notes: j.notes, tech: null, user_id: j.assigned_user_id, status: j.status, invoice_id: j.invoice_id || null, eta_minutes: j.eta_minutes || null, kind: j.kind, priority: j.priority });
+    out.sort((a: any, b: any) => String(a.starts_at).localeCompare(String(b.starts_at)));
     return json({ ok: true, date: ymd, jobs: out });
   }
 
