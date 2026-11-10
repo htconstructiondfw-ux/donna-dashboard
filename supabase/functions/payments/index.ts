@@ -2,7 +2,7 @@ import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import Stripe from "https://esm.sh/stripe@14.25.0?target=denonext";
 
-// Donna shared payments module (v19: card on file per client (contacts.card) + save-card-on-pay; v18: salon checkout — tickets with tips, products with stock, gift cards sold/redeemed; v17 activity log). Any vertical can use it; the dashboard exposes it to contractors first.
+// Donna shared payments module (v21: HOA dues — per-community Stripe accounts (communities.stripe_account_id), pay by bank (ACH) or card +fee, autopay enrollment on units, dues_autopay_charge for the sweep; v19: card on file per client (contacts.card) + save-card-on-pay; v18: salon checkout — tickets with tips, products with stock, gift cards sold/redeemed; v17 activity log). Any vertical can use it; the dashboard exposes it to contractors first.
 // Tenants connect THEIR OWN Stripe account (Connect, Accounts v2, SaaS pattern). Donna never holds, touches or routes money:
 // Checkout Sessions are created directly on the tenant's account (Stripe-Account header), no application fee.
 //
@@ -58,7 +58,7 @@ const json = (o: unknown, s = 200) => new Response(JSON.stringify(o), { status: 
 const money = (c: number) => `$${(Math.round(c) / 100).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 const payUrl = (token: string) => `${APP}/pay/${token}`;
 // Card processing fee (settings.payments.card_fee_pct, 0 = off). Charged only when the customer pays by card; cash/check never pay it.
-const cardFee = (acct: any, totalCents: number) => { const pct = Number(acct?.settings?.payments?.card_fee_pct || 0); return pct > 0 ? { pct, cents: Math.round(totalCents * pct / 100) } : { pct: 0, cents: 0 }; };
+const cardFee = (acct: any, totalCents: number, overridePct?: number | null) => { const pct = overridePct != null ? Number(overridePct) : Number(acct?.settings?.payments?.card_fee_pct || 0); return pct > 0 ? { pct, cents: Math.round(totalCents * pct / 100) } : { pct: 0, cents: 0 }; };
 
 async function resolveCaller(req: Request, body?: any): Promise<{ userId: string; accountId: string; role: string } | null> {
   const m = (req.headers.get("Authorization") || "").match(/Bearer\s+(.+)/i);
@@ -96,6 +96,32 @@ async function loadAccount(accountId: string) {
 async function loadPA(accountId: string) {
   const { data } = await supabase.from("payment_accounts").select("*").eq("account_id", accountId).maybeSingle();
   return data as any;
+}
+// Which Stripe account takes this invoice's money: the community's own (HOA dues) or the business's.
+async function paFor(inv: any): Promise<any> {
+  if (inv?.community_id) {
+    const { data: c } = await supabase.from("communities").select("id, name, stripe_account_id, charges_enabled, card_fee_pct").eq("id", inv.community_id).maybeSingle();
+    return c ? { stripe_account_id: c.stripe_account_id, charges_enabled: c.charges_enabled, community: c, enabled: c.charges_enabled } : null;
+  }
+  const pa = await loadPA(inv.account_id); if (!pa) return null;
+  const acct = await loadAccount(inv.account_id); return { ...pa, enabled: acct?.settings?.payments?.enabled === true };
+}
+async function refreshCommunity(c: any) {
+  if (!STRIPE_KEY || !c?.stripe_account_id) return c;
+  const a: any = await stripeV2("GET", `/v2/core/accounts/${c.stripe_account_id}?include=configuration.merchant&include=requirements`);
+  const cardStatus = a?.configuration?.merchant?.capabilities?.card_payments?.status || ""; const achStatus = a?.configuration?.merchant?.capabilities?.ach_debit_payments?.status || "";
+  const charges = cardStatus === "active"; const entries: any[] = Array.isArray(a?.requirements?.entries) ? a.requirements.entries : [];
+  const pastDue = entries.some((e: any) => e?.minimum_deadline?.status === "past_due");
+  const upd = { charges_enabled: charges, stripe_status: charges ? "active" : (pastDue ? "restricted" : "onboarding"), requirements: { summary: a?.requirements?.summary || null, count: entries.length, card_payments: cardStatus, ach_debit_payments: achStatus }, updated_at: new Date().toISOString() };
+  const { data } = await supabase.from("communities").update(upd).eq("id", c.id).select("*").maybeSingle();
+  return data || { ...c, ...upd };
+}
+// Save what a resident enrolled with (bank or card) on their unit.
+async function saveAutopay(unitId: string, pm: any, customer: string | null) {
+  const isBank = pm?.type === "us_bank_account"; const ap = { method: isBank ? "bank" : "card", payment_method: pm.id, customer: customer || null, last4: isBank ? pm.us_bank_account?.last4 || null : pm.card?.last4 || null, bank_name: isBank ? pm.us_bank_account?.bank_name || null : null, brand: isBank ? null : pm.card?.brand || null, enrolled_at: new Date().toISOString() };
+  const { data: u } = await supabase.from("units").update({ autopay: ap, updated_at: new Date().toISOString() }).eq("id", unitId).select("account_id, owner_phone, label, community_id").maybeSingle();
+  if (u?.owner_phone) { const { data: c } = await supabase.from("communities").select("name").eq("id", u.community_id).maybeSingle(); const acct = await loadAccount(u.account_id); if (acct?.settings?.sms?.enabled === true) await sendText(u.account_id, u.owner_phone, `${c?.name || acct.name}: autopay is on for ${u.label} using your ${isBank ? "bank account" : "card"} ending ${ap.last4 || ""}. Dues are drawn on the due date and you get a receipt each time. Reply STOP AUTOPAY any time.`); }
+  return ap;
 }
 async function setPaymentsEnabled(acct: any, enabled: boolean) {
   const s = { ...(acct.settings || {}) }; s.payments = { ...(s.payments || {}), enabled, provider: "stripe" };
@@ -215,8 +241,8 @@ async function markPaid(inv: any, method: string, provider: string, providerRef:
     // Customer receipt, every payment method (card, cash, check, gift card, other): text and/or email, with the pay page as the itemized receipt.
     if (acct) {
       const amt = money(amountCents ?? inv.total_cents); const link = payUrl(inv.pay_token);
-      const how = method === "card" ? "card" : method === "check" ? "check" : method === "cash" ? "cash" : method === "gift_card" ? "gift card" : (note || method || "payment");
-      const word = inv.kind === "ticket" ? "visit" : "invoice";
+      const how = method === "card" ? "card" : method === "bank" ? "bank transfer" : method === "check" ? "check" : method === "cash" ? "cash" : method === "gift_card" ? "gift card" : (note || method || "payment");
+      const word = inv.kind === "ticket" ? "visit" : inv.kind === "dues" ? "dues" : "invoice";
       if (inv.customer_phone && acct.settings?.sms?.enabled === true) await sendText(inv.account_id, inv.customer_phone, `${acct.name}: paid, thank you. ${amt} for your ${word} ${inv.number} (${how})${inv.tip_cents ? ", including a " + money(inv.tip_cents) + " tip" : ""}. Your receipt: ${link}`);
       if (inv.customer_email) {
         const lines = (inv.lines || []).map((l: any) => `  ${l.desc}${l.qty > 1 ? ` x${l.qty}` : ""}  ${money(l.cents)}`).join("\n");
@@ -244,8 +270,10 @@ Deno.serve(async (req: Request) => {
     try {
       if (ev.type === "checkout.session.completed" && ev.data.object?.mode === "setup") {
         // Card on file: the customer saved a card for a booked job. Keep the ids on the job; the tech can charge it at Done.
-        const cs = ev.data.object; const jobId = cs?.metadata?.job_id; const contactId = cs?.metadata?.contact_id; const acctStripe = ev.account || cs?.metadata?.stripe_account || null;
-        if ((jobId || contactId) && cs.setup_intent && acctStripe) {
+        const cs = ev.data.object; const jobId = cs?.metadata?.job_id; const contactId = cs?.metadata?.contact_id; const unitId = cs?.metadata?.unit_id; const acctStripe = ev.account || cs?.metadata?.stripe_account || null;
+        if (unitId && cs.setup_intent && acctStripe) {
+          try { const si: any = await stripe.setupIntents.retrieve(String(cs.setup_intent), { expand: ["payment_method"] }, { stripeAccount: acctStripe }); if (si?.payment_method?.id) await saveAutopay(unitId, si.payment_method, cs.customer || si.customer || null); } catch (e) { console.error("autopay setup webhook", e); }
+        } else if ((jobId || contactId) && cs.setup_intent && acctStripe) {
           try {
             const si: any = await stripe.setupIntents.retrieve(String(cs.setup_intent), { expand: ["payment_method"] }, { stripeAccount: acctStripe });
             const pm: any = si?.payment_method || {};
@@ -260,15 +288,33 @@ Deno.serve(async (req: Request) => {
         const cs = ev.data.object; const invoiceId = cs?.metadata?.invoice_id;
         if (invoiceId && cs.payment_status === "paid") {
           const { data: inv } = await supabase.from("invoices").select("*").eq("id", invoiceId).maybeSingle();
-          if (inv) await markPaid(inv, "card", "stripe", String(cs.payment_intent || cs.id), null, cs.amount_total ?? inv.total_cents, undefined, Number(cs?.metadata?.card_fee_cents || 0));
+          const viaBank = (cs.payment_method_types || []).length === 1 && cs.payment_method_types[0] === "us_bank_account";
+          if (inv) await markPaid(inv, viaBank ? "bank" : "card", "stripe", String(cs.payment_intent || cs.id), null, cs.amount_total ?? inv.total_cents, undefined, Number(cs?.metadata?.card_fee_cents || 0));
+          // Resident ticked "enroll in autopay" on the pay page: keep the bank account / card on the unit.
+          if (inv?.unit_id && cs?.metadata?.autopay === "1" && cs.payment_intent) {
+            try { const acctStripe = ev.account || null; const pi: any = await stripe.paymentIntents.retrieve(String(cs.payment_intent), { expand: ["payment_method"] }, acctStripe ? { stripeAccount: acctStripe } : undefined); if (pi?.payment_method?.id) await saveAutopay(inv.unit_id, pi.payment_method, pi.customer || cs.customer || null); } catch (e) { console.error("autopay after pay", e); }
+          }
           // "Save my card for next time" on the pay page: keep the payment method on the client's record.
           if (inv?.contact_id && cs?.metadata?.save_card === "1" && cs.payment_intent) {
             try { const acctStripe = ev.account || null; const pi: any = await stripe.paymentIntents.retrieve(String(cs.payment_intent), { expand: ["payment_method"] }, acctStripe ? { stripeAccount: acctStripe } : undefined); const pm: any = pi?.payment_method || {}; if (pm?.id) await supabase.from("contacts").update({ card: { payment_method: pm.id, customer: pi.customer || cs.customer || null, brand: pm.card?.brand || null, last4: pm.card?.last4 || null, saved_at: new Date().toISOString() }, updated_at: new Date().toISOString() }).eq("id", inv.contact_id); } catch (e) { console.error("save card after pay", e); }
           }
         }
+      } else if (ev.type === "checkout.session.async_payment_failed") {
+        // A bank debit from the pay page bounced: tell the resident, leave the invoice open.
+        const cs = ev.data.object; const invoiceId = cs?.metadata?.invoice_id;
+        if (invoiceId) { const { data: inv } = await supabase.from("invoices").select("account_id, customer_phone, number, pay_token, kind").eq("id", invoiceId).maybeSingle(); if (inv?.customer_phone) { const acct = await loadAccount(inv.account_id); if (acct?.settings?.sms?.enabled === true) await sendText(inv.account_id, inv.customer_phone, `${acct.name}: your bank payment for ${inv.kind === "dues" ? "dues" : "invoice"} ${inv.number} didn't go through. You can try again or use a card here: ${payUrl(inv.pay_token)}`); } }
+      } else if (ev.type === "payment_intent.succeeded" && ev.data.object?.metadata?.autopay === "1") {
+        // Autopay bank debits settle a few days after the sweep charged them.
+        const pi = ev.data.object; const { data: inv } = await supabase.from("invoices").select("*").eq("id", String(pi.metadata.invoice_id || "")).maybeSingle();
+        if (inv && !inv.paid_at) await markPaid(inv, pi.payment_method_types?.[0] === "us_bank_account" ? "bank" : "card", "stripe", pi.id, "autopay", pi.amount_received ?? inv.total_cents, undefined, Number(pi.metadata?.card_fee_cents || 0));
+      } else if (ev.type === "payment_intent.payment_failed" && ev.data.object?.metadata?.autopay === "1") {
+        const pi = ev.data.object; const { data: inv } = await supabase.from("invoices").select("id, account_id, customer_phone, number, pay_token").eq("id", String(pi.metadata.invoice_id || "")).maybeSingle();
+        if (inv) { await supabase.from("invoices").update({ paid_note: `autopay failed: ${pi.last_payment_error?.message || "declined"}`, updated_at: new Date().toISOString() }).eq("id", inv.id); if (inv.customer_phone) { const acct = await loadAccount(inv.account_id); if (acct?.settings?.sms?.enabled === true) await sendText(inv.account_id, inv.customer_phone, `${acct.name}: your autopay for dues ${inv.number} didn't go through (${pi.last_payment_error?.message || "declined"}). Pay here or update your autopay: ${payUrl(inv.pay_token)}`); } }
       } else if (ev.type === "account.updated") {
         const a = ev.data.object; const { data: pa } = await supabase.from("payment_accounts").select("*").eq("stripe_account_id", a.id).maybeSingle();
         if (pa) { const acct = await loadAccount(pa.account_id); if (acct) await refreshStatus(acct, pa); }
+        const { data: comm } = await supabase.from("communities").select("*").eq("stripe_account_id", a.id).maybeSingle();
+        if (comm) await refreshCommunity(comm);
       }
     } catch (e) { console.error("webhook handling", e); }
     return json({ received: true });
@@ -284,34 +330,40 @@ Deno.serve(async (req: Request) => {
     if (!inv) return json({ ok: false, error: "not_found" }, 404);
     if (inv.paid_at || inv.status === "paid") return json({ ok: false, error: "already_paid" });
     if (inv.status === "void") return json({ ok: false, error: "void" });
-    const acct = await loadAccount(inv.account_id); const pa = await loadPA(inv.account_id);
+    const acct = await loadAccount(inv.account_id); const pa = await paFor(inv);
     // Tip chosen on the pay page (tickets only). Saved on the invoice so the receipt and the stylist report see it.
     if (body.tip_cents !== undefined && inv.kind === "ticket" && acct?.settings?.payments?.tips !== false) {
       const tip = Math.max(0, Math.min(Math.round(Number(body.tip_cents) || 0), 100000));
       if (tip !== (inv.tip_cents || 0)) { const { data: upd } = await supabase.from("invoices").update({ tip_cents: tip, updated_at: new Date().toISOString() }).eq("id", inv.id).select("*").maybeSingle(); if (upd) Object.assign(inv, upd); }
     }
     if (!stripe) return json({ ok: false, error: "stripe_not_configured" }, 503);
-    if (!acct?.settings?.payments?.enabled || !pa?.charges_enabled || !pa?.stripe_account_id) return json({ ok: false, error: "online_payments_off" });
+    if (!pa?.enabled || !pa?.charges_enabled || !pa?.stripe_account_id) return json({ ok: false, error: "online_payments_off" });
+    // Dues: resident picks bank (no fee) or card (+ the community's fee). Other invoices: card.
+    const byBank = !!inv.community_id && body.method === "bank";
+    const autopay = !!inv.unit_id && body.autopay === true;
     const lines = (inv.lines || []).filter((l: any) => l.kind !== "discount" && l.kind !== "tax" && l.cents > 0);
     const discount = (inv.lines || []).filter((l: any) => l.kind === "discount").reduce((s: number, l: any) => s + Math.abs(l.cents), 0);
     const tax = inv.tax_cents || 0;
     // Stripe line items can't be negative: when there's a discount, collapse to one line for the total.
-    const fee = cardFee(acct, inv.total_cents);
+    const fee = byBank ? { pct: 0, cents: 0 } : cardFee(acct, inv.total_cents, pa.community ? pa.community.card_fee_pct : null);
     const items = (discount > 0 || lines.length === 0)
-      ? [{ quantity: 1, price_data: { currency: inv.currency, unit_amount: inv.total_cents, product_data: { name: `Invoice ${inv.number}` } } }]
+      ? [{ quantity: 1, price_data: { currency: inv.currency, unit_amount: inv.total_cents, product_data: { name: `${inv.kind === "dues" ? "Dues" : "Invoice"} ${inv.number}` } } }]
       : [...lines.map((l: any) => ({ quantity: 1, price_data: { currency: inv.currency, unit_amount: l.cents, product_data: { name: l.desc.slice(0, 120) } } })),
          ...(tax > 0 ? [{ quantity: 1, price_data: { currency: inv.currency, unit_amount: tax, product_data: { name: "Sales tax" } } }] : [])];
     if (inv.tip_cents > 0 && !(discount > 0 || lines.length === 0)) items.push({ quantity: 1, price_data: { currency: inv.currency, unit_amount: inv.tip_cents, product_data: { name: "Tip" } } });
     if (fee.cents > 0) items.push({ quantity: 1, price_data: { currency: inv.currency, unit_amount: fee.cents, product_data: { name: `Card processing fee (${fee.pct}%)` } } });
     try {
       const saveCard = body.save_card === true && !!inv.contact_id;
+      const keep = saveCard || autopay; const payee = pa.community ? pa.community.name : acct.name;
       const session: any = await stripe.checkout.sessions.create({
         mode: "payment", line_items: items,
+        payment_method_types: byBank ? ["us_bank_account"] : ["card"],
+        ...(byBank ? { payment_method_options: { us_bank_account: { verification_method: "instant", financial_connections: { permissions: ["payment_method"] } } } } : {}),
         success_url: `${payUrl(token)}?paid=1`, cancel_url: payUrl(token),
         customer_email: inv.customer_email || undefined,
-        ...(saveCard ? { customer_creation: "always" } : {}),
-        metadata: { invoice_id: inv.id, account_id: inv.account_id, number: inv.number, card_fee_cents: String(fee.cents), save_card: saveCard ? "1" : "0" },
-        payment_intent_data: { description: `${acct.name} · ${inv.kind === "ticket" ? "Visit" : "Invoice"} ${inv.number}${fee.cents ? " (incl. card fee)" : ""}`, metadata: { invoice_id: inv.id, card_fee_cents: String(fee.cents) }, ...(saveCard ? { setup_future_usage: "off_session" } : {}) },
+        ...(keep ? { customer_creation: "always" } : {}),
+        metadata: { invoice_id: inv.id, account_id: inv.account_id, number: inv.number, card_fee_cents: String(fee.cents), save_card: saveCard ? "1" : "0", autopay: autopay ? "1" : "0", unit_id: inv.unit_id || "" },
+        payment_intent_data: { description: `${payee} · ${inv.kind === "ticket" ? "Visit" : inv.kind === "dues" ? "Dues" : "Invoice"} ${inv.number}${fee.cents ? " (incl. card fee)" : ""}`, metadata: { invoice_id: inv.id, card_fee_cents: String(fee.cents) }, ...(keep ? { setup_future_usage: "off_session" } : {}) },
       } as any, { stripeAccount: pa.stripe_account_id });
       await supabase.from("invoices").update({ stripe_checkout_session_id: session.id, updated_at: new Date().toISOString() }).eq("id", inv.id);
       return json({ ok: true, url: session.url });
@@ -417,10 +469,13 @@ Deno.serve(async (req: Request) => {
     if (!inv) return json({ ok: false, error: "not_found" }, 404); if (inv.paid_at) return json({ ok: false, error: "already_paid" });
     if (!(await canTouchInvoice(caller, inv))) return json({ ok: false, error: "not_yours", message: "That invoice belongs to someone else on the team." }, 403);
     const to = String(body.to || inv.customer_phone || "").trim(); const email = String(body.email || inv.customer_email || "").trim();
-    const pa = await loadPA(acct.id); const online = acct.settings?.payments?.enabled === true && pa?.charges_enabled === true;
+    const pa = await paFor(inv); const online = !!(pa?.enabled && pa?.charges_enabled);
     const link = payUrl(inv.pay_token); const total = money(inv.total_cents);
-    const sfee = cardFee(acct, inv.total_cents);
-    const text = online
+    const sfee = cardFee(acct, inv.total_cents, pa?.community ? pa.community.card_fee_pct : null);
+    const payeeName = pa?.community ? pa.community.name : business;
+    const text = inv.kind === "dues"
+      ? `${payeeName}: dues of ${total} for ${inv.service_address || "your home"} are due ${inv.due_at ? new Date(inv.due_at + "T12:00:00Z").toLocaleDateString("en-US", { month: "short", day: "numeric" }) : "soon"}. ${online ? `Pay by bank (no fee) or card${sfee.pct ? ` (+${sfee.pct}%)` : ""}, or set up autopay: ${link}` : `Details: ${link}`}`
+      : online
       ? `${business}: your invoice ${inv.number} for ${total} is ready. Tap to view and pay: ${link}${sfee.cents ? ` (${sfee.pct}% card fee if paying by card; cash or check is ${total})` : ""}`
       : `${business}: your invoice ${inv.number} for ${total} is ready. View it here: ${link}`;
     let sentSms = false, sentEmail = false;
@@ -440,7 +495,7 @@ Deno.serve(async (req: Request) => {
     const id = String(body.id || ""); const { data: inv } = await supabase.from("invoices").select("*").eq("id", id).eq("account_id", acct.id).maybeSingle();
     if (!inv) return json({ ok: false, error: "not_found" }, 404);
     if (!(await canTouchInvoice(caller, inv))) return json({ ok: false, error: "not_yours", message: "That invoice belongs to someone else on the team." }, 403);
-    const method = ["cash", "check", "card", "other", "gift_card", "zelle", "venmo"].includes(body.method) ? body.method : "cash";
+    const method = ["cash", "check", "card", "other", "gift_card", "zelle", "venmo", "bank"].includes(body.method) ? body.method : "cash";
     if (body.tip_cents !== undefined && !inv.paid_at) { const tip = Math.max(0, Math.min(Math.round(Number(body.tip_cents) || 0), 100000)); if (tip !== (inv.tip_cents || 0)) { const { data: t } = await supabase.from("invoices").update({ tip_cents: tip, updated_at: new Date().toISOString() }).eq("id", inv.id).select("*").maybeSingle(); if (t) Object.assign(inv, t); } }
     const upd = await markPaid(inv, method, "manual", null, String(body.note || "").slice(0, 200) || null);
     await logActivity(acct.id, caller.userId, "invoice.paid", "invoice", inv.id, inv.number, { method, total_cents: inv.total_cents });
@@ -515,6 +570,36 @@ Deno.serve(async (req: Request) => {
     const { data } = await supabase.from("invoices").update({ status: "void", updated_at: new Date().toISOString() }).eq("id", id).select("*").maybeSingle();
     await logActivity(acct.id, caller.userId, "invoice.void", "invoice", inv.id, inv.number, { total_cents: inv.total_cents });
     return json({ ok: true, invoice: data });
+  }
+
+  // ---- HOA dues: charge a unit's autopay for one invoice (called by the dues sweep, or an admin's "charge now") ----
+  if (action === "dues_autopay_charge") {
+    const { data: inv } = await supabase.from("invoices").select("*").eq("id", String(body.invoice_id || "")).eq("account_id", acct.id).maybeSingle();
+    if (!inv || !inv.unit_id) return json({ ok: false, error: "not_found" }, 404); if (inv.paid_at) return json({ ok: true, already: true });
+    const { data: unit } = await supabase.from("units").select("id, autopay, label, owner_phone").eq("id", inv.unit_id).maybeSingle(); const ap = unit?.autopay;
+    if (!ap?.payment_method) return json({ ok: false, error: "no_autopay" });
+    const pa = await paFor(inv); if (!stripe || !pa?.charges_enabled || !pa?.stripe_account_id) return json({ ok: false, error: "online_payments_off" });
+    const isBank = ap.method === "bank"; const fee = isBank ? { pct: 0, cents: 0 } : cardFee(acct, inv.total_cents, pa.community?.card_fee_pct);
+    await supabase.from("invoices").update({ autopay_attempts: (inv.autopay_attempts || 0) + 1, updated_at: new Date().toISOString() }).eq("id", inv.id);
+    try {
+      const pi: any = await stripe.paymentIntents.create({ amount: inv.total_cents + fee.cents, currency: inv.currency || "usd", customer: ap.customer || undefined, payment_method: ap.payment_method, payment_method_types: [isBank ? "us_bank_account" : "card"], off_session: true, confirm: true, description: `${pa.community?.name || business} · Dues ${inv.number} (autopay)`, metadata: { invoice_id: inv.id, account_id: acct.id, number: inv.number, autopay: "1", card_fee_cents: String(fee.cents) } }, { stripeAccount: pa.stripe_account_id });
+      if (pi.status === "succeeded") { const upd = await markPaid(inv, isBank ? "bank" : "card", "stripe", pi.id, "autopay", pi.amount_received ?? (inv.total_cents + fee.cents), undefined, fee.cents); return json({ ok: true, invoice: upd, status: "paid" }); }
+      if (pi.status === "processing") { await supabase.from("invoices").update({ paid_note: "autopay: bank debit processing", stripe_payment_intent_id: pi.id, updated_at: new Date().toISOString() }).eq("id", inv.id); return json({ ok: true, status: "processing" }); }
+      return json({ ok: false, error: "not_succeeded", status: pi.status });
+    } catch (e: any) { const msg = e?.message || String(e); await supabase.from("invoices").update({ paid_note: `autopay failed: ${msg.slice(0, 120)}`, updated_at: new Date().toISOString() }).eq("id", inv.id); return json({ ok: false, error: "declined", message: msg }); }
+  }
+  if (action === "autopay_setup_link") {
+    // Text a resident a link to enroll in autopay (bank by default, or card). The webhook stores it on the unit.
+    const { data: unit } = await supabase.from("units").select("id, label, owner_phone, owner_email, community_id, communities(name, stripe_account_id, charges_enabled, card_fee_pct)").eq("id", String(body.unit_id || "")).eq("account_id", acct.id).maybeSingle();
+    const c: any = (unit as any)?.communities; if (!unit || !c) return json({ ok: false, error: "not_found" }, 404);
+    if (!stripe || !c.charges_enabled || !c.stripe_account_id) return json({ ok: false, error: "online_payments_off", message: "Connect this community's Stripe first." });
+    const method = body.method === "card" ? "card" : "us_bank_account";
+    try {
+      const session: any = await stripe.checkout.sessions.create({ mode: "setup", payment_method_types: [method], customer_email: unit.owner_email || undefined, ...(method === "us_bank_account" ? { payment_method_options: { us_bank_account: { verification_method: "instant", financial_connections: { permissions: ["payment_method"] } } } } : {}), success_url: `${APP}/pay/card-saved`, cancel_url: `${APP}/pay/card-saved?cancel=1`, metadata: { unit_id: unit.id, account_id: acct.id, stripe_account: c.stripe_account_id }, setup_intent_data: { metadata: { unit_id: unit.id, account_id: acct.id } } } as any, { stripeAccount: c.stripe_account_id });
+      const to = String(body.phone || unit.owner_phone || "").trim(); let sent = false;
+      if (to && acct.settings?.sms?.enabled === true) sent = await sendText(acct.id, to, `${c.name}: set up autopay for ${unit.label} dues here (${method === "card" ? "card, " + (c.card_fee_pct || 3) + "% fee" : "bank account, no fee"}; drawn on the due date, receipt every time): ${session.url}`);
+      return json({ ok: true, sent, url: session.url });
+    } catch (e) { return json({ ok: false, error: "stripe_error", detail: String((e as any)?.message || e) }, 502); }
   }
 
   if (action === "client_card") {
