@@ -1,7 +1,7 @@
 import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 
-// Donna — HOA / community dues (v1). PM Donna and Real Estate Donna (community managers).
+// Donna — HOA / community dues (v2). PM Donna and Real Estate Donna (community managers).
 //
 // Decisions (Hubert, Nov 10 2026): dues monthly or annually per community (+ one-off assessments); FULL amount only;
 // autopay with bank debit (ACH, no fee) as the default and card at the community's card fee (3%); one Stripe connected
@@ -21,6 +21,7 @@ import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 //   autopay_link {unit_id, method?} / autopay_cancel {unit_id}
 //   lookup_by_phone {phone}                -> the caller's unit(s) + open dues (for Donna on the phone / text)
 //   sweep                                  -> cron, daily: generate -> remind -> autopay -> late fee
+//   (Retell tool call, body.call)          -> "what do I owe?" spoken answer + pay link texted to the number on file
 //
 // Money moves only through `payments` (checkout, autopay charge, autopay enrollment); this function owns the schedule.
 
@@ -57,13 +58,15 @@ async function stripeV1Form(path: string, form: Record<string, string>, stripeAc
 
 type Caller = { userId: string; accountId: string; role: string; internal: boolean };
 async function resolveCaller(req: Request, body: any): Promise<Caller | null> {
-  const m = (req.headers.get("Authorization") || "").match(/Bearer\s+(.+)/i); if (!m) return null;
-  let internal = m[1] === SERVICE_ROLE;
+  const m = (req.headers.get("Authorization") || "").match(/Bearer\s+(.+)/i);
+  if (!m && !req.headers.get("x-cron-secret")) return null;
+  let internal = !!m && m[1] === SERVICE_ROLE;
   if (!internal && req.headers.get("x-cron-secret")) { const { data: sec } = await supabase.from("app_secrets").select("value").eq("key", "cron_secret").maybeSingle(); internal = !!(sec as any)?.value && req.headers.get("x-cron-secret") === (sec as any).value; }
   if (internal) {
     if (body?.user_id) { const { data: me } = await supabase.from("users").select("id, account_id, role").eq("id", body.user_id).maybeSingle(); return me ? { userId: me.id, accountId: me.account_id, role: me.role, internal: true } : null; }
     return { userId: "", accountId: String(body?.account_id || ""), role: "owner", internal: true };
   }
+  if (!m) return null;
   const userClient = createClient(SUPA_URL, ANON, { auth: { persistSession: false } });
   const { data: { user } } = await userClient.auth.getUser(m[1]); if (!user) return null;
   const { data: me } = await supabase.from("users").select("account_id, role").eq("id", user.id).maybeSingle();
@@ -146,7 +149,13 @@ function parseRoster(text: string): { label: string; owner_name: string | null; 
   for (const raw of String(text || "").split(/\r?\n/)) {
     const line = raw.trim(); if (!line) continue;
     if (/^(address|lot|unit|home|street)\b/i.test(line) && /owner|name|phone|email/i.test(line)) continue; // header
-    const parts = line.split(/\t|\s*\|\s*|\s*,\s*/).map((p) => p.trim()).filter(Boolean);
+    let parts = line.split(/\t|\s*\|\s*|\s*,\s*/).map((p) => p.trim()).filter(Boolean);
+    if (parts.length === 1) {
+      // No separators ("105 Oak Creek Dr Maria Lopez 817-555-0103 maria@x.com $95"): pull the phone, email and amount out first.
+      let rest1 = line; const pulled: string[] = [];
+      for (const re of [/\S+@\S+\.\S+/, /(?:\+?1[\s.-]?)?\(?\d{3}\)?[\s.-]?\d{3}[\s.-]?\d{4}\b/, /\$\s*\d{1,5}(?:\.\d{2})?/]) { const m = rest1.match(re); if (m) { pulled.push(m[0]); rest1 = rest1.replace(m[0], " "); } }
+      parts = [rest1.replace(/\s+/g, " ").trim(), ...pulled].filter(Boolean);
+    }
     let phone: string | null = null, email: string | null = null, dues: number | null = null; const rest: string[] = [];
     for (const p of parts) {
       if (!email && /@/.test(p)) { email = p.toLowerCase(); continue; }
@@ -194,7 +203,9 @@ async function sweepCommunity(c: any): Promise<any> {
     else if (dLeft === -1) remind = true;
     else if (dLeft < -1 && lastRem >= 7) remind = true;
     if (remind && texting && u.owner_phone && lastRem >= 2) {
-      const msg = dLeft > 0 ? `${c.name}: a reminder that ${money(inv.total_cents)} in dues for ${u.label} is due ${MONTHS[Number(due.slice(5, 7)) - 1]} ${Number(due.slice(8, 10))}. Pay by bank (no fee) or card, or set up autopay: ${link}`
+      const ap = u.autopay?.payment_method ? u.autopay : null;
+      const msg = (dLeft > 0 && ap) ? `${c.name}: autopay will draft ${money(inv.total_cents)} for ${u.label} on ${MONTHS[Number(due.slice(5, 7)) - 1]} ${Number(due.slice(8, 10))} from your ${ap.method === "card" ? "card" : "bank account"}${ap.last4 ? ` ending ${ap.last4}` : ""}. Nothing to do. To pay another way: ${link}`
+        : dLeft > 0 ? `${c.name}: a reminder that ${money(inv.total_cents)} in dues for ${u.label} is due ${MONTHS[Number(due.slice(5, 7)) - 1]} ${Number(due.slice(8, 10))}. Pay by bank (no fee) or card, or set up autopay: ${link}`
         : `${c.name}: dues of ${money(inv.total_cents)} for ${u.label} were due ${MONTHS[Number(due.slice(5, 7)) - 1]} ${Number(due.slice(8, 10))}${Number(c.late_fee_cents) > 0 && !inv.late_fee_applied_at ? ` — a ${money(c.late_fee_cents)} late fee applies after ${c.grace_days} days` : ""}. Pay here: ${link}`;
       if (await sendText(c.account_id, u.owner_phone, msg)) { res.reminded++; await supabase.from("invoices").update({ last_reminder_at: new Date().toISOString(), updated_at: new Date().toISOString() }).eq("id", inv.id); }
     }
@@ -209,10 +220,60 @@ async function sweepCommunity(c: any): Promise<any> {
   return res;
 }
 
+
+// ---------------------------------------------------------------- Donna on the phone: "what do I owe?" (Retell custom tool hoa_dues)
+const RETELL_WEBHOOK_SECRET = Deno.env.get("RETELL_WEBHOOK_SECRET") || "";
+const RETELL_SIG_ENFORCE = (Deno.env.get("RETELL_SIG_ENFORCE") || "").toLowerCase() === "true";
+async function retellSigValid(raw: string, sig: string | null): Promise<boolean> {
+  if (!RETELL_WEBHOOK_SECRET || !sig) return false;
+  const m = String(sig).match(/v=(\d+),d=(.*)/); if (!m) return false;
+  if (Math.abs(Date.now() - Number(m[1])) > 5 * 60 * 1000) return false;
+  try {
+    const key = await crypto.subtle.importKey("raw", new TextEncoder().encode(RETELL_WEBHOOK_SECRET), { name: "HMAC", hash: "SHA-256" }, false, ["sign"]);
+    const mac = await crypto.subtle.sign("HMAC", key, new TextEncoder().encode(raw + m[1]));
+    const exp = Array.from(new Uint8Array(mac)).map((b) => b.toString(16).padStart(2, "0")).join(""); const got = (m[2] || "").trim().toLowerCase();
+    if (exp.length !== got.length) return false; let d = 0; for (let i = 0; i < exp.length; i++) d |= exp.charCodeAt(i) ^ got.charCodeAt(i); return d === 0;
+  } catch { return false; }
+}
+const sayDate = (d: string) => d ? `${MONTHS[Number(d.slice(5, 7)) - 1]} ${Number(d.slice(8, 10))}` : "";
+// Balances are only spoken for homes whose phone on file is the number calling, and the pay link is texted to that same number.
+async function duesForCaller(accountId: string, phone: string): Promise<string> {
+  const notFound = "I don't see dues on file for the number you're calling from. If the account is under a different phone number, the manager can verify you and send a statement — would you like me to take a message for them?";
+  if (!phone) return notFound;
+  const { data: units } = await supabase.from("units").select("id, label, autopay, community_id, communities(name)").eq("account_id", accountId).eq("owner_phone", phone).eq("is_active", true);
+  if (!units?.length) return notFound;
+  const { data: open } = await supabase.from("invoices").select("id, total_cents, due_at, pay_token, unit_id, late_fee_applied_at").in("unit_id", units.map((u: any) => u.id)).eq("kind", "dues").in("status", ["draft", "sent"]).order("due_at");
+  const today = new Date().toISOString().slice(0, 10);
+  const byId: Record<string, any> = {}; for (const u of units) byId[(u as any).id] = u;
+  const items = (open || []).map((i: any) => ({ ...i, unit: byId[i.unit_id] }));
+  const anyAuto = units.some((u: any) => u.autopay?.payment_method);
+  if (!items.length) return `You're all paid up${units.length === 1 ? ` for ${(units[0] as any).label}` : ""}; nothing is due right now.${anyAuto ? " Autopay is on, so the next dues will be drafted automatically on the due date." : " Your next dues notice will have a link to pay or to turn on autopay."}`;
+  const oneHome = new Set(items.map((i: any) => i.unit_id)).size === 1;
+  const total = items.reduce((s: number, i: any) => s + (i.total_cents || 0), 0);
+  const parts = items.slice(0, 3).map((i: any) => `${money(i.total_cents)}${oneHome ? "" : ` for ${i.unit.label}`} ${i.due_at < today ? `that was due ${sayDate(i.due_at)}${i.late_fee_applied_at ? ", including a late fee" : ""}` : `due ${sayDate(i.due_at)}`}${i.unit.autopay?.payment_method && i.due_at >= today ? ", which autopay will draft on the due date" : ""}`);
+  if (oneHome) parts[0] = `For ${items[0].unit.label}, ${parts[0]}`;
+  if (items.length > 1) parts[parts.length - 1] += `, so ${money(total)} in all`;
+  const comm = (items[0].unit as any).communities?.name || "Your association";
+  const sms = `${comm} dues:\n${items.slice(0, 3).map((i: any) => `${i.unit.label}: ${money(i.total_cents)} due ${sayDate(i.due_at)} ${payUrl(i.pay_token)}`).join("\n")}\nPay by bank (no fee) or card. You can turn on autopay on the same page.`;
+  const sent = await sendText(accountId, phone, sms);
+  return `${oneHome ? "" : "I have "}${parts.join(oneHome ? ", and " : "; and ")}. ${sent ? "I just texted you a link to pay. Paying by bank has no fee, a card adds a small fee, and you can turn on autopay on that same page." : "You can pay with the link on your dues notice, by bank with no fee or by card."} I can't take card or bank numbers over the phone.`;
+}
+
 Deno.serve(async (req: Request) => {
   if (req.method === "OPTIONS") return new Response(null, { headers: CORS });
   if (req.method !== "POST") return json({ ok: false, error: "method" }, 405);
-  let body: any = {}; try { body = await req.json(); } catch { return json({ ok: false, error: "bad_json" }, 400); }
+  const raw = await req.text();
+  let body: any = {}; try { body = JSON.parse(raw || "{}"); } catch { return json({ ok: false, error: "bad_json" }, 400); }
+  // Retell tool call (no Authorization header): identify the business by Donna's number, the caller by theirs.
+  if (body?.call && !req.headers.get("Authorization") && !req.headers.get("x-cron-secret")) {
+    const valid = await retellSigValid(raw, req.headers.get("x-retell-signature")); console.log(`retell-sig dues: ${valid ? "PASS" : "FAIL"}`);
+    if (!valid && RETELL_SIG_ENFORCE) return json({ error: "unauthorized" }, 401);
+    const call = body.call || {}; const outbound = call.direction === "outbound";
+    const donnaNum = outbound ? call.from_number : call.to_number; const callerNum = normPhone(outbound ? call.to_number : call.from_number);
+    const { data: asst } = await supabase.from("assistants").select("account_id").eq("twilio_number", donnaNum).maybeSingle();
+    if (!(asst as any)?.account_id) return json({ result: "I'm having trouble looking up dues right now. I can take a message for the manager." });
+    return json({ result: await duesForCaller((asst as any).account_id, callerNum) });
+  }
   const action = String(body.action || "");
   const caller = await resolveCaller(req, body); if (!caller) return json({ ok: false, error: "unauthorized" }, 401);
 

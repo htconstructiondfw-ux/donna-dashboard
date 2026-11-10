@@ -446,6 +446,7 @@ function renderApp(){
   // A solo owner lives in their day; land there on first load, then leave navigation free.
   if(mgr && isSolo() && !state._homed){ state._homed=true; if(state.view==='assistant') state.view='today'; }
   if(mgr && new URLSearchParams(location.search).get('calendar')) state.view='settings';
+  if(mgr && new URLSearchParams(location.search).get('dues')) state.view='dues';
   if(mgr && new URLSearchParams(location.search).get('payments') && !state._payReturned){ state._payReturned=true; state.view=(salonOn()&&!paymentsOn())?'money':'settings'; setTimeout(()=>{ if($("#pay-card")) paintPaymentsCard(true); },600); try{ history.replaceState(null,'',location.pathname); }catch(e){} }
   let navConfig, navActivity, soon=[];
   if(mgr){
@@ -466,6 +467,7 @@ function renderApp(){
     const re=realEstateOn(), prop=propertyOn();
     if(re){ navConfig.splice(1,0,["listings",prop?"Listings (for sale & rent)":"Listings",I.home]); navActivity.splice(1,0,["leads","Leads & documents",I.sign]); }
     if(prop){ navConfig.splice(re?2:1,0,["properties",re?"Managed rentals":"Properties",I.building]); navConfig.splice(re?3:2,0,["contractors",re?"Vendors":"Contractors",I.wrench]); navActivity.splice(0,0,["requests",re?"Maintenance requests":"Service requests",I.wrench]); }
+    if(prop||re) navActivity.splice(prop?1:2,0,["dues","Communities & dues",I.home]);
     soon=[["billing","Billing",I.card]];
   } else {
     // Stylist: focused view — their own bookings, messages, clients, and their own availability.
@@ -498,7 +500,7 @@ function renderApp(){
     </aside>
     <main class="main">
       <div class="topbar">
-        <div class="crumbs">${['settings','notifications','account'].includes(state.view)?'Account':(['today','messages','appointments','waitlist','calls','contacts','clients','gaps','conversations','requests','leads','money'].includes(state.view)?'Activity':'Configure')} · <b>${esc(({today:"Today",assistant:"Assistant",schedule:"Schedule",types:(pmMode()?"Visit types":(salonOn()?"Services":"Appointment types")),staff:"Team",messages:"Phone messages",appointments:(pmMode()?"Visits & appointments":"Appointments"),settings:"Settings",notifications:"Notifications",calls:"Calls",knowledge:"Knowledge",contacts:(salonOn()?"Clients":"Contacts"),clients:"Clients",gaps:"Open questions",conversations:"Inbox",waitlist:"Waitlist",promotions:"Promotions",booking:(pmMode()?"Self-scheduling":"Booking page"),mylink:"My booking link",intake:"Intake forms",properties:"Properties",contractors:"Contractors",requests:"Service requests",listings:"Listings",leads:"Leads & documents",money:(isManager()?"Checkout & money":"My money"),account:"My account"})[state.view])}</b></div>
+        <div class="crumbs">${['settings','notifications','account'].includes(state.view)?'Account':(['today','messages','appointments','waitlist','calls','contacts','clients','gaps','conversations','requests','leads','money','dues'].includes(state.view)?'Activity':'Configure')} · <b>${esc(({today:"Today",assistant:"Assistant",schedule:"Schedule",types:(pmMode()?"Visit types":(salonOn()?"Services":"Appointment types")),staff:"Team",messages:"Phone messages",appointments:(pmMode()?"Visits & appointments":"Appointments"),settings:"Settings",notifications:"Notifications",calls:"Calls",knowledge:"Knowledge",contacts:(salonOn()?"Clients":"Contacts"),clients:"Clients",gaps:"Open questions",conversations:"Inbox",waitlist:"Waitlist",promotions:"Promotions",booking:(pmMode()?"Self-scheduling":"Booking page"),mylink:"My booking link",intake:"Intake forms",properties:"Properties",dues:"Communities & dues",contractors:"Contractors",requests:"Service requests",listings:"Listings",leads:"Leads & documents",money:(isManager()?"Checkout & money":"My money"),account:"My account"})[state.view])}</b></div>
         <div class="acct-chip"><span class="av">${initials}</span><div class="who"><b>${esc(state.account.company)}</b><span>${esc((state.account.status||'trial'))} · ${esc(state.account.plan||'starter')}</span></div></div>
       </div>
       <div id="approve-banner"></div>
@@ -515,8 +517,8 @@ function renderPage(){
   if('speechSynthesis' in window) window.speechSynthesis.cancel();
   teardownRealtime();
   document.querySelectorAll(".nav-item[data-v]").forEach(b=>b.classList.toggle("active",b.dataset.v===state.view));
-  $(".crumbs").innerHTML=`${['settings','notifications','account'].includes(state.view)?'Account':(['today','messages','appointments','waitlist','calls','contacts','clients','gaps','conversations','requests','leads','money'].includes(state.view)?'Activity':'Configure')} · <b>${esc(({today:"Today",assistant:"Assistant",schedule:"Schedule",types:(pmMode()?"Visit types":(salonOn()?"Services":"Appointment types")),staff:"Team",messages:"Phone messages",appointments:(pmMode()?"Visits & appointments":"Appointments"),settings:"Settings",notifications:"Notifications",calls:"Calls",knowledge:"Knowledge",contacts:(salonOn()?"Clients":"Contacts"),clients:"Clients",gaps:"Open questions",conversations:"Email inbox",waitlist:"Waitlist",promotions:"Promotions",booking:(pmMode()?"Self-scheduling":"Booking page"),mylink:"My booking link",intake:"Intake forms",properties:"Properties",contractors:"Contractors",requests:"Service requests",listings:"Listings",leads:"Leads & documents",money:(isManager()?"Checkout & money":"My money"),account:"My account"})[state.view])}</b>`;
-  const PAGES={today:pageToday, assistant:pageAssistant, schedule:pageSchedule, types:pageTypes, staff:pageStaff, messages:pageMessages, appointments:renderAppts, settings:pageSettings, notifications:pageNotifications, calls:pageCalls, knowledge:pageKnowledge, contacts:pageContacts, clients:pageClients, gaps:pageGaps, conversations:pageConversations, waitlist:pageWaitlist, promotions:pagePromotions, booking:pageBookingPage, mylink:pageMyLink, intake:pageIntakeForms, properties:pageProperties, contractors:pageContractors, requests:pageServiceRequests, jobs:pageJobs, money:pageSalonMoney, listings:pageListings, leads:pageLeads, account:pageMyAccount};
+  $(".crumbs").innerHTML=`${['settings','notifications','account'].includes(state.view)?'Account':(['today','messages','appointments','waitlist','calls','contacts','clients','gaps','conversations','requests','leads','money','dues'].includes(state.view)?'Activity':'Configure')} · <b>${esc(({today:"Today",assistant:"Assistant",schedule:"Schedule",types:(pmMode()?"Visit types":(salonOn()?"Services":"Appointment types")),staff:"Team",messages:"Phone messages",appointments:(pmMode()?"Visits & appointments":"Appointments"),settings:"Settings",notifications:"Notifications",calls:"Calls",knowledge:"Knowledge",contacts:(salonOn()?"Clients":"Contacts"),clients:"Clients",gaps:"Open questions",conversations:"Email inbox",waitlist:"Waitlist",promotions:"Promotions",booking:(pmMode()?"Self-scheduling":"Booking page"),mylink:"My booking link",intake:"Intake forms",properties:"Properties",dues:"Communities & dues",contractors:"Contractors",requests:"Service requests",listings:"Listings",leads:"Leads & documents",money:(isManager()?"Checkout & money":"My money"),account:"My account"})[state.view])}</b>`;
+  const PAGES={today:pageToday, assistant:pageAssistant, schedule:pageSchedule, types:pageTypes, staff:pageStaff, messages:pageMessages, appointments:renderAppts, settings:pageSettings, notifications:pageNotifications, calls:pageCalls, knowledge:pageKnowledge, contacts:pageContacts, clients:pageClients, gaps:pageGaps, conversations:pageConversations, waitlist:pageWaitlist, promotions:pagePromotions, booking:pageBookingPage, mylink:pageMyLink, intake:pageIntakeForms, properties:pageProperties, dues:pageDues, contractors:pageContractors, requests:pageServiceRequests, jobs:pageJobs, money:pageSalonMoney, listings:pageListings, leads:pageLeads, account:pageMyAccount};
   const LOADERS={today:loadAppointments, appointments:loadAppointments, messages:loadMessages, calls:loadCalls, contacts:loadContacts, clients:loadContacts, gaps:loadGaps, conversations:loadConversations, staff:loadStaff, waitlist:loadWaitlist};
   const v=state.view;
   (PAGES[v]||(()=>{}))();
@@ -4876,6 +4878,188 @@ async function loadContractors(){
   const { data:rules }=await db.from('dispatch_rules').select('*').eq('account_id',state.account.id);
   state.con.rules=rules||[];
 }
+// ---------------------------------------------------------------- Communities & dues (PM + real estate community managers)
+// Each association is its own Stripe merchant (money goes straight to its bank); Donna bills, reminds, runs autopay, adds late fees.
+async function duesApi(body){ const { data, error }=await db.functions.invoke('dues',{ body }); if(error){ try{ return await error.context.json(); }catch(_e){ return { ok:false, error:error.message||'error' }; } } return data||{ ok:false, error:'empty' }; }
+const dMoney=c=>'$'+(Math.round(c||0)/100).toLocaleString('en-US',{minimumFractionDigits:2,maximumFractionDigits:2});
+const D_MON=["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
+const dDate=d=>{ if(!d) return ''; const s=String(d).slice(0,10); return `${D_MON[Number(s.slice(5,7))-1]} ${Number(s.slice(8,10))}, ${s.slice(0,4)}`; };
+const dOrd=n=>{ const t=['th','st','nd','rd'], v=n%100; return n+(t[(v-20)%10]||t[v]||t[0]); };
+const dCents=v=>{ const n=Number(String(v||'').replace(/[^0-9.]/g,'')); return isFinite(n)?Math.round(n*100):0; };
+const dCsv=(name,rows)=>{ const esc2=v=>{ const s=v==null?'':String(v); return /[",\n]/.test(s)?'"'+s.replace(/"/g,'""')+'"':s; }; const blob=new Blob([rows.map(r=>r.map(esc2).join(',')).join('\n')],{type:'text/csv'}); const a=document.createElement('a'); a.href=URL.createObjectURL(blob); a.download=name; document.body.appendChild(a); a.click(); setTimeout(()=>{ URL.revokeObjectURL(a.href); a.remove(); },500); };
+
+async function pageDues(){
+  state.dues=state.dues||{ sel:null, tab:'period', comms:[] };
+  const S=state.dues;
+  try{ const q=new URLSearchParams(location.search); if(q.get('dues')&&q.get('community')){ S.sel=q.get('community'); S.tab='settings'; S._stripeReturn=q.get('dues'); history.replaceState(null,'',location.pathname); } }catch(_e){}
+  $("#page").innerHTML=`
+  <style>
+    .du-comms{display:grid;grid-template-columns:repeat(auto-fill,minmax(230px,1fr));gap:12px}
+    .du-comm{border:1px solid var(--line);border-radius:12px;padding:14px;cursor:pointer;background:#fff}
+    .du-comm.sel{border-color:var(--accent);box-shadow:inset 0 0 0 1px var(--accent)}
+    .du-comm h3{margin:0 0 4px;font-size:15px} .du-comm .s{font-size:12.5px;color:var(--muted);line-height:1.6}
+    .du-kpis{display:grid;grid-template-columns:repeat(auto-fit,minmax(130px,1fr));gap:10px;margin:4px 0 14px}
+    .du-kpi{border:1px solid var(--line);border-radius:10px;padding:10px 12px} .du-kpi b{display:block;font-size:19px;font-variant-numeric:tabular-nums} .du-kpi span{font-size:12px;color:var(--muted)}
+    .du-tabs{display:flex;gap:4px;flex-wrap:wrap;border-bottom:1px solid var(--line);margin-bottom:14px}
+    .du-tab{border:0;background:none;padding:9px 12px;font:inherit;font-weight:600;font-size:13.5px;color:var(--muted);cursor:pointer;border-bottom:2px solid transparent}
+    .du-tab.on{color:var(--ink);border-bottom-color:var(--accent)}
+    .du-t{width:100%;border-collapse:collapse;font-size:13.5px} .du-t th{text-align:left;font-size:11.5px;text-transform:uppercase;letter-spacing:.04em;color:var(--muted);font-weight:600;padding:6px 8px;border-bottom:1px solid var(--line)}
+    .du-t td{padding:9px 8px;border-bottom:1px solid var(--line-2,#eef0f2);vertical-align:top} .du-t td.r,.du-t th.r{text-align:right;font-variant-numeric:tabular-nums}
+    .du-wrap{overflow-x:auto}
+    .du-st{font-size:11.5px;font-weight:700;border-radius:20px;padding:2px 8px;white-space:nowrap}
+    .du-st.paid{background:#eef7f1;color:var(--ok)} .du-st.open{background:#f3f5f8;color:var(--ink-2)} .du-st.late{background:#fdf0ee;color:var(--danger)} .du-st.none{background:#fff;color:var(--muted);border:1px solid var(--line)}
+    .du-row3{display:grid;grid-template-columns:repeat(3,1fr);gap:12px} @media(max-width:780px){.du-row3{grid-template-columns:1fr}}
+    .du-msg{font-size:12.5px;color:var(--muted)}
+  </style>
+  <div class="page">
+    <div class="page-head"><h1>Communities &amp; dues</h1><p>Bill each community's dues, take payment by bank (no fee) or card, and let ${esc(aName())} remind people, run autopay, and add late fees on schedule. Each association gets its own Stripe account, so money goes straight to its own bank. ${esc(aName())} never holds it.</p></div>
+    <div class="card">
+      <div class="card-h"><h2>Your communities</h2><button class="btn sm primary" id="du-add">Add a community</button></div>
+      <div id="du-comms"><div class="empty">Loading…</div></div>
+    </div>
+    <div id="du-detail"></div>
+  </div>`;
+  $("#du-add").onclick=()=>{ S.sel='new'; S.tab='settings'; paintDetail(); };
+  const load=async()=>{ const r=await duesApi({ action:'communities_list' }); S.comms=(r&&r.communities)||[]; paintComms(); if(S.sel) paintDetail(); };
+  function paintComms(){
+    const el=$("#du-comms"); if(!el) return;
+    if(!S.comms.length){ el.innerHTML=`<div class="empty">No communities yet. Add one, connect its Stripe account, paste in the homes, and ${esc(aName())} takes it from there.</div>`; return; }
+    el.innerHTML=`<div class="du-comms">${S.comms.map(c=>{ const t=c.tiles||{}; return `<div class="du-comm ${S.sel===c.id?'sel':''}" data-c="${c.id}"><h3>${esc(c.name)}</h3><div class="s">${t.units||0} homes · ${t.autopay||0} on autopay<br>${dMoney(t.open_cents)} open${t.late_count?` · <b style="color:var(--danger)">${t.late_count} late</b>`:''}<br>${c.charges_enabled?'Payments on':'<span style="color:var(--danger)">Stripe not connected</span>'} · ${c.frequency==='annual'?'Annual':'Monthly'} ${dMoney(c.dues_cents)}</div></div>`; }).join('')}</div>`;
+    el.querySelectorAll('[data-c]').forEach(x=>x.onclick=()=>{ S.sel=x.dataset.c; if(S.tab==='settings'&&S._prevNew) S.tab='period'; paintComms(); paintDetail(); });
+  }
+  function cur(){ return S.comms.find(c=>c.id===S.sel)||null; }
+  function paintDetail(){
+    const host=$("#du-detail"); if(!host) return;
+    const c=S.sel==='new'?null:cur();
+    if(S.sel!=='new'&&!c){ host.innerHTML=''; return; }
+    const t=(c&&c.tiles)||{};
+    const tabs=c?[['period',t.next?esc(t.next.label):'This period'],['late','Late'],['homes','Homes'],['payments','Payments'],['settings','Settings']]:[['settings','Settings']];
+    host.innerHTML=`<div class="card">
+      <div class="card-h"><h2>${c?esc(c.name):'New community'}</h2>${c?`<span class="hint">${c.charges_enabled?'<span style="color:var(--ok)">Taking payments</span>':(c.stripe_account_id?'Stripe setup not finished':'Stripe not connected')}</span>`:''}</div>
+      ${c?`<div class="du-kpis">
+        <div class="du-kpi"><b>${t.units||0}</b><span>homes</span></div>
+        <div class="du-kpi"><b>${t.autopay||0}</b><span>on autopay</span></div>
+        <div class="du-kpi"><b>${dMoney(t.open_cents)}</b><span>open${t.late_count?` · ${t.late_count} late`:''}</span></div>
+        <div class="du-kpi"><b>${dMoney(t.collected_month_cents)}</b><span>collected this month</span></div>
+        <div class="du-kpi"><b>${dMoney(t.collected_year_cents)}</b><span>collected this year</span></div>
+        <div class="du-kpi"><b>${t.next?esc(dDate(t.next.due)):'—'}</b><span>next due</span></div>
+      </div>
+      ${!c.charges_enabled?`<div style="border:1px solid #f0d9b5;background:#fdf8ee;border-radius:10px;padding:12px 14px;margin-bottom:14px;font-size:13.5px">Before homeowners can pay online, connect ${esc(c.name)}'s own Stripe account. You'll enter the association's details and its bank account; deposits go there once a month. <button class="btn sm primary" id="du-connect" style="margin-left:6px">${c.stripe_account_id?'Finish Stripe setup':'Connect Stripe'}</button> ${c.stripe_account_id?'<button class="btn sm" id="du-recheck">Check status</button>':''}<span class="du-msg" id="du-cmsg" style="margin-left:6px"></span></div>`:''}`:''}
+      <div class="du-tabs">${tabs.map(x=>`<button class="du-tab ${S.tab===x[0]?'on':''}" data-tab="${x[0]}">${x[1]}</button>`).join('')}</div>
+      <div id="du-body"><div class="empty">Loading…</div></div>
+    </div>`;
+    host.querySelectorAll('[data-tab]').forEach(b=>b.onclick=()=>{ S.tab=b.dataset.tab; paintDetail(); });
+    const con=$("#du-connect"); if(con) con.onclick=async()=>{ con.disabled=true; $("#du-cmsg").textContent='Opening Stripe…'; const r=await duesApi({ action:'community_connect', id:c.id }); if(r&&r.ok&&r.url){ location.href=r.url; return; } con.disabled=false; $("#du-cmsg").style.color='var(--danger)'; $("#du-cmsg").textContent=(r&&(r.message||r.error))||'Could not open Stripe.'; };
+    const rc=$("#du-recheck"); if(rc) rc.onclick=async()=>{ rc.disabled=true; await duesApi({ action:'community_refresh', id:c.id }); await load(); };
+    if(c && S._stripeReturn){ S._stripeReturn=null; duesApi({ action:'community_refresh', id:c.id }).then(load); }
+    ({ period:tabPeriod, late:tabLate, homes:tabHomes, payments:tabPayments, settings:tabSettings })[S.tab](c);
+  }
+  // ---- this period
+  async function tabPeriod(c){
+    const b=$("#du-body"); const r=await duesApi({ action:'status', community_id:c.id }); if(!r||!r.ok){ b.innerHTML='<div class="empty">Could not load.</div>'; return; }
+    const today=new Date().toISOString().slice(0,10); const tt=r.totals||{};
+    const st=row=>{ const i=row.invoice; if(!i) return '<span class="du-st none">Not billed</span>'; if(i.status==='paid') return `<span class="du-st paid">Paid${i.paid_method?' · '+esc(i.paid_method==='us_bank_account'?'bank':i.paid_method):''}</span>`; if(i.due_at&&i.due_at<today) return '<span class="du-st late">Late</span>'; return '<span class="du-st open">Open</span>'; };
+    b.innerHTML=`<div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-bottom:12px">
+        <div style="font-size:13.5px"><b>${esc(r.period?r.period.label:'')}</b> · due ${esc(dDate(r.period&&r.period.due))} · ${tt.paid||0} paid, ${tt.open||0} open${tt.not_billed?`, ${tt.not_billed} not billed yet`:''} · ${dMoney(tt.collected_cents)} in, ${dMoney(tt.outstanding_cents)} out</div>
+        <div style="margin-left:auto;display:flex;gap:8px">${tt.not_billed?`<button class="btn sm primary" id="du-run">Bill ${tt.not_billed===tt.units?'everyone':'the rest'} now</button>`:''}<button class="btn sm" id="du-csv1">Export CSV</button></div>
+      </div>
+      <div class="du-msg" id="du-rmsg" style="margin-bottom:8px">${tt.not_billed&&c.notify_days_before?`${esc(aName())} sends these automatically ${c.notify_days_before} days before the due date. Bill now only if you want them out sooner.`:''}</div>
+      ${(r.rows||[]).length?`<div class="du-wrap"><table class="du-t"><thead><tr><th>Home</th><th>Owner</th><th class="r">Amount</th><th>Status</th><th>Autopay</th><th></th></tr></thead><tbody>${r.rows.map(x=>`<tr><td><b>${esc(x.label)}</b></td><td>${esc(x.owner_name||'')}<div style="font-size:12px;color:var(--muted)">${esc(x.owner_phone?prettyPhone(x.owner_phone):(x.owner_email||'no phone or email'))}</div></td><td class="r">${x.invoice?dMoney(x.invoice.total_cents):''}</td><td>${st(x)}${x.invoice&&x.invoice.paid_at?`<div style="font-size:12px;color:var(--muted)">${esc(dDate(x.invoice.paid_at))}</div>`:''}</td><td>${x.autopay?esc(x.autopay==='card'?'Card':'Bank'):''}</td><td>${x.invoice&&x.invoice.status!=='paid'?`<button class="btn sm ghost" data-copy="${esc(x.invoice.pay_url)}">Copy pay link</button>`:''}</td></tr>`).join('')}</tbody></table></div>`:`<div class="empty">No homes yet. Add them on the Homes tab.</div>`}`;
+    b.querySelectorAll('[data-copy]').forEach(x=>x.onclick=()=>{ try{ navigator.clipboard.writeText(x.dataset.copy); x.textContent='Copied'; }catch(_e){} });
+    const run=$("#du-run"); if(run) run.onclick=async()=>{ run.disabled=true; $("#du-rmsg").textContent='Sending…'; const x=await duesApi({ action:'run', community_id:c.id, period:r.period&&r.period.key }); $("#du-rmsg").style.color=x&&x.ok?'var(--ok)':'var(--danger)'; $("#du-rmsg").textContent=x&&x.ok?`Billed ${x.created} home${x.created===1?'':'s'}, ${x.sent} sent by text or email.${(x.errors||[]).length?' Problems: '+x.errors.join('; '):''}`:'Could not bill: '+((x&&(x.message||x.error))||''); await load(); };
+    $("#du-csv1").onclick=()=>dCsv(`${c.name} ${r.period?r.period.key:''}.csv`,[["Home","Owner","Phone","Email","Amount","Status","Due","Paid on","Method","Autopay"],...(r.rows||[]).map(x=>[x.label,x.owner_name,x.owner_phone,x.owner_email,x.invoice?(x.invoice.total_cents/100).toFixed(2):'',x.invoice?(x.invoice.status==='paid'?'paid':(x.invoice.due_at<today?'late':'open')):'not billed',x.invoice?x.invoice.due_at:'',x.invoice&&x.invoice.paid_at?String(x.invoice.paid_at).slice(0,10):'',x.invoice?x.invoice.paid_method:'',x.autopay||''])]);
+  }
+  // ---- late
+  async function tabLate(c){
+    const b=$("#du-body"); const r=await duesApi({ action:'delinquent', community_id:c.id }); if(!r||!r.ok){ b.innerHTML='<div class="empty">Could not load.</div>'; return; }
+    const rows=r.rows||[]; const bucket=d=>d>90?'90+ days':d>60?'61–90 days':d>30?'31–60 days':'1–30 days';
+    const by={}; rows.forEach(x=>{ const k=bucket(x.days_late); by[k]=(by[k]||0)+x.total_cents; });
+    b.innerHTML=rows.length?`<div class="du-kpis">${['1–30 days','31–60 days','61–90 days','90+ days'].map(k=>`<div class="du-kpi"><b>${dMoney(by[k]||0)}</b><span>${k} late</span></div>`).join('')}</div>
+      <div class="du-msg" style="margin-bottom:10px">${esc(aName())} texts a reminder the day after the due date and then weekly, and adds the late fee once after the grace period (${c.grace_days||0} days). Payment plans and collections stay with you.</div>
+      <div style="text-align:right;margin-bottom:8px"><button class="btn sm" id="du-csv2">Export CSV</button></div>
+      <div class="du-wrap"><table class="du-t"><thead><tr><th>Home</th><th>Owner</th><th>For</th><th class="r">Amount</th><th class="r">Days late</th><th></th></tr></thead><tbody>${rows.map(x=>`<tr><td><b>${esc(x.label||'')}</b></td><td>${esc(x.owner_name||'')}<div style="font-size:12px;color:var(--muted)">${esc(x.owner_phone?prettyPhone(x.owner_phone):'')}</div></td><td>${esc(x.period_key||'')}${x.late_fee?' <span class="du-st late">late fee</span>':''}</td><td class="r">${dMoney(x.total_cents)}</td><td class="r">${x.days_late}</td><td><button class="btn sm ghost" data-copy="${esc(x.pay_url)}">Copy pay link</button></td></tr>`).join('')}</tbody></table></div>`
+      :`<div class="empty">Nobody is late. 🎉</div>`;
+    b.querySelectorAll('[data-copy]').forEach(x=>x.onclick=()=>{ try{ navigator.clipboard.writeText(x.dataset.copy); x.textContent='Copied'; }catch(_e){} });
+    const csv=$("#du-csv2"); if(csv) csv.onclick=()=>dCsv(`${c.name} late.csv`,[["Home","Owner","Phone","Period","Amount","Days late","Late fee added","Pay link"],...rows.map(x=>[x.label,x.owner_name,x.owner_phone,x.period_key,(x.total_cents/100).toFixed(2),x.days_late,x.late_fee?'yes':'no',x.pay_url])]);
+  }
+  // ---- homes
+  async function tabHomes(c){
+    const b=$("#du-body"); const r=await duesApi({ action:'units_list', community_id:c.id }); const units=(r&&r.units)||[];
+    b.innerHTML=`<div class="grid-2" style="margin-bottom:14px">
+        <div><div class="lab" style="font-weight:600;font-size:13px;margin-bottom:6px">Add one home</div>
+          <div class="grid-2"><div class="field"><input class="inp" id="du-u-label" placeholder="Address, lot, or unit"></div><div class="field"><input class="inp" id="du-u-name" placeholder="Owner's name"></div></div>
+          <div class="grid-2"><div class="field"><input class="inp" id="du-u-phone" placeholder="Owner's mobile"></div><div class="field"><input class="inp" id="du-u-email" placeholder="Owner's email"></div></div>
+          <div style="display:flex;gap:8px;align-items:center"><input class="inp" id="du-u-dues" placeholder="Dues if different from ${dMoney(c.dues_cents)}" style="max-width:240px"><button class="btn primary sm" id="du-u-add">Add home</button><span class="du-msg" id="du-u-msg"></span></div>
+        </div>
+        <div><div class="lab" style="font-weight:600;font-size:13px;margin-bottom:6px">Or paste your roster</div>
+          <textarea class="inp" id="du-roster" rows="5" placeholder="One home per line, e.g.\n123 Elm St, Jane Doe, 817-555-0101, jane@example.com\nLot 42 | Sam Lee | (817) 555-0102 | $95"></textarea>
+          <div style="display:flex;gap:8px;align-items:center;margin-top:8px"><button class="btn sm" id="du-r-prev">Preview</button><button class="btn sm primary" id="du-r-go" disabled>Import</button><span class="du-msg" id="du-r-msg"></span></div>
+          <div id="du-r-out"></div>
+        </div>
+      </div>
+      ${units.length?`<div style="display:flex;justify-content:flex-end;margin-bottom:8px"><button class="btn sm" id="du-csv3">Export CSV</button></div><div class="du-wrap"><table class="du-t"><thead><tr><th>Home</th><th>Owner</th><th>Contact</th><th class="r">Dues</th><th>Autopay</th><th class="r">Open</th><th></th></tr></thead><tbody>${units.map(u=>`<tr><td><b>${esc(u.label)}</b></td><td>${esc(u.owner_name||'')}</td><td style="font-size:12.5px">${esc(u.owner_phone?prettyPhone(u.owner_phone):'')}${u.owner_email?`<div style="color:var(--muted)">${esc(u.owner_email)}</div>`:''}</td><td class="r">${dMoney(u.dues_cents!=null?u.dues_cents:c.dues_cents)}${u.dues_cents!=null?'<div style="font-size:11px;color:var(--muted)">custom</div>':''}</td><td>${u.autopay?`${esc(u.autopay.method==='card'?'Card':'Bank')}${u.autopay.last4?' ··'+esc(u.autopay.last4):''} <button class="btn sm ghost" data-apoff="${u.id}">Turn off</button>`:(u.owner_phone&&c.charges_enabled?`<button class="btn sm ghost" data-apl="${u.id}">Text autopay link</button>`:'')}</td><td class="r">${u.open_cents?`<span style="color:${u.late?'var(--danger)':'inherit'}">${dMoney(u.open_cents)}</span>`:''}</td><td style="white-space:nowrap"><button class="btn sm ghost" data-led="${u.id}">History</button><button class="btn sm ghost" data-rm="${u.id}" title="Remove">✕</button></td></tr><tr id="du-led-${u.id}" style="display:none"><td colspan="7"></td></tr>`).join('')}</tbody></table></div>`:`<div class="empty">No homes yet.</div>`}`;
+    $("#du-u-add").onclick=async()=>{ const m=$("#du-u-msg"); const label=$("#du-u-label").value.trim(); if(!label){ m.textContent='Address, lot, or unit first.'; return; } const dv=$("#du-u-dues").value.trim(); const x=await duesApi({ action:'unit_save', unit:{ community_id:c.id, label, owner_name:$("#du-u-name").value.trim(), owner_phone:$("#du-u-phone").value.trim(), owner_email:$("#du-u-email").value.trim(), dues_cents:dv?dCents(dv):null } }); if(!(x&&x.ok)){ m.style.color='var(--danger)'; m.textContent='Could not add: '+((x&&x.error)||''); return; } await load(); };
+    let parsed=null;
+    $("#du-r-prev").onclick=async()=>{ const m=$("#du-r-msg"); const x=await duesApi({ action:'units_import', community_id:c.id, text:$("#du-roster").value, preview:true }); parsed=(x&&x.rows)||[]; m.textContent=parsed.length?`${parsed.length} home${parsed.length===1?'':'s'} found. Check them, then Import.`:'Nothing recognized. One home per line.'; $("#du-r-go").disabled=!parsed.length; $("#du-r-out").innerHTML=parsed.length?`<div class="du-wrap" style="margin-top:8px;max-height:220px;overflow:auto"><table class="du-t"><thead><tr><th>Home</th><th>Owner</th><th>Phone</th><th>Email</th><th class="r">Dues</th></tr></thead><tbody>${parsed.map(p=>`<tr><td>${esc(p.label)}</td><td>${esc(p.owner_name||'')}</td><td>${esc(p.owner_phone?prettyPhone(p.owner_phone):'')}</td><td>${esc(p.owner_email||'')}</td><td class="r">${p.dues_cents!=null?dMoney(p.dues_cents):'default'}</td></tr>`).join('')}</tbody></table></div>`:''; };
+    $("#du-r-go").onclick=async()=>{ const m=$("#du-r-msg"); $("#du-r-go").disabled=true; m.textContent='Importing…'; const x=await duesApi({ action:'units_import', community_id:c.id, text:$("#du-roster").value }); m.style.color=x&&x.ok?'var(--ok)':'var(--danger)'; m.textContent=x&&x.ok?`Added ${x.added}, updated ${x.updated}.`:'Could not import.'; if(x&&x.ok) setTimeout(load,700); };
+    b.querySelectorAll('[data-rm]').forEach(x=>x.onclick=async()=>{ if(!confirm('Remove this home from the community? Its payment history is kept.')) return; await duesApi({ action:'unit_remove', id:x.dataset.rm }); load(); });
+    b.querySelectorAll('[data-apl]').forEach(x=>x.onclick=async()=>{ x.disabled=true; const y=await duesApi({ action:'autopay_link', unit_id:x.dataset.apl }); x.textContent=y&&y.ok?(y.sent?'Sent':'Link made (texting is off)'):'Could not'; if(y&&y.ok&&!y.sent&&y.url){ try{ navigator.clipboard.writeText(y.url); x.textContent='Link copied'; }catch(_e){} } });
+    b.querySelectorAll('[data-apoff]').forEach(x=>x.onclick=async()=>{ if(!confirm('Turn off autopay for this home? The owner gets a text.')) return; await duesApi({ action:'autopay_cancel', unit_id:x.dataset.apoff }); load(); });
+    b.querySelectorAll('[data-led]').forEach(x=>x.onclick=async()=>{ const tr=$("#du-led-"+x.dataset.led); if(tr.style.display!=='none'){ tr.style.display='none'; return; } tr.style.display=''; const td=tr.firstElementChild; td.innerHTML='Loading…'; const y=await duesApi({ action:'ledger', unit_id:x.dataset.led }); const rows=(y&&y.rows)||[]; td.innerHTML=rows.length?`<div style="font-size:12.5px">${rows.map(i=>`<div style="display:flex;gap:10px;padding:3px 0"><span style="min-width:90px">${esc(i.period_key||'')}</span><span style="min-width:110px">due ${esc(dDate(i.due_at))}</span><span style="min-width:80px;text-align:right">${dMoney(i.total_cents)}</span><span>${i.status==='paid'?`paid ${esc(dDate(i.paid_at))}${i.paid_method?' · '+esc(i.paid_method==='us_bank_account'?'bank':i.paid_method):''}`:esc(i.status)}</span></div>`).join('')}<div style="margin-top:6px;color:var(--muted)">Billed ${dMoney(y.billed_cents)} · paid ${dMoney(y.paid_cents)}</div></div>`:'<span style="color:var(--muted)">No dues billed yet.</span>'; });
+    const csv=$("#du-csv3"); if(csv) csv.onclick=()=>dCsv(`${c.name} homes.csv`,[["Home","Owner","Phone","Email","Dues","Autopay","Open"],...units.map(u=>[u.label,u.owner_name,u.owner_phone,u.owner_email,((u.dues_cents!=null?u.dues_cents:c.dues_cents)/100).toFixed(2),u.autopay?u.autopay.method:'',(u.open_cents/100).toFixed(2)])]);
+  }
+  // ---- payments
+  async function tabPayments(c){
+    const b=$("#du-body"); const now=new Date(); S.range=S.range||'month';
+    const ranges={ month:[new Date(now.getFullYear(),now.getMonth(),1),now], last:[new Date(now.getFullYear(),now.getMonth()-1,1),new Date(now.getFullYear(),now.getMonth(),1)], year:[new Date(now.getFullYear(),0,1),now] };
+    const [from,to]=ranges[S.range]; const r=await duesApi({ action:'collected', community_id:c.id, from:from.toISOString(), to:new Date(to.getTime()+(S.range==='last'?0:86400000)).toISOString() });
+    const rows=(r&&r.rows)||[]; const bm=(r&&r.by_method)||{};
+    b.innerHTML=`<div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:12px">${[['month','This month'],['last','Last month'],['year','This year']].map(x=>`<button class="btn sm ${S.range===x[0]?'primary':''}" data-rg="${x[0]}">${x[1]}</button>`).join('')}<span style="margin-left:auto;font-size:13.5px"><b>${dMoney(r&&r.total_cents)}</b> collected${Object.keys(bm).length?' · '+Object.entries(bm).map(([k,v])=>`${k==='us_bank_account'||k==='bank'?'bank':k} ${dMoney(v)}`).join(' · '):''}</span><button class="btn sm" id="du-csv4">Export CSV</button></div>
+      <div class="du-msg" style="margin-bottom:10px">Stripe deposits to ${esc(c.name)}'s bank ${c.payout_schedule==='monthly'?`once a month, around the ${dOrd(c.payout_day||10)}`:c.payout_schedule}. The full payout report is in the association's Stripe dashboard.</div>
+      ${rows.length?`<div class="du-wrap"><table class="du-t"><thead><tr><th>Date</th><th>Home</th><th>Owner</th><th>For</th><th>Method</th><th class="r">Amount</th></tr></thead><tbody>${rows.map(x=>`<tr><td>${esc(dDate(x.paid_at))}</td><td>${esc(x.label||'')}</td><td>${esc(x.owner_name||'')}</td><td>${esc(x.period_key||'')}</td><td>${esc(x.method==='us_bank_account'?'bank':(x.method||''))}</td><td class="r">${dMoney(x.amount_cents)}</td></tr>`).join('')}</tbody></table></div>`:`<div class="empty">No payments in this range.</div>`}`;
+    b.querySelectorAll('[data-rg]').forEach(x=>x.onclick=()=>{ S.range=x.dataset.rg; tabPayments(c); });
+    $("#du-csv4").onclick=()=>dCsv(`${c.name} payments ${S.range}.csv`,[["Date","Home","Owner","Period","Method","Amount","Invoice","Reference"],...rows.map(x=>[String(x.paid_at).slice(0,10),x.label,x.owner_name,x.period_key,x.method,(x.amount_cents/100).toFixed(2),x.number,x.provider_ref])]);
+  }
+  // ---- settings (also "add a community")
+  function tabSettings(c){
+    const b=$("#du-body"); const v=c||{ frequency:'monthly', due_day:1, due_month:1, dues_cents:0, grace_days:10, late_fee_cents:0, card_fee_pct:3, notify_days_before:10, payout_schedule:'monthly', payout_day:10 };
+    const months=["January","February","March","April","May","June","July","August","September","October","November","December"];
+    b.innerHTML=`<div class="grid-2"><div class="field"><label class="lab">Community name</label><input class="inp" id="du-s-name" value="${esc(v.name||'')}" placeholder="e.g. Oak Creek HOA"></div><div class="field"><label class="lab">Address <span class="sub">shown on the pay page</span></label><input class="inp" id="du-s-addr" value="${esc(v.address||'')}"></div></div>
+      <div class="du-row3">
+        <div class="field"><label class="lab">Dues are billed</label><select class="inp" id="du-s-freq"><option value="monthly" ${v.frequency!=='annual'?'selected':''}>Monthly</option><option value="annual" ${v.frequency==='annual'?'selected':''}>Once a year</option></select></div>
+        <div class="field"><label class="lab">Amount per home</label><input class="inp" id="du-s-amt" value="${v.dues_cents?(v.dues_cents/100).toFixed(2):''}" placeholder="e.g. 95.00"></div>
+        <div class="field"><label class="lab">Due on day <span class="sub">1–28</span></label><input class="inp" id="du-s-day" type="number" min="1" max="28" value="${v.due_day||1}"></div>
+      </div>
+      <div class="du-row3" id="du-s-annual" style="display:${v.frequency==='annual'?'grid':'none'}"><div class="field"><label class="lab">Due month</label><select class="inp" id="du-s-month">${months.map((m,i)=>`<option value="${i+1}" ${Number(v.due_month||1)===i+1?'selected':''}>${m}</option>`).join('')}</select></div></div>
+      <div class="du-row3">
+        <div class="field"><label class="lab">Send the bill <span class="sub">days before due</span></label><input class="inp" id="du-s-notify" type="number" min="0" max="60" value="${v.notify_days_before!=null?v.notify_days_before:10}"></div>
+        <div class="field"><label class="lab">Grace period <span class="sub">days after due</span></label><input class="inp" id="du-s-grace" type="number" min="0" max="90" value="${v.grace_days!=null?v.grace_days:10}"></div>
+        <div class="field"><label class="lab">Late fee <span class="sub">once, after grace · 0 for none</span></label><input class="inp" id="du-s-late" value="${v.late_fee_cents?(v.late_fee_cents/100).toFixed(2):'0'}"></div>
+      </div>
+      <div class="du-row3">
+        <div class="field"><label class="lab">Card fee <span class="sub">% paid by the homeowner · bank is free</span></label><input class="inp" id="du-s-cfee" value="${v.card_fee_pct!=null?v.card_fee_pct:3}"></div>
+        <div class="field"><label class="lab">Deposits to the association</label><select class="inp" id="du-s-psch"><option value="monthly" ${v.payout_schedule==='monthly'?'selected':''}>Monthly</option><option value="weekly" ${v.payout_schedule==='weekly'?'selected':''}>Weekly</option><option value="daily" ${v.payout_schedule==='daily'?'selected':''}>Daily</option></select></div>
+        <div class="field" id="du-s-pdayf" style="display:${v.payout_schedule==='monthly'?'block':'none'}"><label class="lab">Deposit day of month</label><input class="inp" id="du-s-pday" type="number" min="1" max="28" value="${v.payout_day||10}"></div>
+      </div>
+      <div style="display:flex;gap:10px;align-items:center"><button class="btn primary" id="du-s-save">${c?'Save':'Add community'}</button>${c?'':'<button class="btn" id="du-s-cancel">Cancel</button>'}<span class="du-msg" id="du-s-msg">No partial payments: homeowners always pay the full amount.</span></div>
+      ${c?`<div style="border-top:1px solid var(--line);margin-top:18px;padding-top:14px"><div class="lab" style="font-weight:600;font-size:13px;margin-bottom:6px">Special assessment</div>
+        <div class="du-row3"><div class="field"><input class="inp" id="du-a-desc" placeholder="What it's for, e.g. Pool resurfacing"></div><div class="field"><input class="inp" id="du-a-amt" placeholder="Amount per home"></div><div class="field"><input class="inp" id="du-a-due" type="date"></div></div>
+        <div style="display:flex;gap:10px;align-items:center"><button class="btn sm" id="du-a-go">Bill every home</button><span class="du-msg" id="du-a-msg"></span></div></div>
+      <div style="border-top:1px solid var(--line);margin-top:18px;padding-top:14px"><button class="btn sm ghost" id="du-s-rm" style="color:var(--danger)">Remove this community</button></div>`:''}`;
+    $("#du-s-freq").onchange=()=>{ $("#du-s-annual").style.display=$("#du-s-freq").value==='annual'?'grid':'none'; };
+    $("#du-s-psch").onchange=()=>{ $("#du-s-pdayf").style.display=$("#du-s-psch").value==='monthly'?'block':'none'; };
+    const cancel=$("#du-s-cancel"); if(cancel) cancel.onclick=()=>{ S.sel=null; paintDetail(); };
+    $("#du-s-save").onclick=async()=>{ const m=$("#du-s-msg"); const name=$("#du-s-name").value.trim(); if(!name){ m.style.color='var(--danger)'; m.textContent='Name the community first.'; return; }
+      const community={ id:c?c.id:undefined, name, address:$("#du-s-addr").value.trim(), frequency:$("#du-s-freq").value, dues_cents:dCents($("#du-s-amt").value), due_day:Number($("#du-s-day").value)||1, due_month:Number($("#du-s-month").value)||1, notify_days_before:Number($("#du-s-notify").value)||0, grace_days:Number($("#du-s-grace").value)||0, late_fee_cents:dCents($("#du-s-late").value), card_fee_pct:Number($("#du-s-cfee").value)||0, payout_schedule:$("#du-s-psch").value, payout_day:Number($("#du-s-pday").value)||10 };
+      if(!community.dues_cents){ m.style.color='var(--danger)'; m.textContent='Enter the dues amount per home.'; return; }
+      const x=await duesApi({ action:'community_save', community }); if(!(x&&x.ok)){ m.style.color='var(--danger)'; m.textContent='Could not save: '+((x&&x.error)||''); return; }
+      m.style.color='var(--ok)'; m.textContent='Saved.'; if(!c){ S.sel=x.community.id; S.tab='homes'; } await load(); };
+    const ag=$("#du-a-go"); if(ag) ag.onclick=async()=>{ const m=$("#du-a-msg"); const amount_cents=dCents($("#du-a-amt").value), due_at=$("#du-a-due").value; if(!amount_cents||!due_at){ m.style.color='var(--danger)'; m.textContent='Amount and due date, please.'; return; } if(!confirm(`Bill ${dMoney(amount_cents)} to every home in ${c.name}, due ${dDate(due_at)}? Each owner gets a pay link.`)) return; ag.disabled=true; const x=await duesApi({ action:'assessment', community_id:c.id, desc:$("#du-a-desc").value.trim()||'Special assessment', amount_cents, due_at }); m.style.color=x&&x.ok?'var(--ok)':'var(--danger)'; m.textContent=x&&x.ok?`Billed ${x.created} homes, ${x.sent} sent.`:'Could not bill: '+((x&&x.error)||''); ag.disabled=false; load(); };
+    const rm=$("#du-s-rm"); if(rm) rm.onclick=async()=>{ if(!confirm(`Remove ${c.name}? Billing and reminders stop. Payment history is kept.`)) return; await duesApi({ action:'community_remove', id:c.id }); S.sel=null; load(); };
+  }
+  await load();
+}
+
 function pageContractors(){
   state.con=state.con||{edit:null};
   $("#page").innerHTML=`

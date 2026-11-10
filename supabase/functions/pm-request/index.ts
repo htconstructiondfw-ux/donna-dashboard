@@ -378,7 +378,7 @@ Deno.serve(async (req: Request) => {
   const call = body?.call ?? {};
   const args = body?.args ?? body ?? {};
   const action = pick(args.action ?? body.action ?? "identify").toLowerCase();
-  const phone = normPhone(args.phone ?? args.callback_number ?? call.from_number ?? "");
+  const phone = normPhone(args.phone ?? args.callback_number ?? (call?.direction === "outbound" ? call.to_number : call.from_number) ?? ""); // outbound = wizard test call: the caller is the TO side
   const email = pick(args.email).toLowerCase();
   const callerName = pick(args.name ?? args.caller_name);
   const propHint = pick(args.property ?? args.community ?? args.building ?? args.property_name ?? args.address);

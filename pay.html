@@ -35,6 +35,7 @@
   .tipcustom{display:flex;gap:8px;margin-top:8px;align-items:center} .tipcustom input{flex:1;padding:10px 12px;border:1.5px solid var(--line);border-radius:12px;font:inherit;font-size:16px}
   .skel{height:14px;border-radius:7px;background:linear-gradient(90deg,#eceeec,#f6f7f6,#eceeec);background-size:200% 100%;animation:sh 1.2s infinite;margin:10px 0}
   @keyframes sh{to{background-position:-200% 0}}
+.methods{display:grid;gap:8px;margin-top:16px} .method{display:flex;gap:12px;align-items:center;border:1.5px solid var(--line);border-radius:14px;padding:13px 14px;cursor:pointer;background:#fff} .method.on{border-color:var(--accent);box-shadow:inset 0 0 0 1px var(--accent)} .method input{accent-color:var(--accent);width:18px;height:18px;margin:0} .method b{display:block;font-size:15px} .method span{font-size:13px;color:var(--muted)} .method .amt{margin-left:auto;font-weight:700;font-variant-numeric:tabular-nums} .autopay-on{margin-top:12px;font-size:13px;color:var(--ok);background:#eef7f1;border-radius:10px;padding:10px 12px}
 .savecard{display:flex;gap:8px;align-items:flex-start;font-size:13px;color:var(--muted);margin-top:10px;cursor:pointer}.savecard input{margin-top:3px}
 </style>
 </head>
@@ -53,7 +54,7 @@ const money = c => "$" + (Math.round(c||0)/100).toLocaleString("en-US",{minimumF
 const app = document.getElementById("app");
 
 async function load(attempt=0){
-  if(token==="card-saved"){ app.innerHTML = q.get("cancel")==="1" ? '<div class="card"><h2 style="margin:0 0 8px">No card saved</h2><p style="color:#555;margin:0">That\'s okay. You can pay when the work is done. If you meant to add a card, open the link from your text again.</p></div>' : '<div class="card"><h2 style="margin:0 0 8px">Card saved. Thank you!</h2><p style="color:#555;margin:0">Nothing has been charged. You\'ll be billed only when the work is done, and you\'ll get a receipt by text.</p></div>'; return; }
+  if(token==="card-saved"){ app.innerHTML = q.get("cancel")==="1" ? '<div class="card"><h2 style="margin:0 0 8px">No card saved</h2><p style="color:#555;margin:0">That\'s okay. You can pay when the work is done. If you meant to add a card, open the link from your text again.</p></div>' : '<div class="card"><h2 style="margin:0 0 8px">Card saved. Thank you!</h2><p style="color:#555;margin:0">Nothing has been charged yet. You\'ll be charged only when the work is done or your bill is due, and you\'ll get a receipt by text.</p></div>'; return; }
   if(!token){ app.innerHTML = '<div class="card err">This invoice link isn\'t complete. Please use the link from your text or email.</div>'; return; }
   let inv=null;
   try{
@@ -67,22 +68,32 @@ async function load(attempt=0){
 }
 
 let saveCard = false;
+let payMethod = "bank";   // dues: bank (no fee) is the default
+let autopayPick = false;
+const MONTHS=["January","February","March","April","May","June","July","August","September","October","November","December"];
+const longDate = d => d ? `${MONTHS[Number(d.slice(5,7))-1]} ${Number(d.slice(8,10))}, ${d.slice(0,4)}` : "";
+const lsGet = k => { try{ return localStorage.getItem(k); }catch(_e){ return null; } };
+const lsSet = (k,v) => { try{ localStorage.setItem(k,v); }catch(_e){} };
 let tipPick = null; // cents chosen on this page (tickets only); null = use the invoice's saved tip
 function render(inv){
   const b = inv.business || {}; const paid = !!inv.paid_at; const isVoid = inv.status === "void";
   const isTicket = inv.kind === "ticket";
+  const isDues = !!inv.bank_pay;
+  const apOn = !!(inv.unit && inv.unit.autopay);
+  const bankInFlight = !inv.paid_at && ((inv.paid_note && /processing/i.test(inv.paid_note)) || (justPaid && lsGet("paymethod_"+token)==="bank"));
   const base = (inv.total_cents||0) - (inv.tip_cents||0);            // services + products + tax
   const tipNow = tipPick != null ? tipPick : (inv.tip_cents||0);
   const due = base + tipNow;
-  const feeNow = inv.card_fee_pct>0 ? Math.round(due * inv.card_fee_pct / 100) : 0;
+  const feeCard = inv.card_fee_pct>0 ? Math.round(due * inv.card_fee_pct / 100) : 0;
+  const feeNow = (isDues && payMethod==="bank") ? 0 : feeCard;
   const initials = (b.name||"?").split(/\s+/).slice(0,2).map(w=>w[0]).join("").toUpperCase();
   const lines = (inv.lines||[]).filter(l => l.kind !== "tax");
-  document.title = `${isTicket?"Receipt":"Invoice"} ${inv.number} · ${b.name||""}`;
+  document.title = `${isTicket?"Receipt":isDues?"Dues":"Invoice"} ${inv.number} · ${b.name||""}`;
   app.innerHTML = `
     <div class="biz"><div class="logo">${esc(initials)}</div><div><h1>${esc(b.name||"Invoice")}</h1><p>${[b.phone,b.email].filter(Boolean).map(esc).join(" · ")}</p></div></div>
     <div class="card">
       <div class="top">
-        <div><div class="num">${isTicket?(paid?"Receipt":"Your visit"):"Invoice"} ${esc(inv.number)}</div>${isTicket&&inv.served_by_name?`<div class="addr">with ${esc(inv.served_by_name)}</div>`:""}${inv.customer_name?`<div class="to">${esc(inv.customer_name)}</div>`:""}${inv.service_address?`<div class="addr">${esc(inv.service_address)}</div>`:""}</div>
+        <div><div class="num">${isTicket?(paid?"Receipt":"Your visit"):isDues?"Dues":"Invoice"} ${esc(inv.number)}</div>${isDues&&inv.due_at&&!paid?`<div class="addr">Due ${esc(longDate(inv.due_at))}</div>`:""}${isTicket&&inv.served_by_name?`<div class="addr">with ${esc(inv.served_by_name)}</div>`:""}${inv.customer_name?`<div class="to">${esc(inv.customer_name)}</div>`:""}${inv.service_address?`<div class="addr">${esc(inv.service_address)}</div>`:""}</div>
         <span class="badge ${paid?"paid":isVoid?"void":""}">${paid?"Paid":isVoid?"Cancelled":"Due"}</span>
       </div>
       <table>
@@ -97,25 +108,37 @@ function render(inv){
       ${inv.notes?`<div class="notes">${esc(inv.notes)}</div>`:""}
       ${paid ? `<div class="done">Paid${inv.paid_method&&inv.paid_method!=="card"?" ("+esc(inv.paid_method)+")":""}${inv.paid_note&&/card processing fee/.test(inv.paid_note)?` · ${esc(inv.paid_note.replace(/^.*incl\. /,"incl. "))}`:""} on ${new Date(inv.paid_at).toLocaleDateString("en-US",{month:"long",day:"numeric",year:"numeric"})}. Thank you!</div>`
         : isVoid ? `<div class="err">This invoice was cancelled by ${esc(b.name||"the business")}.</div>`
+        : bankInFlight ? `<div class="done" style="background:#eef7f1">Bank payment started. It takes 2–4 business days to clear; you\'ll get a receipt by text when it does. Nothing else to do.</div>`
+        : (inv.can_pay_online && isDues) ? `<div class="methods">
+            <label class="method ${payMethod==="bank"?"on":""}"><input type="radio" name="pm" value="bank" ${payMethod==="bank"?"checked":""}><div><b>Bank account</b><span>No fee · sign in to your bank or enter your account</span></div><div class="amt">${money(due)}</div></label>
+            <label class="method ${payMethod==="card"?"on":""}"><input type="radio" name="pm" value="card" ${payMethod==="card"?"checked":""}><div><b>Card</b><span>${inv.card_fee_pct>0?`Includes a ${inv.card_fee_pct}% card fee of ${money(feeCard)}`:"Debit or credit"}</span></div><div class="amt">${money(due+feeCard)}</div></label>
+          </div>
+          ${apOn?`<div class="autopay-on">Autopay is on${inv.unit.autopay.last4?` (${inv.unit.autopay.method==="card"?"card":"bank"} ending ${esc(inv.unit.autopay.last4)})`:""}. This will be drafted on the due date, or you can pay it now.</div>`
+            : (inv.unit?`<label class="savecard"><input type="checkbox" id="autopay" ${autopayPick?"checked":""}> Pay future dues automatically from this ${payMethod==="bank"?"bank account":"card"} (autopay). You\'ll get a text before each one, and you can turn it off any time.</label>`:"")}
+          <button class="pay" id="payBtn">Pay ${money(due+feeNow)} by ${payMethod==="bank"?"bank":"card"}</button>
+          <div class="alt">Secure payment through Stripe. Your payment goes directly to ${esc(b.name||"the association")}${b.managed_by?`, managed by ${esc(b.managed_by)}`:""}. Full amount only.</div><div id="payErr"></div>`
         : inv.can_pay_online ? `${feeNow>0?`<div class="alt" style="margin-top:14px;text-align:left"><b>Cash or check:</b> ${money(due)} &nbsp;·&nbsp; <b>By card:</b> ${money(due+feeNow)} <span style="color:#999">(includes a ${inv.card_fee_pct}% card processing fee of ${money(feeNow)})</span></div>`:""}<button class="pay" id="payBtn">Pay ${money(due+feeNow)} by card</button>${isTicket&&inv.has_contact?`<label class="savecard"><input type="checkbox" id="saveCard" ${saveCard?"checked":""}> Keep this card on file with ${esc(b.name||"the salon")} so next time is one tap</label>`:""}<div class="alt">Secure card payment through Stripe. Your payment goes directly to ${esc(b.name||"the business")}.</div><div id="payErr"></div>`
         : (justPaid ? `<div class="alt">Confirming your payment…</div>` : `<div class="alt">Pay ${esc(b.name||"the business")} directly${b.phone?` · ${esc(b.phone)}`:""}.</div>`)}
     </div>
-    <div class="foot">Sent by ${esc(b.name||"the business")} with Donna.<br>Payments are processed by ${esc(b.name||"the business")}'s own Stripe account; Donna never holds your money.</div>`;
+    <div class="foot">Sent by ${esc(b.name||"the business")}${b.managed_by?` (managed by ${esc(b.managed_by)})`:""} with Donna.<br>Payments are processed by ${esc(b.name||"the business")}'s own Stripe account; Donna never holds your money.</div>`;
   document.querySelectorAll("[data-tip]").forEach(b=>b.onclick=()=>{ tipPick=Number(b.dataset.tip); render(inv); });
   const scb=document.getElementById("saveCard"); if(scb) scb.onchange=()=>{ saveCard=scb.checked; };
   const tn=document.getElementById("tipNone"); if(tn) tn.onclick=()=>{ tipPick=0; render(inv); };
   const tc=document.getElementById("tipCustom"); if(tc) tc.onchange=()=>{ const v=Math.round(Number(String(tc.value).replace(/[^0-9.]/g,""))*100); if(isFinite(v)&&v>=0){ tipPick=v; render(inv); } };
+  document.querySelectorAll('input[name="pm"]').forEach(r=>r.onchange=()=>{ payMethod=r.value; render(inv); });
+  const apb=document.getElementById("autopay"); if(apb) apb.onchange=()=>{ autopayPick=apb.checked; };
   const btn = document.getElementById("payBtn");
   if(btn) btn.onclick = async () => {
     btn.disabled = true; btn.textContent = "Opening secure checkout…";
     try{
       const body = {action:"checkout",token}; if(isTicket && inv.tips_enabled) body.tip_cents = tipNow; const sc=document.getElementById("saveCard"); if(sc&&sc.checked) body.save_card = true;
+      if(isDues){ body.method = payMethod; if(autopayPick && !apOn) body.autopay = true; lsSet("paymethod_"+token, payMethod); }
       const r = await fetch(`${SB}/functions/v1/payments`,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(body)});
       const j = await r.json();
       if(j.ok && j.url){ location.href = j.url; return; }
       document.getElementById("payErr").innerHTML = `<div class="err">${j.error==="already_paid"?"This invoice is already paid.":"Online payment isn't available right now. Please pay the business directly."}</div>`;
     }catch(e){ document.getElementById("payErr").innerHTML = '<div class="err">Couldn\'t open checkout. Please try again.</div>'; }
-    btn.disabled = false; btn.textContent = `Pay ${money(due+feeNow)} by card`;
+    btn.disabled = false; btn.textContent = `Pay ${money(due+feeNow)} by ${isDues&&payMethod==="bank"?"bank":"card"}`;
   };
 }
 load();
