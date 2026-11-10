@@ -2241,7 +2241,7 @@ function todayHeroHTML(o){
     <div class="kick">${esc(KICK[th])} · ${esc(dateLbl)}</div>
     <h1>${esc(hello)}${first?', '+esc(first):''}.</h1>
     <div class="sub">${today.length?`${today.length} ${today.length===1?NOUN[0]:NOUN[1]} on the books${team?' across the team':''}${left?`, ${left} still to come`:', all done for the day'}.`:`Nothing booked yet today. ${esc(aName())} is answering and will add bookings as they come in.`} Times in ${esc(tzLabel(tz))}.</div>
-    <div class="live"><i></i>${esc(aName())} is answering your line</div>
+    ${state.assistant&&state.assistant.active===false?`<div class="live"><i style="background:#f59e0b;animation:none"></i>${esc(aName())} is paused. Turn her on in Assistant.</div>`:`<div class="live"><i></i>${esc(aName())} is answering your line</div>`}
     <div class="kpis">
       ${tile(today.length,`${NOUN[1]} today`,'appointments')}
       ${tile(left,'still to come')}
