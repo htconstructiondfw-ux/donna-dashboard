@@ -376,7 +376,8 @@ async function doReset(){
   pendingRecovery=false;
   setTimeout(boot, 1200);
 }
-async function signOut(){ await db.auth.signOut(); state.account=null; renderAuth(); }
+// Full reload on sign-out so nothing cached in memory (team, properties, listings, invoices) survives into the next login.
+async function signOut(){ try{ await db.auth.signOut(); }catch(_e){} location.replace(location.pathname); }
 
 /* ===================== DATA LOAD ===================== */
 async function loadData(){
