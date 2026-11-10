@@ -342,7 +342,7 @@ Deno.serve(async (req: Request) => {
     servicesVar = (svcRows || []).map((s: any) => s.name).filter(Boolean).join(", ");
     servicesDetail = (svcRows || []).map((s: any) => `${s.name}${s.default_duration_min ? " · " + fmtDur(Number(s.default_duration_min)) : ""}${s.price ? " · " + s.price : ""}`).join("; ");
     if (isSalon) {
-      const { data: ppl } = await supabase.from("users").select("id, full_name, pronunciation, is_bookable, role, created_at").eq("account_id", asst.account_id).eq("is_active", true).order("created_at");
+      const { data: ppl } = await supabase.from("users").select("id, full_name, pronunciation, is_bookable, role, created_at").eq("account_id", asst.account_id).order("created_at");
       const bookablePpl = (ppl || []).filter((u: any) => u.is_bookable);
       const prov = bookablePpl.length ? bookablePpl : (ppl || []).filter((u: any) => u.role === "owner").slice(0, 1);
       stylistsSay = prov.map((u: any) => { const f = firstName(u.full_name); return u.pronunciation ? `${f} (said "${u.pronunciation}")` : f; }).join(", ");
@@ -352,7 +352,7 @@ Deno.serve(async (req: Request) => {
   if (salonTeam) {
     isSalonTeam = "yes";
     const [{ data: staff }, { data: rules }, { data: blocks }, { data: svcs }] = await Promise.all([
-      supabase.from("users").select("id, full_name, phone, role, is_bookable, created_at").eq("account_id", asst.account_id).eq("is_active", true).order("created_at"),
+      supabase.from("users").select("id, full_name, phone, role, is_bookable, created_at").eq("account_id", asst.account_id).order("created_at"),
       supabase.from("availability_rules").select("user_id, rule_type, day_of_week, start_time, end_time").eq("account_id", asst.account_id),
       supabase.from("calendar_blocks").select("user_id, starts_at, ends_at").eq("account_id", asst.account_id).gt("ends_at", now.toISOString()),
       supabase.from("appointment_types").select("name").eq("account_id", asst.account_id).eq("is_active", true).order("created_at"),

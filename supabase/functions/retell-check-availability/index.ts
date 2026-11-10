@@ -226,7 +226,7 @@ Deno.serve(async (req: Request) => {
   const fmtDur = (m: number) => m >= 60 ? (m % 60 ? (Math.round(m / 60 * 4) / 4).toString().replace(/\.0$/, "") + " hours" : (m / 60) + (m === 60 ? " hour" : " hours")) : m + " minutes";
   const svcNote = svcs.length ? ` (${svcName}, about ${fmtDur(dur)}${svcs.length > 1 ? " total, back to back" : ""})` : "";
 
-  const { data: bookable } = await supabase.from("users").select("id, full_name, trades, service_zips").eq("account_id", asst.account_id).eq("is_bookable", true).eq("is_active", true).order("created_at");
+  const { data: bookable } = await supabase.from("users").select("id, full_name, trades, service_zips").eq("account_id", asst.account_id).eq("is_bookable", true).order("created_at");
   let people = (bookable || []) as any[];
   if (!people.length) {
     // solo shop with nobody flagged bookable: the owner IS the stylist and the dashboard hours are theirs
