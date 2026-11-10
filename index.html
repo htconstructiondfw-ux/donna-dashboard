@@ -6085,7 +6085,7 @@ async function wzPersist(patch){
 }
 async function setupApi(body){ const { data, error }=await db.functions.invoke("setup",{ body }); if(error){ let msg=error.message||'error'; try{ const j=await error.context.json(); msg=j.message||j.error||msg; }catch(_e){} return { ok:false, error:msg }; } return data||{ ok:false, error:'empty' }; }
 function wzShell(body,opts){
-  opts=opts||{};
+  opts=opts||{}; window._wzAlt=opts.onAlt||null; // wzBindNav picks this up so the alt button always works
   const step=state.wizStep||0, total=WZ_TITLES.length-1;
   const dots=WZ_TITLES.map((t,i)=>`<span class="wz-dot ${i<step?'done':''} ${i===step?'cur':''}"></span>`).join("");
   const footer = opts.noFooter ? '' : (step===0
@@ -6157,7 +6157,7 @@ function wzBindNav(saveFn,opts){
     state.wizStep=(state.wizStep||0)+1; await wzPersist({}); renderWizard();
   };
   const back=$("#wz-back"); if(back) back.onclick=async()=>{ state.wizStep=Math.max(0,(state.wizStep||0)-1); await wzPersist({}); renderWizard(); };
-  const alt=$("#wz-alt"); if(alt&&opts.onAlt) alt.onclick=opts.onAlt;
+  const alt=$("#wz-alt"); const onAlt=opts.onAlt||window._wzAlt; if(alt&&onAlt) alt.onclick=async()=>{ alt.disabled=true; try{ await onAlt(); }catch(e){ console.error(e); alt.disabled=false; } };
   const exit=$("#wz-exit"); if(exit) exit.onclick=async()=>{ await wzPersist({}); await wzFinish(true); };
 }
 function renderWizard(){
