@@ -1576,7 +1576,7 @@ function pageContacts(){
     <div class="page-head"><h1>Contacts</h1><p>${pmMode()?`Everyone ${esc(aName())} has talked to — residents, owners, tenants, board members, vendors, prospects — built automatically from calls, emails, and texts, with what she learned about each. Link a person to a property on the Properties page so she knows their unit and role next time.`:`The customer list ${esc(aName())} builds automatically. Every caller she saves shows up here with what she learned, so you can see who's calling, mark your regulars, or block a number.`}</p></div>
     <div class="card">
       <div class="card-h"><h2>People${total?` <span class="hint">${total}</span>`:''}</h2><button class="btn sm" id="c-refresh">Refresh</button></div>
-      <div class="c-tools"><input class="c-search" id="c-search" type="search" placeholder="Search name, number, company\u2026" value="${esc(q)}"><button class="btn sm" id="c-add">Add contact</button><button class="btn sm" id="c-import">Import</button><button class="btn sm" id="c-export">Export</button><input type="file" id="c-file" accept=".csv,.vcf,text/csv,text/vcard" style="display:none"></div>
+      <div class="c-tools"><input class="c-search" id="c-search" type="search" placeholder="Search name, number, company\u2026" value="${esc(q)}"><button class="btn sm" id="c-add">Add contact</button><button class="btn sm" id="c-pull" title="Bring in your Google or Outlook contacts">From Google / Outlook</button><button class="btn sm" id="c-import">Import</button><button class="btn sm" id="c-export">Export</button><input type="file" id="c-file" accept=".csv,.vcf,text/csv,text/vcard" style="display:none"></div>
       <details class="c-help" style="margin:-4px 0 14px">
         <summary style="cursor:pointer;font-size:12.5px;color:var(--muted);user-select:none">How import and export work</summary>
         <div style="font-size:12.5px;color:var(--muted);line-height:1.7;margin-top:8px;padding:10px 12px;border:1px solid var(--line);border-radius:8px;background:var(--surface)">
@@ -1594,6 +1594,7 @@ function pageContacts(){
   $("#c-add").onclick=showAddContact;
   $("#c-export").onclick=showExport;
   { const fi=$("#c-file"); $("#c-import").onclick=()=>fi.click(); fi.onchange=()=>{ if(fi.files&&fi.files[0]){ ctImportFile(fi.files[0]); fi.value=""; } }; }
+  { const pb=$("#c-pull"); if(pb) pb.onclick=()=>contactsPull(pb); }
   $("#c-refresh").onclick=async()=>{ const b=$("#c-refresh"); b.disabled=true; b.textContent="\u2026"; await loadContacts(); pageContacts(); };
   bindContactActions();
 }
@@ -5374,12 +5375,12 @@ async function deleteDocument(id){
 const CAL_PROVIDERS = {
   google: { label:"Google Calendar",
     authUrl:"https://accounts.google.com/o/oauth2/v2/auth",
-    scope:"https://www.googleapis.com/auth/calendar.events https://www.googleapis.com/auth/calendar.freebusy https://www.googleapis.com/auth/calendar.calendarlist.readonly",
+    scope:"https://www.googleapis.com/auth/calendar.events https://www.googleapis.com/auth/calendar.freebusy https://www.googleapis.com/auth/calendar.calendarlist.readonly https://www.googleapis.com/auth/contacts.readonly https://www.googleapis.com/auth/contacts.other.readonly",
     callback: SUPABASE_URL + "/functions/v1/google-oauth-callback",
     extra:{ access_type:"offline", prompt:"select_account consent" } },
   microsoft: { label:"Microsoft Outlook",
     authUrl:"https://login.microsoftonline.com/common/oauth2/v2.0/authorize",
-    scope:"offline_access https://graph.microsoft.com/Calendars.ReadWrite https://graph.microsoft.com/User.Read https://graph.microsoft.com/OnlineMeetings.ReadWrite",
+    scope:"offline_access https://graph.microsoft.com/Calendars.ReadWrite https://graph.microsoft.com/User.Read https://graph.microsoft.com/OnlineMeetings.ReadWrite https://graph.microsoft.com/Contacts.Read https://graph.microsoft.com/People.Read",
     callback: SUPABASE_URL + "/functions/v1/microsoft-oauth-callback",
     extra:{ response_mode:"query", prompt:"select_account" } }
 };
@@ -5400,12 +5401,26 @@ async function disconnectCalendar(btn){
   if(error){ btn.disabled=false; btn.textContent=o; return; }
   paintCalendarCard();
 }
+// Contacts from the connected Google / Microsoft account (same grant as the calendar). Never overwrites a name the owner typed.
+async function contactsPull(btn, silent){
+  if(btn){ btn.disabled=true; btn.dataset.o=btn.textContent; btn.textContent='Bringing them in…'; }
+  let r; try{ const { data, error }=await db.functions.invoke("contacts-import",{ body:{ action:'pull' } }); r=data||{ ok:false, error:(error&&error.message)||'error' }; }catch(e){ r={ ok:false, error:String(e.message||e) }; }
+  if(btn){ btn.disabled=false; btn.textContent=btn.dataset.o||'From Google / Outlook'; }
+  if(!r.ok){
+    if(r.error==='not_connected'){ if(!silent){ const go=await uiConfirm(`Connect your Google or Outlook account and ${aName()} pulls your contacts in — calendar and address book in one tap. Nothing is emailed to anyone.`,{okText:'Connect Google',cancelText:'Not now'}); if(go) connectCalendar('google'); } return r; }
+    if(!silent) uiAlert('Could not pull contacts: '+(r.message||r.error||'')); return r;
+  }
+  if((r.needs_reconnect||[]).length){ if(!silent){ const go=await uiConfirm(`Your ${r.needs_reconnect.join(' and ')} connection was made before ${aName()} could read contacts. Reconnect once to allow it (calendar stays as is).`,{okText:'Reconnect',cancelText:'Later'}); if(go) connectCalendar(r.needs_reconnect[0]); } return r; }
+  try{ await loadContacts(); if(state.view==='contacts'||state.view==='clients') renderPage(); }catch(_e){}
+  if(!silent) uiAlert(r.added||r.updated?`Brought in ${r.added} new ${r.added===1?'person':'people'}${r.updated?` and filled in ${r.updated} you already had`:''} from ${r.found} found.`:`Nothing new — your ${r.found} contacts were already here.`);
+  return r;
+}
 function calToast(){
   const q=new URLSearchParams(location.search); const c=q.get("calendar");
   if(!c) return "";
   q.delete("calendar"); const qs=q.toString();
   history.replaceState({}, "", location.pathname + (qs?"?"+qs:""));
-  if(c==="connected") return `<div style="margin-bottom:12px;font-size:13px;color:var(--ok)">Calendar connected.</div>`;
+  if(c==="connected"){ setTimeout(()=>{ contactsPull(null,true).then(r=>{ if(r&&r.ok&&(r.added||r.updated)){ const el=document.getElementById('cal-contacts-note'); if(el) el.textContent=`Also brought in ${r.added} contact${r.added===1?'':'s'} from this account.`; } }); },300); return `<div style="margin-bottom:12px;font-size:13px;color:var(--ok)">Calendar connected. <span id="cal-contacts-note" style="color:var(--muted)">Pulling your contacts in the background…</span></div>`; }
   if(c==="error") return `<div style="margin-bottom:12px;font-size:13px;color:var(--danger)">Could not connect that calendar. Please try again.</div>`;
   return "";
 }
@@ -5793,6 +5808,7 @@ function wzBindNav(saveFn,opts){
 }
 function renderWizard(){
   if(typeof teardownRealtime==='function') teardownRealtime();
+  try{ const q=new URLSearchParams(location.search); if(q.get('calendar')==='connected'){ history.replaceState({}, '', location.pathname); setTimeout(()=>contactsPull(null,true),400); } }catch(_e){}
   if(typeof state.wizStep!=='number'){ const ob=obState(); state.wizStep=(ob&&typeof ob.step==='number')?Math.min(ob.step, WZ_TITLES.length-1):0; }
   if(!state.wz){ const ob=obState()||{}; state.wz={
     query: state.account.company||'', website:(state.account.settings&&state.account.settings.business&&state.account.settings.business.website)||'',
@@ -5928,12 +5944,17 @@ const WZ_RENDER={
         <div class="wz-field"><label>Voice</label><select class="wz-sel" id="wz-voice">${VOICES.map(v=>`<option value="${v[0]}" ${g.voice===v[0]?'selected':''}>${esc(v[1])}</option>`).join('')}</select></div>
         <div class="wz-field"><label>Her name <span class="hint">most people keep Donna</span></label><input class="wz-inp" id="wz-aname" value="${esc(g.aname)}"></div>
       </div>
-      <div class="wz-field"><label>Speaks</label><div id="wz-langs">${[['en','English'],['es','Spanish'],['vi','Vietnamese'],['zh','Chinese'],['ko','Korean']].map(l=>`<span class="wz-chip ${((state.assistant&&state.assistant.languages)||['en']).includes(l[0])?'sel':''}" data-lang="${l[0]}">${l[1]}</span>`).join('')}</div><div class="hint" style="font-size:12px;color:var(--muted)">She switches when the caller does.</div></div>
+      <div class="wz-sec"><h3>Your calendar and contacts <span class="src">optional · one tap</span></h3>
+        <p style="font-size:13px;color:var(--muted);margin:0 0 8px">Connect Google or Outlook and ${esc(g.aname)} books straight onto your calendar and brings your contacts in — no export, no spreadsheet.</p>
+        <div style="display:flex;gap:8px;flex-wrap:wrap"><button class="btn sm" id="wz-gcal">Connect Google</button><button class="btn sm" id="wz-mcal">Connect Outlook</button></div>
+      </div>
+      <div class="wz-field" style="margin-top:14px"><label>Speaks</label><div id="wz-langs">${[['en','English'],['es','Spanish'],['vi','Vietnamese'],['zh','Chinese'],['ko','Korean']].map(l=>`<span class="wz-chip ${((state.assistant&&state.assistant.languages)||['en']).includes(l[0])?'sel':''}" data-lang="${l[0]}">${l[1]}</span>`).join('')}</div><div class="hint" style="font-size:12px;color:var(--muted)">She switches when the caller does.</div></div>
       <div class="wz-msg" id="wz-m"></div>
     `,{nextLabel:'Sounds good'});
     const langs=new Set((state.assistant&&state.assistant.languages)||['en']);
     document.querySelectorAll('[data-lang]').forEach(c=>c.onclick=()=>{ const l=c.dataset.lang; if(langs.has(l)&&langs.size>1) langs.delete(l); else langs.add(l); c.classList.toggle('sel',langs.has(l)); });
     $("#wz-aname").oninput=()=>{ g.aname=$("#wz-aname").value.trim()||DEFAULT_NAME; };
+    $("#wz-gcal").onclick=async()=>{ await wzPersist({}); connectCalendar('google'); }; $("#wz-mcal").onclick=async()=>{ await wzPersist({}); connectCalendar('microsoft'); };
     wzBindNav(async()=>{
       g.voice=$("#wz-voice").value; g.aname=$("#wz-aname").value.trim()||DEFAULT_NAME;
       const row={ assistant_name:g.aname, voice_id:g.voice, languages:[...langs], is_active:true };
