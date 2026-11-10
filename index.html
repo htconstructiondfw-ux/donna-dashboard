@@ -159,8 +159,8 @@
   .type-item .ic svg{width:17px;height:17px}
   .type-item .nm{font-weight:600;font-size:14px} .type-item .nm small{display:block;color:var(--muted);font-weight:400;font-size:12px;margin-top:1px}
   .type-item .mode{margin-left:auto;font-size:11px;letter-spacing:.06em;text-transform:uppercase;color:var(--muted-2);font-weight:600;white-space:nowrap}
-  .staff-row{display:flex;align-items:center;gap:14px;padding:13px 16px;border:1px solid var(--line);border-radius:var(--r-sm);margin-bottom:9px;background:#fbfcfe}
-  .staff-row .staff-main{min-width:0} .staff-row .staff-main b{font-weight:600;font-size:14px} .staff-row .staff-main small{display:block;color:var(--muted);font-weight:400;font-size:12px;margin-top:1px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .staff-row{display:flex;flex-wrap:wrap;align-items:center;gap:10px 14px;padding:13px 16px;border:1px solid var(--line);border-radius:var(--r-sm);margin-bottom:9px;background:#fbfcfe}
+  .staff-row .staff-main{flex:1 1 360px;min-width:0} .staff-row .staff-main b{font-weight:600;font-size:14px} .staff-row .staff-main small{display:block;color:var(--muted);font-weight:400;font-size:12px;margin-top:1px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
   .staff-row .staff-meta{margin-left:auto;display:flex;gap:6px;align-items:center;flex:none} .staff-row .staff-act{flex:none}
   .pill{font-size:10.5px;letter-spacing:.04em;text-transform:uppercase;font-weight:600;color:var(--muted-2);border:1px solid var(--line);border-radius:20px;padding:2px 8px;white-space:nowrap}
   .pill.ok{color:var(--ok);border-color:#bfe3d0;background:#f1faf5} .pill.mgr{color:var(--ink-2);border-color:#c9d6ea;background:#eef3fb}
@@ -1164,7 +1164,7 @@ async function staffAction(btn, action){
   if(!(r&&r.ok)){ say((r&&r.error)||"That didn't go through.",'var(--danger)'); return; }
   if(action==='resend_invite'){ say('Login link sent.','var(--ok)'); return; }
   say(action==='deactivate'?'Deactivated — they can no longer sign in.':'Reactivated.','var(--ok)');
-  await loadStaff(); const el=$("#staff-list"); if(el){ el.innerHTML=(state.staff||[]).map(staffRowHTML).join(""); bindBookToggles(); }
+  await loadStaff(); const el=$("#staff-list"); if(el){ el.innerHTML=(state.staff||[]).map(staffRowHTML).join(""); bindBookToggles(); } loadActivity(40);
 }
 async function saveStaffPron(id){
   const inp=document.querySelector(`[data-pron="${id}"]`); const m=document.querySelector(`[data-pronmsg="${id}"]`);
@@ -1175,7 +1175,7 @@ async function saveStaffPron(id){
   else if(m){ m.style.color='var(--danger)'; m.textContent='Error'; }
 }
 function genPassword(){ const c="ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnpqrstuvwxyz23456789"; let s=""; const a=crypto.getRandomValues(new Uint32Array(12)); for(let i=0;i<12;i++) s+=c[a[i]%c.length]; return s; }
-async function toggleBookable(id,val){ await db.from('users').update({is_bookable:val}).eq('id',id); if(id===state.owner.id) state.owner.bookable=val; await loadStaff(); const el=$("#staff-list"); if(el){ el.innerHTML=(state.staff||[]).map(staffRowHTML).join(""); bindBookToggles(); } }
+async function toggleBookable(id,val){ await db.from('users').update({is_bookable:val}).eq('id',id); if(id===state.owner.id) state.owner.bookable=val; await loadStaff(); const el=$("#staff-list"); if(el){ el.innerHTML=(state.staff||[]).map(staffRowHTML).join(""); bindBookToggles(); } loadActivity(40); }
 async function addStaff(){
   const name=$("#st-name").value.trim(), email=$("#st-email").value.trim().toLowerCase(), how=$("#st-how").value, pass=$("#st-pass").value, book=$("#st-book").checked, role=$("#st-role").value, phone=normPhone($("#st-phone").value);
   const msg=$("#st-msg"); const set=(t,c)=>{ if(msg){ msg.style.color=c||"var(--muted)"; msg.textContent=t; } };
