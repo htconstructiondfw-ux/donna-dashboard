@@ -29,6 +29,10 @@
   .err{margin-top:16px;padding:14px;border-radius:14px;background:#f6e7e5;color:var(--danger);text-align:center}
   .foot{margin-top:26px;text-align:center;color:var(--muted);font-size:12.5px;line-height:1.6}
   .foot a{color:inherit}
+  .tips{margin-top:14px} .tips .k{font-size:13px;color:var(--muted);margin-bottom:8px;font-weight:600}
+  .tipgrid{display:grid;grid-template-columns:repeat(4,1fr);gap:8px} .tipgrid button{padding:12px 6px;border:1.5px solid var(--line);border-radius:12px;background:#fff;font:inherit;font-weight:700;cursor:pointer;color:var(--ink)} .tipgrid button small{display:block;font-weight:500;color:var(--muted);font-size:12px}
+  .tipgrid button.on{border-color:var(--accent);background:#edf5f0;color:var(--accent-deep)}
+  .tipcustom{display:flex;gap:8px;margin-top:8px;align-items:center} .tipcustom input{flex:1;padding:10px 12px;border:1.5px solid var(--line);border-radius:12px;font:inherit;font-size:16px}
   .skel{height:14px;border-radius:7px;background:linear-gradient(90deg,#eceeec,#f6f7f6,#eceeec);background-size:200% 100%;animation:sh 1.2s infinite;margin:10px 0}
   @keyframes sh{to{background-position:-200% 0}}
 </style>
@@ -61,40 +65,54 @@ async function load(attempt=0){
   render(inv);
 }
 
+let tipPick = null; // cents chosen on this page (tickets only); null = use the invoice's saved tip
 function render(inv){
   const b = inv.business || {}; const paid = !!inv.paid_at; const isVoid = inv.status === "void";
+  const isTicket = inv.kind === "ticket";
+  const base = (inv.total_cents||0) - (inv.tip_cents||0);            // services + products + tax
+  const tipNow = tipPick != null ? tipPick : (inv.tip_cents||0);
+  const due = base + tipNow;
+  const feeNow = inv.card_fee_pct>0 ? Math.round(due * inv.card_fee_pct / 100) : 0;
   const initials = (b.name||"?").split(/\s+/).slice(0,2).map(w=>w[0]).join("").toUpperCase();
   const lines = (inv.lines||[]).filter(l => l.kind !== "tax");
-  document.title = `Invoice ${inv.number} · ${b.name||""}`;
+  document.title = `${isTicket?"Receipt":"Invoice"} ${inv.number} · ${b.name||""}`;
   app.innerHTML = `
     <div class="biz"><div class="logo">${esc(initials)}</div><div><h1>${esc(b.name||"Invoice")}</h1><p>${[b.phone,b.email].filter(Boolean).map(esc).join(" · ")}</p></div></div>
     <div class="card">
       <div class="top">
-        <div><div class="num">Invoice ${esc(inv.number)}</div>${inv.customer_name?`<div class="to">${esc(inv.customer_name)}</div>`:""}${inv.service_address?`<div class="addr">${esc(inv.service_address)}</div>`:""}</div>
+        <div><div class="num">${isTicket?(paid?"Receipt":"Your visit"):"Invoice"} ${esc(inv.number)}</div>${isTicket&&inv.served_by_name?`<div class="addr">with ${esc(inv.served_by_name)}</div>`:""}${inv.customer_name?`<div class="to">${esc(inv.customer_name)}</div>`:""}${inv.service_address?`<div class="addr">${esc(inv.service_address)}</div>`:""}</div>
         <span class="badge ${paid?"paid":isVoid?"void":""}">${paid?"Paid":isVoid?"Cancelled":"Due"}</span>
       </div>
       <table>
-        ${lines.map(l=>`<tr><td>${esc(l.desc)}${l.qty>1?`<span class="k">${l.qty} × ${money(l.unit_cents)}</span>`:""}${l.kind==="addon"?`<span class="k">Add-on</span>`:""}</td><td class="amt">${l.cents===0?"No charge":money(l.cents)}</td></tr>`).join("")}
+        ${lines.map(l=>`<tr><td>${esc(l.desc)}${l.qty>1?`<span class="k">${l.qty} × ${money(l.unit_cents)}</span>`:""}${l.kind==="addon"?`<span class="k">Add-on</span>`:l.kind==="product"?`<span class="k">Retail</span>`:l.kind==="gift_card"?`<span class="k">Gift card applied</span>`:l.kind==="gift_card_sale"?`<span class="k">Gift card</span>`:""}</td><td class="amt">${l.cents===0?"No charge":money(l.cents)}</td></tr>`).join("")}
         ${inv.tax_cents?`<tr><td>Sales tax</td><td class="amt">${money(inv.tax_cents)}</td></tr>`:""}
-        <tr class="total"><td>Total</td><td class="amt">${money(inv.total_cents)}</td></tr>
+        ${tipNow?`<tr><td>Tip${inv.served_by_name?` <span class="k">for ${esc(inv.served_by_name)}</span>`:""}</td><td class="amt">${money(tipNow)}</td></tr>`:""}
+        <tr class="total"><td>Total</td><td class="amt">${money(due)}</td></tr>
       </table>
+      ${(!paid && !isVoid && isTicket && inv.tips_enabled) ? `<div class="tips"><div class="k">Add a tip${inv.served_by_name?` for ${esc(inv.served_by_name)}`:""}?</div>
+        <div class="tipgrid">${[15,18,20,25].map(p=>{ const c=Math.round(base*p/100); return `<button type="button" data-tip="${c}" class="${tipNow===c?'on':''}">${p}%<small>${money(c)}</small></button>`; }).join("")}</div>
+        <div class="tipcustom"><input id="tipCustom" inputmode="decimal" placeholder="Other amount"><button type="button" id="tipNone" style="padding:10px 14px;border:1.5px solid var(--line);border-radius:12px;background:#fff;font:inherit;font-weight:600;color:var(--muted);cursor:pointer">No tip</button></div></div>` : ""}
       ${inv.notes?`<div class="notes">${esc(inv.notes)}</div>`:""}
       ${paid ? `<div class="done">Paid${inv.paid_method&&inv.paid_method!=="card"?" ("+esc(inv.paid_method)+")":""}${inv.paid_note&&/card processing fee/.test(inv.paid_note)?` · ${esc(inv.paid_note.replace(/^.*incl\. /,"incl. "))}`:""} on ${new Date(inv.paid_at).toLocaleDateString("en-US",{month:"long",day:"numeric",year:"numeric"})}. Thank you!</div>`
         : isVoid ? `<div class="err">This invoice was cancelled by ${esc(b.name||"the business")}.</div>`
-        : inv.can_pay_online ? `${inv.card_fee_cents>0?`<div class="alt" style="margin-top:14px;text-align:left"><b>Cash or check:</b> ${money(inv.total_cents)} &nbsp;·&nbsp; <b>By card:</b> ${money(inv.total_cents+inv.card_fee_cents)} <span style="color:#999">(includes a ${inv.card_fee_pct}% card processing fee of ${money(inv.card_fee_cents)})</span></div>`:""}<button class="pay" id="payBtn">Pay ${money(inv.total_cents+(inv.card_fee_cents||0))} by card</button><div class="alt">Secure card payment through Stripe. Your payment goes directly to ${esc(b.name||"the business")}.</div><div id="payErr"></div>`
+        : inv.can_pay_online ? `${feeNow>0?`<div class="alt" style="margin-top:14px;text-align:left"><b>Cash or check:</b> ${money(due)} &nbsp;·&nbsp; <b>By card:</b> ${money(due+feeNow)} <span style="color:#999">(includes a ${inv.card_fee_pct}% card processing fee of ${money(feeNow)})</span></div>`:""}<button class="pay" id="payBtn">Pay ${money(due+feeNow)} by card</button><div class="alt">Secure card payment through Stripe. Your payment goes directly to ${esc(b.name||"the business")}.</div><div id="payErr"></div>`
         : (justPaid ? `<div class="alt">Confirming your payment…</div>` : `<div class="alt">Pay ${esc(b.name||"the business")} directly${b.phone?` · ${esc(b.phone)}`:""}.</div>`)}
     </div>
     <div class="foot">Sent by ${esc(b.name||"the business")} with Donna.<br>Payments are processed by ${esc(b.name||"the business")}'s own Stripe account; Donna never holds your money.</div>`;
+  document.querySelectorAll("[data-tip]").forEach(b=>b.onclick=()=>{ tipPick=Number(b.dataset.tip); render(inv); });
+  const tn=document.getElementById("tipNone"); if(tn) tn.onclick=()=>{ tipPick=0; render(inv); };
+  const tc=document.getElementById("tipCustom"); if(tc) tc.onchange=()=>{ const v=Math.round(Number(String(tc.value).replace(/[^0-9.]/g,""))*100); if(isFinite(v)&&v>=0){ tipPick=v; render(inv); } };
   const btn = document.getElementById("payBtn");
   if(btn) btn.onclick = async () => {
     btn.disabled = true; btn.textContent = "Opening secure checkout…";
     try{
-      const r = await fetch(`${SB}/functions/v1/payments`,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({action:"checkout",token})});
+      const body = {action:"checkout",token}; if(isTicket && inv.tips_enabled) body.tip_cents = tipNow;
+      const r = await fetch(`${SB}/functions/v1/payments`,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(body)});
       const j = await r.json();
       if(j.ok && j.url){ location.href = j.url; return; }
       document.getElementById("payErr").innerHTML = `<div class="err">${j.error==="already_paid"?"This invoice is already paid.":"Online payment isn't available right now. Please pay the business directly."}</div>`;
     }catch(e){ document.getElementById("payErr").innerHTML = '<div class="err">Couldn\'t open checkout. Please try again.</div>'; }
-    btn.disabled = false; btn.textContent = `Pay ${money(inv.total_cents+(inv.card_fee_cents||0))} by card`;
+    btn.disabled = false; btn.textContent = `Pay ${money(due+feeNow)} by card`;
   };
 }
 load();
