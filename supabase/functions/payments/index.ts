@@ -2,7 +2,7 @@ import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import Stripe from "https://esm.sh/stripe@14.25.0?target=denonext";
 
-// Donna shared payments module (v17: activity log on void / reprice / mark paid). Any vertical can use it; the dashboard exposes it to contractors first.
+// Donna shared payments module (v18: salon checkout — tickets with tips, products with stock, gift cards sold/redeemed; v17 activity log). Any vertical can use it; the dashboard exposes it to contractors first.
 // Tenants connect THEIR OWN Stripe account (Connect, Accounts v2, SaaS pattern). Donna never holds, touches or routes money:
 // Checkout Sessions are created directly on the tenant's account (Stripe-Account header), no application fee.
 //
@@ -104,9 +104,14 @@ function normLines(raw: any[]): any[] {
   return (Array.isArray(raw) ? raw : []).map((l: any) => {
     const qty = Math.max(0, Number(l.qty ?? 1) || 1);
     const unit = Math.round(Number(l.unit_cents ?? (l.unit != null ? Number(l.unit) * 100 : 0)) || 0);
-    const kind = ["service", "addon", "trip_fee", "discount", "tax", "material", "labor"].includes(l.kind) ? l.kind : "service";
-    const cents = l.cents != null ? Math.round(Number(l.cents)) : Math.round(qty * unit) * (kind === "discount" ? -1 : 1);
-    return { desc: String(l.desc || l.name || "").slice(0, 140), qty, unit_cents: unit, cents, kind };
+    const kind = ["service", "addon", "trip_fee", "discount", "tax", "material", "labor", "product", "gift_card", "gift_card_sale"].includes(l.kind) ? l.kind : "service";
+    const neg = kind === "discount" || kind === "gift_card";
+    const cents = l.cents != null ? Math.round(Number(l.cents)) : Math.round(qty * unit) * (neg ? -1 : 1);
+    const out: any = { desc: String(l.desc || l.name || "").slice(0, 140), qty, unit_cents: unit, cents: neg ? -Math.abs(cents) : cents, kind };
+    if (l.product_id) out.product_id = String(l.product_id);
+    if (kind === "gift_card" && l.code) out.code = String(l.code).trim().toUpperCase();
+    if (kind === "gift_card_sale") { if (l.recipient_name) out.recipient_name = String(l.recipient_name).slice(0, 80); if (l.recipient_phone) out.recipient_phone = String(l.recipient_phone).trim(); }
+    return out;
   }).filter((l) => l.desc);
 }
 
@@ -145,12 +150,46 @@ async function sendEmail(to: string, from: string, subject: string, text: string
   try { const r = await fetch("https://api.resend.com/emails", { method: "POST", headers: { Authorization: `Bearer ${RESEND_KEY}`, "Content-Type": "application/json" }, body: JSON.stringify({ from, to: [to], subject, text }) }); return r.ok; } catch { return false; }
 }
 
+// Gift cards redeemed on a ticket must exist, be active, and cover the amount. Returns an error string or null.
+async function checkGiftCards(accountId: string, lines: any[]): Promise<string | null> {
+  for (const l of lines.filter((x) => x.kind === "gift_card")) {
+    if (!l.code) return "gift_card_code_missing";
+    const { data: g } = await supabase.from("gift_cards").select("id, balance_cents, status, expires_at").eq("account_id", accountId).eq("code", l.code).maybeSingle();
+    if (!g || g.status !== "active") return `gift_card_not_found:${l.code}`;
+    if (g.expires_at && new Date(g.expires_at).getTime() < Date.now()) return `gift_card_expired:${l.code}`;
+    if (Math.abs(l.cents) > g.balance_cents) return `gift_card_balance:${l.code}:${g.balance_cents}`;
+  }
+  return null;
+}
+const newGiftCode = () => { const a = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789"; let s = ""; const r = crypto.getRandomValues(new Uint8Array(8)); for (const b of r) s += a[b % a.length]; return s.slice(0, 4) + "-" + s.slice(4); };
+// Once a ticket is paid: stock goes down, redeemed gift cards lose balance, sold gift cards are issued (and texted to the recipient).
+async function afterPaid(inv: any, acct: any) {
+  const lines: any[] = inv.lines || [];
+  for (const l of lines) {
+    try {
+      if (l.kind === "product" && l.product_id) {
+        const { data: p } = await supabase.from("products").select("stock").eq("id", l.product_id).maybeSingle();
+        if (p && p.stock != null) await supabase.from("products").update({ stock: Math.max(0, p.stock - (Number(l.qty) || 1)), updated_at: new Date().toISOString() }).eq("id", l.product_id);
+      } else if (l.kind === "gift_card" && l.code) {
+        const { data: g } = await supabase.from("gift_cards").select("id, balance_cents").eq("account_id", inv.account_id).eq("code", l.code).maybeSingle();
+        if (g) { const bal = Math.max(0, g.balance_cents - Math.abs(l.cents)); await supabase.from("gift_cards").update({ balance_cents: bal, status: bal === 0 ? "used" : "active", updated_at: new Date().toISOString() }).eq("id", g.id); await supabase.from("gift_card_moves").insert({ gift_card_id: g.id, invoice_id: inv.id, delta_cents: -Math.abs(l.cents), note: `Redeemed on ${inv.number}` }); }
+      } else if (l.kind === "gift_card_sale") {
+        let code = newGiftCode(); for (let i = 0; i < 5; i++) { const { data: dup } = await supabase.from("gift_cards").select("id").eq("account_id", inv.account_id).eq("code", code).maybeSingle(); if (!dup) break; code = newGiftCode(); }
+        const { data: g } = await supabase.from("gift_cards").insert({ account_id: inv.account_id, code, initial_cents: l.cents, balance_cents: l.cents, purchaser_contact_id: inv.contact_id || null, recipient_name: l.recipient_name || null, recipient_phone: l.recipient_phone || null, sold_invoice_id: inv.id }).select("id").maybeSingle();
+        if (g) await supabase.from("gift_card_moves").insert({ gift_card_id: g.id, invoice_id: inv.id, delta_cents: l.cents, note: `Sold on ${inv.number}` });
+        const to = l.recipient_phone || inv.customer_phone;
+        if (to && acct?.settings?.sms?.enabled === true) await sendText(inv.account_id, to, `${acct.name}: ${l.recipient_name ? l.recipient_name + ", " : ""}you have a ${money(l.cents)} gift card. Code ${code}. Give the code at checkout; we track the balance for you.`);
+      }
+    } catch (e) { console.error("afterPaid line", String(e)); }
+  }
+}
+
 async function markPaid(inv: any, method: string, provider: string, providerRef: string | null, note: string | null, amountCents?: number, feeCents?: number, surchargeCents = 0) {
   if (inv.paid_at) return inv;
   const now = new Date().toISOString();
   const paidNote = surchargeCents > 0 ? `${note ? note + "; " : ""}incl. ${money(surchargeCents)} card processing fee` : note;
   const { data } = await supabase.from("invoices").update({ status: "paid", paid_at: now, paid_method: method, paid_note: paidNote, stripe_payment_intent_id: providerRef && provider === "stripe" ? providerRef : inv.stripe_payment_intent_id, updated_at: now }).eq("id", inv.id).select("*").maybeSingle();
-  await supabase.from("payments").insert({ account_id: inv.account_id, invoice_id: inv.id, amount_cents: amountCents ?? inv.total_cents, method, provider, provider_ref: providerRef, fee_cents: feeCents ?? null, note: paidNote });
+  await supabase.from("payments").insert({ account_id: inv.account_id, invoice_id: inv.id, amount_cents: amountCents ?? inv.total_cents, method, provider, provider_ref: providerRef, fee_cents: feeCents ?? null, note: paidNote, tip_cents: inv.tip_cents || 0 });
   // Only the job's final invoice closes the job; an after-hours prepay invoice (job_id set, but not the job's invoice_id) leaves it open.
   if (inv.job_id) { try { await supabase.from("jobs").update({ status: "paid", updated_at: now }).eq("id", inv.job_id).eq("invoice_id", inv.id); } catch { /* jobs may not exist yet */ } }
   // After-hours prepay cleared (any method): page the on-call tech with the job, tell the customer. Card payments also text whoever sent the invoice.
@@ -170,14 +209,17 @@ async function markPaid(inv: any, method: string, provider: string, providerRef:
       }
     }
     if (provider === "stripe" && !paged && who?.phone && acct) await sendText(inv.account_id, who.phone, `${acct.name}: ${inv.customer_name || "Your customer"} paid invoice ${inv.number}, ${money(amountCents ?? inv.total_cents)} by card. It's on its way to your bank.`);
-    // Customer receipt, every payment method (card, cash, check, other): text and/or email, with the pay page as the itemized receipt.
+    // Stock, gift-card balances and new gift cards move only once the money is in.
+    if (acct) await afterPaid(inv, acct);
+    // Customer receipt, every payment method (card, cash, check, gift card, other): text and/or email, with the pay page as the itemized receipt.
     if (acct) {
       const amt = money(amountCents ?? inv.total_cents); const link = payUrl(inv.pay_token);
-      const how = method === "card" ? "card" : method === "check" ? "check" : method === "cash" ? "cash" : (note || "payment");
-      if (inv.customer_phone && acct.settings?.sms?.enabled === true) await sendText(inv.account_id, inv.customer_phone, `${acct.name}: paid, thank you. ${amt} on invoice ${inv.number} (${how}). Your receipt: ${link}`);
+      const how = method === "card" ? "card" : method === "check" ? "check" : method === "cash" ? "cash" : method === "gift_card" ? "gift card" : (note || method || "payment");
+      const word = inv.kind === "ticket" ? "visit" : "invoice";
+      if (inv.customer_phone && acct.settings?.sms?.enabled === true) await sendText(inv.account_id, inv.customer_phone, `${acct.name}: paid, thank you. ${amt} for your ${word} ${inv.number} (${how})${inv.tip_cents ? ", including a " + money(inv.tip_cents) + " tip" : ""}. Your receipt: ${link}`);
       if (inv.customer_email) {
         const lines = (inv.lines || []).map((l: any) => `  ${l.desc}${l.qty > 1 ? ` x${l.qty}` : ""}  ${money(l.cents)}`).join("\n");
-        await sendEmail(inv.customer_email, `${acct.name} via Donna <donna@sidekicklogistics.com>`, `Receipt from ${acct.name} - ${amt} - Invoice ${inv.number}`, `Hi${inv.customer_name ? " " + inv.customer_name : ""},\n\nThank you. We received ${amt} (${how}) on invoice ${inv.number}.\n\n${lines}${surchargeCents > 0 ? `\n  Card processing fee  ${money(surchargeCents)}` : ""}\n\nTotal: ${money(inv.total_cents + surchargeCents)}\nPaid: ${amt}\n\nYour receipt: ${link}\n\n${acct.name}`);
+        await sendEmail(inv.customer_email, `${acct.name} via Donna <donna@sidekicklogistics.com>`, `Receipt from ${acct.name} - ${amt} - ${inv.number}`, `Hi${inv.customer_name ? " " + inv.customer_name : ""},\n\nThank you. We received ${amt} (${how}) for ${word} ${inv.number}.\n\n${lines}${inv.tax_cents ? `\n  Sales tax  ${money(inv.tax_cents)}` : ""}${inv.tip_cents ? `\n  Tip  ${money(inv.tip_cents)}` : ""}${surchargeCents > 0 ? `\n  Card processing fee  ${money(surchargeCents)}` : ""}\n\nTotal: ${money(inv.total_cents + surchargeCents)}\nPaid: ${amt}\n\nYour receipt: ${link}\n\n${acct.name}`);
       }
     }
   } catch { /* non-fatal */ }
@@ -236,6 +278,11 @@ Deno.serve(async (req: Request) => {
     if (inv.paid_at || inv.status === "paid") return json({ ok: false, error: "already_paid" });
     if (inv.status === "void") return json({ ok: false, error: "void" });
     const acct = await loadAccount(inv.account_id); const pa = await loadPA(inv.account_id);
+    // Tip chosen on the pay page (tickets only). Saved on the invoice so the receipt and the stylist report see it.
+    if (body.tip_cents !== undefined && inv.kind === "ticket" && acct?.settings?.payments?.tips !== false) {
+      const tip = Math.max(0, Math.min(Math.round(Number(body.tip_cents) || 0), 100000));
+      if (tip !== (inv.tip_cents || 0)) { const { data: upd } = await supabase.from("invoices").update({ tip_cents: tip, updated_at: new Date().toISOString() }).eq("id", inv.id).select("*").maybeSingle(); if (upd) Object.assign(inv, upd); }
+    }
     if (!stripe) return json({ ok: false, error: "stripe_not_configured" }, 503);
     if (!acct?.settings?.payments?.enabled || !pa?.charges_enabled || !pa?.stripe_account_id) return json({ ok: false, error: "online_payments_off" });
     const lines = (inv.lines || []).filter((l: any) => l.kind !== "discount" && l.kind !== "tax" && l.cents > 0);
@@ -247,6 +294,7 @@ Deno.serve(async (req: Request) => {
       ? [{ quantity: 1, price_data: { currency: inv.currency, unit_amount: inv.total_cents, product_data: { name: `Invoice ${inv.number}` } } }]
       : [...lines.map((l: any) => ({ quantity: 1, price_data: { currency: inv.currency, unit_amount: l.cents, product_data: { name: l.desc.slice(0, 120) } } })),
          ...(tax > 0 ? [{ quantity: 1, price_data: { currency: inv.currency, unit_amount: tax, product_data: { name: "Sales tax" } } }] : [])];
+    if (inv.tip_cents > 0 && !(discount > 0 || lines.length === 0)) items.push({ quantity: 1, price_data: { currency: inv.currency, unit_amount: inv.tip_cents, product_data: { name: "Tip" } } });
     if (fee.cents > 0) items.push({ quantity: 1, price_data: { currency: inv.currency, unit_amount: fee.cents, product_data: { name: `Card processing fee (${fee.pct}%)` } } });
     try {
       const session: any = await stripe.checkout.sessions.create({
@@ -316,6 +364,13 @@ Deno.serve(async (req: Request) => {
     const lines = normLines(body.lines); if (!lines.length) return json({ ok: false, error: "no_lines" }, 400);
     let contact: any = null;
     if (body.contact_id) { const { data } = await supabase.from("contacts").select("id, name, phone, email").eq("id", body.contact_id).eq("account_id", acct.id).maybeSingle(); contact = data; }
+    const gcErr = await checkGiftCards(acct.id, lines); if (gcErr) return json({ ok: false, error: gcErr }, 400);
+    // Salon ticket: the appointment supplies the client and the stylist (served_by) unless given.
+    let appt: any = null;
+    if (body.appointment_id) { const { data } = await supabase.from("appointments").select("id, contact_id, user_id, contacts(name, phone, email)").eq("id", body.appointment_id).eq("account_id", acct.id).maybeSingle(); appt = data; if (!contact && appt?.contacts) contact = { id: appt.contact_id, ...(appt.contacts as any) }; }
+    const kind = body.kind === "ticket" ? "ticket" : "invoice";
+    const servedBy = body.served_by || appt?.user_id || (kind === "ticket" ? caller.userId : null);
+    const tip = Math.max(0, Math.min(Math.round(Number(body.tip_cents) || 0), 100000));
     const { data: num } = await supabase.rpc("next_invoice_number", { p_account: acct.id });
     const row: any = {
       account_id: acct.id, contact_id: contact?.id || null, appointment_id: body.appointment_id || null, job_id: body.job_id || null,
@@ -324,9 +379,12 @@ Deno.serve(async (req: Request) => {
       customer_phone: String(body.customer_phone || contact?.phone || "").trim() || null,
       customer_email: String(body.customer_email || contact?.email || "").trim() || null,
       service_address: String(body.service_address || "").slice(0, 240) || null, created_by: caller.userId,
+      kind, served_by: servedBy, tip_cents: tip,
     };
     const { data, error } = await supabase.from("invoices").insert(row).select("*").maybeSingle();
     if (error) return json({ ok: false, error: error.message }, 400);
+    // A ticket fully covered by a gift card (or $0) is paid on the spot.
+    if (kind === "ticket" && body.pay_now && data.total_cents <= 0) { const upd = await markPaid(data, "gift_card", "manual", null, null); await logActivity(acct.id, caller.userId, "invoice.paid", "invoice", data.id, data.number, { method: "gift_card", total_cents: 0 }); return json({ ok: true, invoice: upd, pay_url: payUrl(data.pay_token) }); }
     return json({ ok: true, invoice: data, pay_url: payUrl(data.pay_token) });
   }
 
@@ -336,7 +394,9 @@ Deno.serve(async (req: Request) => {
     if (!(await canTouchInvoice(caller, inv))) return json({ ok: false, error: "not_yours", message: "That invoice belongs to someone else on the team." }, 403);
     if (body.lines && inv.status !== "draft" && !isAdmin(caller.role)) return json({ ok: false, error: "admins_only", message: "Only an owner or manager can change a sent invoice." }, 403);
     const upd: any = { updated_at: new Date().toISOString() };
-    if (body.lines) { const lines = normLines(body.lines); if (!lines.length) return json({ ok: false, error: "no_lines" }, 400); upd.lines = lines; }
+    if (body.lines) { const lines = normLines(body.lines); if (!lines.length) return json({ ok: false, error: "no_lines" }, 400); const gcErr = await checkGiftCards(acct.id, lines); if (gcErr) return json({ ok: false, error: gcErr }, 400); upd.lines = lines; }
+    if (body.tip_cents !== undefined) upd.tip_cents = Math.max(0, Math.min(Math.round(Number(body.tip_cents) || 0), 100000));
+    if (body.served_by !== undefined) upd.served_by = body.served_by || null;
     for (const k of ["notes", "customer_name", "customer_phone", "customer_email", "service_address"]) if (body[k] !== undefined) upd[k] = String(body[k] || "").trim() || null;
     const { data } = await supabase.from("invoices").update(upd).eq("id", id).select("*").maybeSingle();
     if (body.lines && inv.status !== "draft" && data && data.total_cents !== inv.total_cents) await logActivity(acct.id, caller.userId, "invoice.reprice", "invoice", inv.id, inv.number, { from_cents: inv.total_cents, to_cents: data.total_cents });
@@ -371,7 +431,8 @@ Deno.serve(async (req: Request) => {
     const id = String(body.id || ""); const { data: inv } = await supabase.from("invoices").select("*").eq("id", id).eq("account_id", acct.id).maybeSingle();
     if (!inv) return json({ ok: false, error: "not_found" }, 404);
     if (!(await canTouchInvoice(caller, inv))) return json({ ok: false, error: "not_yours", message: "That invoice belongs to someone else on the team." }, 403);
-    const method = ["cash", "check", "card", "other"].includes(body.method) ? body.method : "cash";
+    const method = ["cash", "check", "card", "other", "gift_card", "zelle", "venmo"].includes(body.method) ? body.method : "cash";
+    if (body.tip_cents !== undefined && !inv.paid_at) { const tip = Math.max(0, Math.min(Math.round(Number(body.tip_cents) || 0), 100000)); if (tip !== (inv.tip_cents || 0)) { const { data: t } = await supabase.from("invoices").update({ tip_cents: tip, updated_at: new Date().toISOString() }).eq("id", inv.id).select("*").maybeSingle(); if (t) Object.assign(inv, t); } }
     const upd = await markPaid(inv, method, "manual", null, String(body.note || "").slice(0, 200) || null);
     await logActivity(acct.id, caller.userId, "invoice.paid", "invoice", inv.id, inv.number, { method, total_cents: inv.total_cents });
     return json({ ok: true, invoice: upd });
@@ -432,6 +493,13 @@ Deno.serve(async (req: Request) => {
     return json({ ok: true, invoice: data });
   }
 
+  if (action === "gift_card_lookup") {
+    const code = String(body.code || "").trim().toUpperCase(); if (!code) return json({ ok: false, error: "no_code" }, 400);
+    const { data: g } = await supabase.from("gift_cards").select("code, initial_cents, balance_cents, status, expires_at, recipient_name").eq("account_id", acct.id).eq("code", code).maybeSingle();
+    if (!g) return json({ ok: false, error: "not_found" });
+    return json({ ok: true, card: g });
+  }
+
   if (action === "invoice_list") {
     const status = body.status ? String(body.status) : null; const limit = Math.min(200, Number(body.limit) || 50);
     let q = supabase.from("invoices").select("*").eq("account_id", acct.id).order("created_at", { ascending: false }).limit(limit);
@@ -449,10 +517,11 @@ Deno.serve(async (req: Request) => {
     const from = body.from ? new Date(body.from) : new Date(Date.now() - 365 * 86400000); const to = body.to ? new Date(body.to) : new Date();
     const { data: invs } = await supabase.from("invoices").select("*").eq("account_id", acct.id).gte("created_at", from.toISOString()).lte("created_at", to.toISOString()).order("created_at");
     const { data: pays } = await supabase.from("payments").select("*, invoices(number)").eq("account_id", acct.id).gte("received_at", from.toISOString()).lte("received_at", to.toISOString()).order("received_at");
+    const { data: ppl } = await supabase.from("users").select("id, full_name").eq("account_id", acct.id); const names = new Map((ppl || []).map((u: any) => [u.id, u.full_name]));
     const esc = (v: any) => `"${String(v ?? "").replace(/"/g, '""')}"`;
     const d = (v: any) => v ? new Date(v).toISOString().slice(0, 10) : "";
-    const invCsv = ["Invoice No,Date,Customer,Phone,Email,Service Address,Description,Subtotal,Tax,Total,Status,Sent,Paid Date,Paid Method",
-      ...(invs || []).map((i: any) => [i.number, d(i.created_at), i.customer_name, i.customer_phone, i.customer_email, i.service_address, (i.lines || []).map((l: any) => `${l.desc}${l.qty > 1 ? " x" + l.qty : ""} ${money(l.cents)}`).join("; "), (i.subtotal_cents / 100).toFixed(2), (i.tax_cents / 100).toFixed(2), (i.total_cents / 100).toFixed(2), i.status, d(i.sent_at), d(i.paid_at), i.paid_method].map(esc).join(","))].join("\n");
+    const invCsv = ["Invoice No,Date,Customer,Phone,Email,Service Address,Description,Subtotal,Tax,Tip,Total,Status,Sent,Paid Date,Paid Method,Served By",
+      ...(invs || []).map((i: any) => [i.number, d(i.created_at), i.customer_name, i.customer_phone, i.customer_email, i.service_address, (i.lines || []).map((l: any) => `${l.desc}${l.qty > 1 ? " x" + l.qty : ""} ${money(l.cents)}`).join("; "), (i.subtotal_cents / 100).toFixed(2), (i.tax_cents / 100).toFixed(2), ((i.tip_cents || 0) / 100).toFixed(2), (i.total_cents / 100).toFixed(2), i.status, d(i.sent_at), d(i.paid_at), i.paid_method, names.get(i.served_by) || ""].map(esc).join(","))].join("\n");
     const payCsv = ["Date,Invoice No,Amount,Method,Provider,Reference,Fee,Note",
       ...(pays || []).map((p: any) => [d(p.received_at), p.invoices?.number, (p.amount_cents / 100).toFixed(2), p.method, p.provider, p.provider_ref, p.fee_cents != null ? (p.fee_cents / 100).toFixed(2) : "", p.note].map(esc).join(","))].join("\n");
     return json({ ok: true, invoices_csv: invCsv, payments_csv: payCsv, count: { invoices: invs?.length || 0, payments: pays?.length || 0 } });
