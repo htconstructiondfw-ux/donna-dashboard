@@ -2,7 +2,7 @@ import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import Stripe from "https://esm.sh/stripe@14.25.0?target=denonext";
 
-// Donna shared payments module (v18: salon checkout — tickets with tips, products with stock, gift cards sold/redeemed; v17 activity log). Any vertical can use it; the dashboard exposes it to contractors first.
+// Donna shared payments module (v19: card on file per client (contacts.card) + save-card-on-pay; v18: salon checkout — tickets with tips, products with stock, gift cards sold/redeemed; v17 activity log). Any vertical can use it; the dashboard exposes it to contractors first.
 // Tenants connect THEIR OWN Stripe account (Connect, Accounts v2, SaaS pattern). Donna never holds, touches or routes money:
 // Checkout Sessions are created directly on the tenant's account (Stripe-Account header), no application fee.
 //
@@ -243,14 +243,16 @@ Deno.serve(async (req: Request) => {
     try {
       if (ev.type === "checkout.session.completed" && ev.data.object?.mode === "setup") {
         // Card on file: the customer saved a card for a booked job. Keep the ids on the job; the tech can charge it at Done.
-        const cs = ev.data.object; const jobId = cs?.metadata?.job_id; const acctStripe = ev.account || cs?.metadata?.stripe_account || null;
-        if (jobId && cs.setup_intent && acctStripe) {
+        const cs = ev.data.object; const jobId = cs?.metadata?.job_id; const contactId = cs?.metadata?.contact_id; const acctStripe = ev.account || cs?.metadata?.stripe_account || null;
+        if ((jobId || contactId) && cs.setup_intent && acctStripe) {
           try {
             const si: any = await stripe.setupIntents.retrieve(String(cs.setup_intent), { expand: ["payment_method"] }, { stripeAccount: acctStripe });
             const pm: any = si?.payment_method || {};
             const card = { payment_method: pm.id || String(si.payment_method || ""), customer: cs.customer || si.customer || null, brand: pm.card?.brand || null, last4: pm.card?.last4 || null, saved_at: new Date().toISOString() };
-            const { data: job } = await supabase.from("jobs").update({ card, updated_at: new Date().toISOString() }).eq("id", jobId).select("account_id, customer_phone, customer_name, assigned_user_id").maybeSingle();
-            if (job) { const acct = await loadAccount(job.account_id); if (acct && job.customer_phone && acct.settings?.sms?.enabled === true) await sendText(job.account_id, job.customer_phone, `${acct.name}: thanks, your card ending ${card.last4 || "on file"} is saved. Nothing is charged until the work is done.`); }
+            let acctId: string | null = null, phone: string | null = null;
+            if (jobId) { const { data: job } = await supabase.from("jobs").update({ card, updated_at: new Date().toISOString() }).eq("id", jobId).select("account_id, customer_phone, contact_id").maybeSingle(); if (job) { acctId = job.account_id; phone = job.customer_phone; if (job.contact_id && !contactId) await supabase.from("contacts").update({ card, updated_at: new Date().toISOString() }).eq("id", job.contact_id); } }
+            if (contactId) { const { data: c } = await supabase.from("contacts").update({ card, updated_at: new Date().toISOString() }).eq("id", contactId).select("account_id, phone").maybeSingle(); if (c) { acctId = c.account_id; phone = phone || c.phone; } }
+            if (acctId && phone) { const acct = await loadAccount(acctId); if (acct && acct.settings?.sms?.enabled === true) await sendText(acctId, phone, `${acct.name}: thanks, your card ending ${card.last4 || "on file"} is saved. ${jobId ? "Nothing is charged until the work is done." : "Next time you can just say \"put it on my card.\""}`); }
           } catch (e) { console.error("card setup webhook", e); }
         }
       } else if (ev.type === "checkout.session.completed" || ev.type === "checkout.session.async_payment_succeeded") {
@@ -258,6 +260,10 @@ Deno.serve(async (req: Request) => {
         if (invoiceId && cs.payment_status === "paid") {
           const { data: inv } = await supabase.from("invoices").select("*").eq("id", invoiceId).maybeSingle();
           if (inv) await markPaid(inv, "card", "stripe", String(cs.payment_intent || cs.id), null, cs.amount_total ?? inv.total_cents, undefined, Number(cs?.metadata?.card_fee_cents || 0));
+          // "Save my card for next time" on the pay page: keep the payment method on the client's record.
+          if (inv?.contact_id && cs?.metadata?.save_card === "1" && cs.payment_intent) {
+            try { const acctStripe = ev.account || null; const pi: any = await stripe.paymentIntents.retrieve(String(cs.payment_intent), { expand: ["payment_method"] }, acctStripe ? { stripeAccount: acctStripe } : undefined); const pm: any = pi?.payment_method || {}; if (pm?.id) await supabase.from("contacts").update({ card: { payment_method: pm.id, customer: pi.customer || cs.customer || null, brand: pm.card?.brand || null, last4: pm.card?.last4 || null, saved_at: new Date().toISOString() }, updated_at: new Date().toISOString() }).eq("id", inv.contact_id); } catch (e) { console.error("save card after pay", e); }
+          }
         }
       } else if (ev.type === "account.updated") {
         const a = ev.data.object; const { data: pa } = await supabase.from("payment_accounts").select("*").eq("stripe_account_id", a.id).maybeSingle();
@@ -297,13 +303,15 @@ Deno.serve(async (req: Request) => {
     if (inv.tip_cents > 0 && !(discount > 0 || lines.length === 0)) items.push({ quantity: 1, price_data: { currency: inv.currency, unit_amount: inv.tip_cents, product_data: { name: "Tip" } } });
     if (fee.cents > 0) items.push({ quantity: 1, price_data: { currency: inv.currency, unit_amount: fee.cents, product_data: { name: `Card processing fee (${fee.pct}%)` } } });
     try {
+      const saveCard = body.save_card === true && !!inv.contact_id;
       const session: any = await stripe.checkout.sessions.create({
         mode: "payment", line_items: items,
         success_url: `${payUrl(token)}?paid=1`, cancel_url: payUrl(token),
         customer_email: inv.customer_email || undefined,
-        metadata: { invoice_id: inv.id, account_id: inv.account_id, number: inv.number, card_fee_cents: String(fee.cents) },
-        payment_intent_data: { description: `${acct.name} · Invoice ${inv.number}${fee.cents ? " (incl. card fee)" : ""}`, metadata: { invoice_id: inv.id, card_fee_cents: String(fee.cents) } },
-      }, { stripeAccount: pa.stripe_account_id });
+        ...(saveCard ? { customer_creation: "always" } : {}),
+        metadata: { invoice_id: inv.id, account_id: inv.account_id, number: inv.number, card_fee_cents: String(fee.cents), save_card: saveCard ? "1" : "0" },
+        payment_intent_data: { description: `${acct.name} · ${inv.kind === "ticket" ? "Visit" : "Invoice"} ${inv.number}${fee.cents ? " (incl. card fee)" : ""}`, metadata: { invoice_id: inv.id, card_fee_cents: String(fee.cents) }, ...(saveCard ? { setup_future_usage: "off_session" } : {}) },
+      } as any, { stripeAccount: pa.stripe_account_id });
       await supabase.from("invoices").update({ stripe_checkout_session_id: session.id, updated_at: new Date().toISOString() }).eq("id", inv.id);
       return json({ ok: true, url: session.url });
     } catch (e) { console.error("checkout", e); return json({ ok: false, error: "stripe_error", detail: String((e as any)?.message || e) }, 502); }
@@ -442,6 +450,18 @@ Deno.serve(async (req: Request) => {
     // Text the customer a Stripe Checkout (setup mode) link on the business's own account. Nothing is charged; the card is saved to the job.
     const pa = await loadPA(acct.id);
     if (!stripe || !acct.settings?.payments?.enabled || !pa?.charges_enabled || !pa?.stripe_account_id) return json({ ok: false, error: "online_payments_off", message: "Connect Stripe and turn on online payments first." });
+    // Salon / any client: save a card on the client's record (no job). Donna texts the link; the webhook stores it on contacts.card.
+    if (body.contact_id && !body.job_id) {
+      const { data: c } = await supabase.from("contacts").select("id, name, phone, email, card").eq("id", body.contact_id).eq("account_id", acct.id).maybeSingle();
+      if (!c) return json({ ok: false, error: "contact_not_found" }, 404);
+      if (c.card?.payment_method && !body.replace) return json({ ok: true, already: true, last4: c.card.last4 || null });
+      const to = String(body.phone || c.phone || "").trim(); if (!to) return json({ ok: false, error: "no_phone" });
+      try {
+        const session: any = await stripe.checkout.sessions.create({ mode: "setup", payment_method_types: ["card"], customer_email: c.email || undefined, success_url: `${APP}/pay/card-saved`, cancel_url: `${APP}/pay/card-saved?cancel=1`, metadata: { contact_id: c.id, account_id: acct.id, stripe_account: pa.stripe_account_id }, setup_intent_data: { metadata: { contact_id: c.id, account_id: acct.id } } } as any, { stripeAccount: pa.stripe_account_id });
+        const sent = acct.settings?.sms?.enabled === true ? await sendText(acct.id, to, `${business}: to make checkout quick next time, you can keep a card on file here (nothing is charged now): ${session.url}`) : false;
+        return json({ ok: true, sent, url: session.url });
+      } catch (e) { console.error("card setup (contact)", e); return json({ ok: false, error: "stripe_error", detail: String((e as any)?.message || e) }, 502); }
+    }
     let job: any = null;
     if (body.job_id) { const { data } = await supabase.from("jobs").select("*").eq("id", body.job_id).eq("account_id", acct.id).maybeSingle(); job = data; }
     else if (body.appointment_id) {
@@ -472,11 +492,14 @@ Deno.serve(async (req: Request) => {
     const pa = await loadPA(acct.id);
     if (!stripe || !pa?.charges_enabled || !pa?.stripe_account_id) return json({ ok: false, error: "online_payments_off" });
     const { data: job } = inv.job_id ? await supabase.from("jobs").select("card, customer_name").eq("id", inv.job_id).maybeSingle() : { data: null as any };
-    const card = (job as any)?.card; if (!card?.payment_method) return json({ ok: false, error: "no_card", message: "No card on file for this job. Send the pay link instead." });
+    let card = (job as any)?.card;
+    if (!card?.payment_method && inv.contact_id) { const { data: c } = await supabase.from("contacts").select("card").eq("id", inv.contact_id).maybeSingle(); card = (c as any)?.card; }
+    if (!card?.payment_method) return json({ ok: false, error: "no_card", message: "No card on file for this client. Send the pay link instead." });
+    if (body.tip_cents !== undefined) { const tip = Math.max(0, Math.min(Math.round(Number(body.tip_cents) || 0), 100000)); if (tip !== (inv.tip_cents || 0)) { const { data: t } = await supabase.from("invoices").update({ tip_cents: tip, updated_at: new Date().toISOString() }).eq("id", inv.id).select("*").maybeSingle(); if (t) Object.assign(inv, t); } }
     try {
       const fee = cardFee(acct, inv.total_cents);
-      const pi: any = await stripe.paymentIntents.create({ amount: inv.total_cents + fee.cents, currency: inv.currency || "usd", customer: card.customer || undefined, payment_method: card.payment_method, off_session: true, confirm: true, description: `${business} \u00b7 Invoice ${inv.number}${fee.cents ? " (incl. card fee)" : ""}`, metadata: { invoice_id: inv.id, account_id: acct.id, number: inv.number, card_fee_cents: String(fee.cents) } }, { stripeAccount: pa.stripe_account_id });
-      if (pi.status === "succeeded") { const upd = await markPaid(inv, "card", "stripe", pi.id, `card on file${card.last4 ? " \u2022\u2022\u2022\u2022 " + card.last4 : ""}`, pi.amount_received ?? (inv.total_cents + fee.cents), undefined, fee.cents); return json({ ok: true, invoice: upd, charged: true, last4: card.last4 || null, card_fee_cents: fee.cents, total_charged: inv.total_cents + fee.cents }); }
+      const pi: any = await stripe.paymentIntents.create({ amount: inv.total_cents + fee.cents, currency: inv.currency || "usd", customer: card.customer || undefined, payment_method: card.payment_method, off_session: true, confirm: true, description: `${business} \u00b7 ${inv.kind === "ticket" ? "Visit" : "Invoice"} ${inv.number}${fee.cents ? " (incl. card fee)" : ""}`, metadata: { invoice_id: inv.id, account_id: acct.id, number: inv.number, card_fee_cents: String(fee.cents) } }, { stripeAccount: pa.stripe_account_id });
+      if (pi.status === "succeeded") { const upd = await markPaid(inv, "card", "stripe", pi.id, `card on file${card.last4 ? " \u2022\u2022\u2022\u2022 " + card.last4 : ""}`, pi.amount_received ?? (inv.total_cents + fee.cents), undefined, fee.cents); await logActivity(acct.id, caller.userId, "invoice.paid", "invoice", inv.id, inv.number, { method: "card on file", total_cents: inv.total_cents }); return json({ ok: true, invoice: upd, charged: true, last4: card.last4 || null, card_fee_cents: fee.cents, total_charged: inv.total_cents + fee.cents }); }
       return json({ ok: false, error: "not_succeeded", status: pi.status, message: "The bank wants the customer to confirm. Send them the pay link." });
     } catch (e: any) {
       const code = e?.code || e?.raw?.code || ""; console.error("charge card", code, e?.message);
@@ -491,6 +514,15 @@ Deno.serve(async (req: Request) => {
     const { data } = await supabase.from("invoices").update({ status: "void", updated_at: new Date().toISOString() }).eq("id", id).select("*").maybeSingle();
     await logActivity(acct.id, caller.userId, "invoice.void", "invoice", inv.id, inv.number, { total_cents: inv.total_cents });
     return json({ ok: true, invoice: data });
+  }
+
+  if (action === "client_card") {
+    const { data: c } = await supabase.from("contacts").select("id, card").eq("id", String(body.contact_id || "")).eq("account_id", acct.id).maybeSingle();
+    const card = (c as any)?.card; return json({ ok: true, has_card: !!card?.payment_method, brand: card?.brand || null, last4: card?.last4 || null });
+  }
+  if (action === "client_card_forget") {
+    if (!isAdmin(caller.role)) return json({ ok: false, error: "admins_only" }, 403);
+    await supabase.from("contacts").update({ card: null, updated_at: new Date().toISOString() }).eq("id", String(body.contact_id || "")).eq("account_id", acct.id); return json({ ok: true });
   }
 
   if (action === "gift_card_lookup") {
