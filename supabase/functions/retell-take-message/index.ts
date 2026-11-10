@@ -152,7 +152,7 @@ Deno.serve(async (req: Request) => {
   if (forName) {
     const want = nameTokens(forName);
     if (want.length) {
-      const { data: staff } = await supabase.from("users").select("id, full_name, email").eq("account_id", asst.account_id);
+      const { data: staff } = await supabase.from("users").select("id, full_name, email").eq("account_id", asst.account_id).eq("is_active", true);
       const su = (staff || []).find((u: any) => { const have = nameTokens(u.full_name); return have.some((h: string) => want.includes(h)); });
       if (su) { personEmail = String((su as any).email || "").trim(); notifyUserId = (su as any).id; }
       if (!personEmail) {
