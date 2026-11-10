@@ -14,6 +14,7 @@ import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 //  - v32: card on file at booking for contractors (settings.contractor.card_on_file_types / card_on_file_all) via payments.card_setup_send.
 //  - v30: contractor dispatch. Only techs whose trades include the service's category and whose service_zips
 //    include the job's zip are considered; the caller never picks a tech, Donna assigns the first one open.
+//  - v33: outbound calls (wizard test call) resolve the business by the FROM number; the caller is the TO side.
 
 const supabase = createClient(Deno.env.get("SUPABASE_URL")!, Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!, { auth: { persistSession: false } });
 const SERVICE_ROLE = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") || "";
@@ -213,7 +214,9 @@ Deno.serve(async (req: Request) => {
   try { body = await req.json(); } catch { return json({ result: "Sorry, I couldn't book that just now." }); }
 
   const call = body?.call ?? {}; const args = body?.args ?? {};
-  const toNumber = call?.to_number; const fromNumber = call?.from_number ?? ""; const retellId = call?.call_id ?? null;
+  // Outbound (wizard test call): Donna's number is FROM and the caller is TO.
+  const outbound = call?.direction === "outbound";
+  const toNumber = outbound ? call?.from_number : call?.to_number; const fromNumber = (outbound ? call?.to_number : call?.from_number) ?? ""; const retellId = call?.call_id ?? null;
 
   const caller = String(args?.caller_name ?? "").trim();
   const phone = (String(args?.phone ?? "").trim() || fromNumber || "");

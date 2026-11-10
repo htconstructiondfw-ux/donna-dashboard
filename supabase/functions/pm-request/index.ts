@@ -64,7 +64,7 @@ async function retellSigValid(rawBody: string, sigHeader: string | null): Promis
 
 async function resolveAccount(req: Request, rawBody: string, body: any): Promise<{ account_id: string | null; channel: string }> {
   const call = body?.call ?? {};
-  const toNumber = pick(call?.to_number);
+  const toNumber = pick(call?.direction === "outbound" ? call?.from_number : call?.to_number); // outbound = wizard test call
   if (toNumber) {
     const valid = await retellSigValid(rawBody, req.headers.get("x-retell-signature"));
     if (!valid && RETELL_SIG_ENFORCE) return { account_id: null, channel: "phone" };

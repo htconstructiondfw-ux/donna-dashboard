@@ -1,7 +1,7 @@
 import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 
-// Donna — take a message (Retell custom function) v24
+// Donna — take a message (Retell custom function) v25
 // Saves caller name, callback number, message, language, urgency, and who the
 // message is for. When the message is for a named person, it resolves that person
 // FIRST against the staff list (so a stylist gets their own message), then the Pro
@@ -16,6 +16,7 @@ import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 
 // v23: paging goes through the on-call ladder (oncall.page) so it escalates when nobody answers.
 // v24: a second urgent message from the same caller within 15 min updates the open emergency job (address, notes) instead of paging again.
+// v25: outbound calls (wizard test call) resolve the business by the FROM number; the caller is the TO side.
 const supabase = createClient(
   Deno.env.get("SUPABASE_URL")!,
   Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!,
@@ -122,8 +123,10 @@ Deno.serve(async (req: Request) => {
 
   const call = body?.call ?? {};
   const args = body?.args ?? {};
-  const toNumber = call?.to_number;
-  const fromNumber = call?.from_number ?? "";
+  // Outbound (wizard test call): Donna's number is FROM and the caller is TO.
+  const outbound = call?.direction === "outbound";
+  const toNumber = outbound ? call?.from_number : call?.to_number;
+  const fromNumber = (outbound ? call?.to_number : call?.from_number) ?? "";
   const retellId = call?.call_id ?? null;
 
   const callerName = String(args?.caller_name ?? args?.name ?? "").trim();

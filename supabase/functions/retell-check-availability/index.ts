@@ -16,6 +16,7 @@ import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 // v23: real drive time. With a Google Maps key on file, contractor openings that don't leave enough driving time from
 //      the tech's neighboring jobs to the caller's address are dropped (drive-time.filter); without a key the flat
 //      travel buffer in donna_is_slot_open_user is the rule.
+// v24: outbound calls (wizard test call) resolve the business by the FROM number.
 
 const supabase = createClient(Deno.env.get("SUPABASE_URL")!, Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!, { auth: { persistSession: false } });
 const SERVICE_ROLE = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
@@ -197,7 +198,8 @@ Deno.serve(async (req: Request) => {
 
   const call = body?.call ?? {};
   const args = body?.args ?? {};
-  const toNumber = call?.to_number;
+  // On an OUTBOUND call (Donna dialing the owner for the wizard test call) Donna's number is the FROM side.
+  const toNumber = call?.direction === "outbound" ? call?.from_number : call?.to_number;
   const date = String(args?.date ?? "").trim();
   const time = String(args?.time ?? "").trim();
   const stylistArg = String(args?.stylist ?? "").trim();

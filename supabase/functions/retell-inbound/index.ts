@@ -1,7 +1,7 @@
 import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 
-// Donna — Retell inbound-call webhook (emits greeting, routing, memory, voice). v45: trip_fee + after_hours vars (prepay only when cards are live). v47: card processing fee note in trip_fee. v48: real_estate var.
+// Donna — Retell inbound-call webhook (emits greeting, routing, memory, voice). v45: trip_fee + after_hours vars (prepay only when cards are live). v47: card processing fee note in trip_fee. v48: real_estate var. v49: hours + approved knowledge appended to custom_instructions.
 
 const supabase = createClient(
   Deno.env.get("SUPABASE_URL")!,
@@ -244,7 +244,7 @@ Deno.serve(async (req: Request) => {
     realEstateText = parts.join(" ");
   }
 
-  const customInstructions = String(routing.custom_instructions || "").trim();
+  let customInstructions = String(routing.custom_instructions || "").trim();
   const openingQuestion = String(routing.opening_question || "").trim();
 
   const codesArr = (Array.isArray(asst.languages) && asst.languages.length) ? asst.languages : ["en"];
@@ -316,6 +316,27 @@ Deno.serve(async (req: Request) => {
     windows = Array.isArray(bh.windows) ? bh.windows : [];
   }
   const openNow = withinWindows(winTz, windows, now);
+
+  // v49: hours and approved knowledge ride along in custom_instructions, so Donna answers "what are your hours?"
+  // and the FAQ the owner confirmed in setup from facts instead of saying she isn't sure.
+  try {
+    const DN = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
+    const t12 = (t: string) => { const [h, m] = String(t).split(":").map(Number); const ap = h >= 12 ? "PM" : "AM"; const hh = ((h + 11) % 12) + 1; return m ? `${hh}:${String(m).padStart(2, "0")} ${ap}` : `${hh} ${ap}`; };
+    const byDay: Record<number, string> = {};
+    for (const w of windows) { const d = Number(w.dow); if (!Number.isFinite(d)) continue; const r = `${t12(w.start)}–${t12(w.end)}`; byDay[d] = byDay[d] ? `${byDay[d]}, ${r}` : r; }
+    const order = [1, 2, 3, 4, 5, 6, 0]; const groups: { days: number[]; r: string }[] = [];
+    for (const d of order) { const r = byDay[d] || "closed"; const g = groups[groups.length - 1]; if (g && g.r === r) g.days.push(d); else groups.push({ days: [d], r }); }
+    const hoursText = windows.length ? groups.map((g) => `${g.days.length > 1 ? DN[g.days[0]] + "–" + DN[g.days[g.days.length - 1]] : DN[g.days[0]]} ${g.r}`).join("; ") : "";
+    const addr = String(settings.address || settings.business?.address || settings.office_address || "").trim();
+    const { data: kb } = await supabase.from("knowledge_entries").select("title, content").eq("account_id", asst.account_id).eq("approved", true).order("created_at").limit(40);
+    let facts = ""; for (const k of kb || []) { const line = `- ${String(k.content || k.title || "").replace(/\s+/g, " ").trim()}`; if (facts.length + line.length > 2800) break; facts += (facts ? "\n" : "") + line; }
+    const extra = [
+      hoursText ? `BUSINESS HOURS (${winTz}): ${hoursText}. We are ${openNow ? "open" : "closed"} right now. Answer hours questions from this directly.` : "",
+      addr ? `ADDRESS: ${addr}.` : "",
+      facts ? `FACTS ABOUT THIS BUSINESS (answer from these; if the answer isn't here, say you're not sure and offer to take a message):\n${facts}` : "",
+    ].filter(Boolean).join("\n\n");
+    if (extra) customInstructions = (customInstructions ? customInstructions + "\n\n" : "") + extra;
+  } catch (e) { console.error("hours/kb", String(e)); }
 
   const transfer = routing.transfer || {};
   const singleNumber = String(transfer.number || "").trim();

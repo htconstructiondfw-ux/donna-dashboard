@@ -146,7 +146,8 @@ Deno.serve(async (req: Request) => {
   let body: any = {}; try { body = JSON.parse(raw || "{}"); } catch { return say("Sorry, I had trouble with that. Could you say it again?"); }
   const call = body.call || {}; const args = body.args || body || {};
   const tool = String(body.tool || args.tool || body.name || "").trim();
-  const toNumber = call.to_number || body.to_number; const fromNumber = call.from_number || body.from_number || "";
+  const outbound = call.direction === "outbound"; // wizard test call: Donna is FROM
+  const toNumber = (outbound ? call.from_number : call.to_number) || body.to_number; const fromNumber = (outbound ? call.to_number : call.from_number) || body.from_number || "";
   let accountId: string | null = body.account_id || null;
   if (!accountId && toNumber) { const { data: asst } = await supabase.from("assistants").select("account_id").eq("twilio_number", toNumber).maybeSingle(); accountId = asst?.account_id || null; }
   if (!accountId) return say("Sorry, I'm having trouble looking that up right now. Let me take your name and number and have the agent call you.");
