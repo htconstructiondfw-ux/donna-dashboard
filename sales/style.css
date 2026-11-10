@@ -45,3 +45,101 @@ th{font-size:11.5px;text-transform:uppercase;letter-spacing:.06em;color:var(--mu
 .dense .card li,.dense .card p{font-size:11.8px;line-height:1.42;margin-bottom:3px}
 .dense .card{padding:11px 13px}
 .dense h4{font-size:13px}
+
+/* ===== v2 visual layer (Nov 2026) ===== */
+html,body{font-family:"Inter",Helvetica,Arial,sans-serif}
+h1,h2,.cover h1,.stat{font-family:"Inter Display","Inter",sans-serif}
+h2{font-size:28px;font-weight:700;letter-spacing:-.02em;line-height:1.12;margin-bottom:10px}
+body.t-general{--accent:#2f6f4f;--accent-2:#e7f2ec;--deep:#123326;--hi:#7fd3a6}
+body.t-salon{--accent:#8a3a5c;--accent-2:#f6e8ee;--deep:#3b1426;--hi:#f2a7c3}
+body.t-contractor{--accent:#c2561a;--accent-2:#fbeee5;--deep:#1d2733;--hi:#ffb27a}
+body.t-pm{--accent:#24538a;--accent-2:#e7eef7;--deep:#0f2440;--hi:#8cc2ff}
+body.t-re{--accent:#0f6e6a;--accent-2:#e3f3f1;--deep:#0b2f33;--hi:#7fe0d6}
+.kicker{color:var(--accent)} h3{color:var(--accent)}
+.page:not(.hero){border-top:8px solid var(--accent)}
+.card{border-radius:14px}
+.card h4{font-size:14.5px}
+.foot{color:#7a8590}
+
+/* cover */
+.hero{padding:0;background:var(--deep);color:#fff;display:block}
+.hero .bg{position:absolute;inset:0;background:radial-gradient(120% 70% at 85% 30%,color-mix(in srgb,var(--accent) 75%,transparent) 0%,transparent 60%),radial-gradient(80% 60% at 0% 100%,color-mix(in srgb,var(--accent) 45%,transparent) 0%,transparent 70%),var(--deep)}
+.hero .dots{position:absolute;inset:0;background-image:radial-gradient(rgba(255,255,255,.07) 1.2px,transparent 1.3px);background-size:18px 18px}
+.hero .hin{position:relative;padding:.55in .65in 0;height:100%}
+.hero .top{display:flex;justify-content:space-between;align-items:center}
+.logo{display:flex;align-items:center;gap:10px;font-weight:700;font-size:20px;letter-spacing:-.01em}
+.logo .mk{width:34px;height:34px;border-radius:10px;background:#fff;color:var(--accent);display:flex;align-items:center;justify-content:center;font-family:"Inter Display";font-weight:800;font-size:19px}
+.logo small{display:block;font-size:10.5px;font-weight:500;opacity:.7;letter-spacing:.06em;text-transform:uppercase}
+.hero .ind{font-size:11px;letter-spacing:.14em;text-transform:uppercase;opacity:.8;text-align:right;max-width:3in;line-height:1.5}
+.hero .row{display:flex;gap:.25in;margin-top:.45in}
+.hero .lcol{flex:1.12}
+.hero .rcol{flex:.88;position:relative;height:5.6in}
+.hero h1{font-size:43px;line-height:1.04;font-weight:800;letter-spacing:-.025em;margin:14px 0 16px}
+.hero h1 em{font-style:normal;color:var(--hi)}
+.hero .sub{font-size:15px;line-height:1.55;opacity:.9;margin:0 0 18px}
+.hero .tag{display:inline-block;background:rgba(255,255,255,.12);border:1px solid rgba(255,255,255,.25);border-radius:999px;padding:5px 12px;font-size:11.5px;line-height:1.4}
+.ticks{list-style:none;margin:0;padding:0}
+.ticks li{color:#fff;font-size:13.5px;margin:0 0 9px;padding-left:28px;position:relative;line-height:1.4}
+.ticks li:before{content:"✓";position:absolute;left:0;top:-1px;width:19px;height:19px;border-radius:50%;background:var(--hi);color:var(--deep);font-weight:800;font-size:11.5px;display:flex;align-items:center;justify-content:center}
+.hero .band{position:absolute;left:.65in;right:.65in;bottom:1.05in;background:#fff;color:var(--ink);border-radius:18px;padding:18px 22px;display:flex;align-items:center;gap:18px;box-shadow:0 20px 50px rgba(0,0,0,.35)}
+.band .ring{flex:none;width:54px;height:54px;border-radius:50%;background:var(--accent);display:flex;align-items:center;justify-content:center}
+.band .ring svg{width:26px;height:26px}
+.band .t{font-size:12.5px;color:var(--muted);line-height:1.45}
+.band .num{font-family:"Inter Display";font-size:30px;font-weight:800;color:var(--ink);letter-spacing:-.01em;line-height:1.1}
+.band .try{margin-left:auto;text-align:right;font-size:12px;color:var(--muted);line-height:1.5}
+.band .try b{display:block;font-size:15px;color:var(--accent)}
+.hero .stats{position:absolute;left:.65in;right:.65in;bottom:.35in;display:flex;justify-content:space-between;font-size:11.5px;opacity:.85}
+.hero .stats b{font-family:"Inter Display";font-size:20px;display:block;color:#fff;letter-spacing:-.01em}
+
+/* phone mockup */
+.phone{position:absolute;width:2.45in;height:5.05in;border-radius:.4in;background:#0b0e13;padding:.085in;box-shadow:0 30px 60px rgba(0,0,0,.45),0 0 0 1.5px rgba(255,255,255,.15) inset}
+.phone .scr{background:#fff;border-radius:.33in;height:100%;overflow:hidden;display:flex;flex-direction:column;color:#111}
+.phone .notch{width:.85in;height:.2in;background:#0b0e13;border-radius:0 0 .14in .14in;margin:0 auto}
+.phone .hd{text-align:center;padding:4px 0 8px;border-bottom:1px solid #eee}
+.phone .av{width:30px;height:30px;border-radius:50%;background:var(--accent);color:#fff;font-weight:700;font-size:13px;display:flex;align-items:center;justify-content:center;margin:0 auto 2px}
+.phone .nm{font-size:10.5px;font-weight:600}
+.phone .th{flex:1;padding:9px 9px;display:flex;flex-direction:column;gap:6px;font-size:10.4px;line-height:1.35}
+.bub{max-width:82%;padding:7px 10px;border-radius:15px}
+.bub.in{background:#ececf0;align-self:flex-start;border-bottom-left-radius:5px}
+.bub.out{background:var(--accent);color:#fff;align-self:flex-end;border-bottom-right-radius:5px}
+.bub .lk{color:#1a63d6;text-decoration:underline}
+.bub.out .lk{color:#fff}
+.ts{font-size:8.5px;color:#999;text-align:center;margin:2px 0}
+.paybtn{display:inline-block;margin-top:5px;background:#111;color:#fff;border-radius:8px;padding:4px 10px;font-weight:600}
+
+/* floating cards */
+.float{position:absolute;background:#fff;color:var(--ink);border-radius:14px;padding:10px 13px;box-shadow:0 16px 40px rgba(0,0,0,.35);font-size:11px;line-height:1.4}
+.float .k{font-size:9px;letter-spacing:.1em;text-transform:uppercase;color:var(--muted);font-weight:700}
+.float b{font-size:12.5px}
+.float .ok{display:inline-flex;width:18px;height:18px;border-radius:50%;background:#1f9d55;color:#fff;align-items:center;justify-content:center;font-size:10px;font-weight:800;margin-right:6px;vertical-align:-4px}
+.float .live{display:inline-block;width:8px;height:8px;border-radius:50%;background:#1f9d55;margin-right:6px;box-shadow:0 0 0 4px rgba(31,157,85,.2)}
+
+/* showcase page */
+.shot{border-radius:12px;overflow:hidden;box-shadow:0 14px 34px rgba(16,24,40,.16);border:1px solid #e3e7ec;background:#fff}
+.shot .bar{height:22px;background:#f1f3f6;display:flex;align-items:center;gap:5px;padding:0 9px;border-bottom:1px solid #e3e7ec}
+.shot .bar i{width:7px;height:7px;border-radius:50%;background:#d0d5dc;display:block}
+.shot .bar span{margin-left:10px;font-size:8.5px;color:#8a94a0;background:#fff;border-radius:5px;padding:2px 10px;flex:1;max-width:3in}
+.shot img{display:block;width:100%}
+.cap{font-size:11.5px;color:var(--muted);margin-top:7px;line-height:1.45}
+.cap b{color:var(--ink)}
+.showcase{position:relative}
+.showcase .phone{position:relative;width:2.2in;height:3.9in}
+.newband{background:var(--accent-2);border-radius:16px;padding:16px 18px;margin-top:16px}
+.newband .kicker{margin-bottom:8px}
+.newband .g{display:grid;grid-template-columns:1fr 1fr 1fr;gap:14px}
+.newband h4{margin:0 0 4px;font-size:13px}
+.newband p{font-size:11.6px;line-height:1.45;margin:0;color:#334}
+.ico{width:28px;height:28px;border-radius:8px;background:var(--accent);color:#fff;display:flex;align-items:center;justify-content:center;margin-bottom:7px}
+.ico svg{width:16px;height:16px}
+.cta{background:linear-gradient(135deg,var(--deep),var(--accent));border-radius:18px}
+.hero p,.hero .sub{color:#fff}
+.shot.clip .imgw{overflow:hidden}
+.newband{padding:12px 16px;margin-top:12px}
+.newband p{font-size:11px;line-height:1.38}
+.newband .ico{width:24px;height:24px;margin-bottom:5px}
+.qcard{margin-top:16px;background:rgba(255,255,255,.08);border:1px solid rgba(255,255,255,.18);border-radius:14px;padding:12px 14px;font-size:12px;line-height:1.5;color:#fff}
+.qcard>div{margin-bottom:6px}
+.qcard .w{display:inline-block;font-size:9.5px;letter-spacing:.1em;text-transform:uppercase;font-weight:700;opacity:.7;margin-right:7px}
+.qcard .w.d{color:var(--hi);opacity:1}
+.qcard .src{font-size:10px;opacity:.6;margin:0}
+.hero .phone{height:5.3in}
