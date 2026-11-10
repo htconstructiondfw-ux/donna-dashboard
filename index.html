@@ -4058,7 +4058,7 @@ async function openProperty(id){
   const ains=p.association_insurance||{};
   box.innerHTML=`
   <div class="card">
-    <div class="card-h"><h2>${esc(p.name)} — details</h2><button class="btn sm" data-pdel="${p.id}">Delete</button></div>
+    <div class="card-h"><h2>${esc(p.name)} — details</h2>${isManager()?`<button class="btn sm" data-pdel="${p.id}">Delete</button>`:''}</div>
     <div class="grid-2">
       <div class="field"><label class="lab">Name</label><input class="inp" id="pd-name" value="${esc(p.name)}"></div>
       <div class="field"><label class="lab">Type</label><select class="inp" id="pd-type">${pmOpts(pmTypesForAccount(),p.property_type)}</select></div>
@@ -4163,7 +4163,7 @@ async function openProperty(id){
   pmBindTypeFields('pd'); pmBindTypeCards(id, p, ctx);
   $("#pd-type").onchange=()=>{ const t=$("#pd-type").value; $("#pd-typefields").innerHTML=pmTypeFields('pd', t, Object.assign({}, p, {property_type:t})); pmBindTypeFields('pd'); };
   $("#pd-save").onclick=()=>savePropertyDetails(id);
-  box.querySelector('[data-pdel]').onclick=()=>deleteProperty(id);
+  { const d=box.querySelector('[data-pdel]'); if(d) d.onclick=()=>deleteProperty(id); }
   { const s=$("#ai-save"); if(s) s.onclick=async()=>{ const m=$("#ai-msg"); m.textContent='Saving…'; const association_insurance={ carrier:$("#ai-carrier").value.trim()||null, policy_number:$("#ai-policy").value.trim()||null, expiration_date:$("#ai-exp").value||null, agent:$("#ai-agent").value.trim()||null, covers:$("#ai-covers").value.trim()||null, certificate_url:$("#ai-url").value.trim()||null }; const { error }=await db.from('properties').update({ association_insurance }).eq('id',id); m.style.color=error?'var(--danger)':'var(--ok)'; m.textContent=error?'Could not save.':'Saved.'; if(!error) await loadProperties(); }; }
   $("#pc-add").onclick=()=>addPropContact(id);
   box.querySelectorAll('[data-pcdel]').forEach(b=>b.onclick=async()=>{ await db.from('property_contacts').delete().eq('id',b.dataset.pcdel); openProperty(id); });
