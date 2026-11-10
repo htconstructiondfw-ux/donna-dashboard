@@ -35,6 +35,7 @@
   .tipcustom{display:flex;gap:8px;margin-top:8px;align-items:center} .tipcustom input{flex:1;padding:10px 12px;border:1.5px solid var(--line);border-radius:12px;font:inherit;font-size:16px}
   .skel{height:14px;border-radius:7px;background:linear-gradient(90deg,#eceeec,#f6f7f6,#eceeec);background-size:200% 100%;animation:sh 1.2s infinite;margin:10px 0}
   @keyframes sh{to{background-position:-200% 0}}
+.savecard{display:flex;gap:8px;align-items:flex-start;font-size:13px;color:var(--muted);margin-top:10px;cursor:pointer}.savecard input{margin-top:3px}
 </style>
 </head>
 <body>
@@ -65,6 +66,7 @@ async function load(attempt=0){
   render(inv);
 }
 
+let saveCard = false;
 let tipPick = null; // cents chosen on this page (tickets only); null = use the invoice's saved tip
 function render(inv){
   const b = inv.business || {}; const paid = !!inv.paid_at; const isVoid = inv.status === "void";
@@ -95,18 +97,19 @@ function render(inv){
       ${inv.notes?`<div class="notes">${esc(inv.notes)}</div>`:""}
       ${paid ? `<div class="done">Paid${inv.paid_method&&inv.paid_method!=="card"?" ("+esc(inv.paid_method)+")":""}${inv.paid_note&&/card processing fee/.test(inv.paid_note)?` · ${esc(inv.paid_note.replace(/^.*incl\. /,"incl. "))}`:""} on ${new Date(inv.paid_at).toLocaleDateString("en-US",{month:"long",day:"numeric",year:"numeric"})}. Thank you!</div>`
         : isVoid ? `<div class="err">This invoice was cancelled by ${esc(b.name||"the business")}.</div>`
-        : inv.can_pay_online ? `${feeNow>0?`<div class="alt" style="margin-top:14px;text-align:left"><b>Cash or check:</b> ${money(due)} &nbsp;·&nbsp; <b>By card:</b> ${money(due+feeNow)} <span style="color:#999">(includes a ${inv.card_fee_pct}% card processing fee of ${money(feeNow)})</span></div>`:""}<button class="pay" id="payBtn">Pay ${money(due+feeNow)} by card</button><div class="alt">Secure card payment through Stripe. Your payment goes directly to ${esc(b.name||"the business")}.</div><div id="payErr"></div>`
+        : inv.can_pay_online ? `${feeNow>0?`<div class="alt" style="margin-top:14px;text-align:left"><b>Cash or check:</b> ${money(due)} &nbsp;·&nbsp; <b>By card:</b> ${money(due+feeNow)} <span style="color:#999">(includes a ${inv.card_fee_pct}% card processing fee of ${money(feeNow)})</span></div>`:""}<button class="pay" id="payBtn">Pay ${money(due+feeNow)} by card</button>${isTicket&&inv.has_contact?`<label class="savecard"><input type="checkbox" id="saveCard" ${saveCard?"checked":""}> Keep this card on file with ${esc(b.name||"the salon")} so next time is one tap</label>`:""}<div class="alt">Secure card payment through Stripe. Your payment goes directly to ${esc(b.name||"the business")}.</div><div id="payErr"></div>`
         : (justPaid ? `<div class="alt">Confirming your payment…</div>` : `<div class="alt">Pay ${esc(b.name||"the business")} directly${b.phone?` · ${esc(b.phone)}`:""}.</div>`)}
     </div>
     <div class="foot">Sent by ${esc(b.name||"the business")} with Donna.<br>Payments are processed by ${esc(b.name||"the business")}'s own Stripe account; Donna never holds your money.</div>`;
   document.querySelectorAll("[data-tip]").forEach(b=>b.onclick=()=>{ tipPick=Number(b.dataset.tip); render(inv); });
+  const scb=document.getElementById("saveCard"); if(scb) scb.onchange=()=>{ saveCard=scb.checked; };
   const tn=document.getElementById("tipNone"); if(tn) tn.onclick=()=>{ tipPick=0; render(inv); };
   const tc=document.getElementById("tipCustom"); if(tc) tc.onchange=()=>{ const v=Math.round(Number(String(tc.value).replace(/[^0-9.]/g,""))*100); if(isFinite(v)&&v>=0){ tipPick=v; render(inv); } };
   const btn = document.getElementById("payBtn");
   if(btn) btn.onclick = async () => {
     btn.disabled = true; btn.textContent = "Opening secure checkout…";
     try{
-      const body = {action:"checkout",token}; if(isTicket && inv.tips_enabled) body.tip_cents = tipNow;
+      const body = {action:"checkout",token}; if(isTicket && inv.tips_enabled) body.tip_cents = tipNow; const sc=document.getElementById("saveCard"); if(sc&&sc.checked) body.save_card = true;
       const r = await fetch(`${SB}/functions/v1/payments`,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(body)});
       const j = await r.json();
       if(j.ok && j.url){ location.href = j.url; return; }

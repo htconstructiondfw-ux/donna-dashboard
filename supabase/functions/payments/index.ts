@@ -84,6 +84,7 @@ async function logActivity(accountId: string, actor: string | null, action: stri
 async function canTouchInvoice(caller: any, inv: any): Promise<boolean> {
   if (isAdmin(caller.role)) return true;
   if (inv.created_by && inv.created_by === caller.userId) return true;
+  if (inv.served_by && inv.served_by === caller.userId) return true;
   if (inv.job_id) { const { data: j } = await supabase.from("jobs").select("assigned_user_id").eq("id", inv.job_id).maybeSingle(); if (j?.assigned_user_id === caller.userId) return true; }
   return false;
 }
@@ -540,7 +541,7 @@ Deno.serve(async (req: Request) => {
     if (!isAdmin(caller.role) || body.mine) {
       const { data: myJobs } = await supabase.from("jobs").select("id").eq("account_id", acct.id).eq("assigned_user_id", caller.userId);
       const ids = (myJobs || []).map((j: any) => j.id);
-      q = ids.length ? q.or(`created_by.eq.${caller.userId},job_id.in.(${ids.join(",")})`) : q.eq("created_by", caller.userId);
+      q = q.or(`created_by.eq.${caller.userId},served_by.eq.${caller.userId}${ids.length ? `,job_id.in.(${ids.join(",")})` : ""}`);
     }
     const { data } = await q; return json({ ok: true, invoices: (data || []).map((i: any) => ({ ...i, pay_url: payUrl(i.pay_token) })) });
   }
