@@ -8,6 +8,7 @@ import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 // so the number is owned in Twilio and usable for texting under the owner's A2P.
 // v15: a new number switches texting on by default (confirmations + reminders) unless the
 // owner has already made a choice under Notifications.
+// v21: area code fallback (overlays, metro neighbours, near the owner's phone).
 // v20: trial accounts may provision (invite-gated signups; wizard needs a number on day one).
 // v19: SIP trunk credential comes from the same place as admin-api / sip-rotate (app_secrets
 // twilio_sip_username/password, falling back to the TWILIO_SIP_* edge secrets) instead of the
@@ -35,19 +36,46 @@ async function sipCredential(): Promise<{ user: string; pass: string }> {
   return { user: Deno.env.get("TWILIO_SIP_USERNAME") || "", pass: Deno.env.get("TWILIO_SIP_PASSWORD") || "" };
 }
 
-async function twilioBuy(areaCode: string, trunkSid: string, nickname: string) {
-  const q = new URLSearchParams({ VoiceEnabled: "true", SmsEnabled: "true", PageSize: "1" });
-  if (areaCode) q.set("AreaCode", areaCode);
+// v21: area codes run out (Dallas 214 often has none). Try the same area's overlay codes, then the metro's
+// neighbours, then numbers near the owner's own phone, before giving up. The caller is told which code it got.
+const OVERLAYS: string[][] = [
+  ["214", "469", "972", "945", "817", "682"], ["817", "682", "214", "469", "972", "945"],
+  ["713", "281", "832", "346"], ["512", "737"], ["210", "726"], ["903", "430"], ["915"], ["806"], ["956"],
+  ["213", "323", "310", "424", "818", "747"], ["714", "657", "949"], ["909", "840"], ["415", "628", "510", "341"], ["408", "669"], ["619", "858"], ["916", "279"],
+  ["212", "646", "332", "917", "718", "347", "929"], ["516", "631", "934"],
+  ["305", "786", "645", "954", "754"], ["407", "689", "321"], ["813", "656", "727"], ["561", "728"],
+  ["312", "872", "773", "847", "224", "630", "331", "708", "464"],
+  ["404", "470", "678", "943", "770"], ["602", "480", "623"], ["702", "725"], ["303", "720", "983"],
+  ["206", "564", "425", "253"], ["503", "971"], ["615", "629"], ["704", "980"], ["919", "984"],
+  ["617", "857", "781", "339"], ["215", "267", "445"], ["202", "771"], ["703", "571"], ["301", "240"],
+];
+function areaChoices(code: string): string[] {
+  const out: string[] = [code];
+  for (const g of OVERLAYS) if (g.includes(code)) for (const c of g) if (!out.includes(c)) out.push(c);
+  return out;
+}
+async function searchOne(params: Record<string, string>): Promise<string | null> {
+  const q = new URLSearchParams({ VoiceEnabled: "true", SmsEnabled: "true", PageSize: "1", ...params });
   const av = await fetch(`https://api.twilio.com/2010-04-01/Accounts/${T_SID}/AvailablePhoneNumbers/US/Local.json?${q}`, { headers: { Authorization: tBasic() } });
   const avj: any = await av.json().catch(() => ({}));
-  const cand = (avj?.available_phone_numbers || [])[0]?.phone_number;
-  if (!cand) return { ok: false as const, error: areaCode ? "No numbers are available in that area code. Try a nearby one." : "No numbers available right now." };
+  return (avj?.available_phone_numbers || [])[0]?.phone_number || null;
+}
+async function findNumber(areaCode: string, near: string): Promise<{ number: string | null; area: string }> {
+  if (!areaCode) return { number: await searchOne({}), area: "" };
+  for (const c of areaChoices(areaCode)) { const n = await searchOne({ AreaCode: c }); if (n) return { number: n, area: c }; }
+  if (/^\+1\d{10}$/.test(near)) { const n = await searchOne({ NearNumber: near, Distance: "60" }); if (n) return { number: n, area: n.slice(2, 5) }; }
+  return { number: null, area: "" };
+}
+async function twilioBuy(areaCode: string, trunkSid: string, nickname: string, near = "") {
+  const found = await findNumber(areaCode, near);
+  const cand = found.number;
+  if (!cand) return { ok: false as const, error: areaCode ? `No numbers are available in ${areaCode} or nearby area codes right now. Try another area code.` : "No numbers available right now." };
   const b: Record<string, string> = { PhoneNumber: cand, FriendlyName: nickname, SmsUrl: `${SUPABASE_URL}/functions/v1/msg-inbound`, SmsMethod: "POST" };
   if (trunkSid) b.TrunkSid = trunkSid;
   const buy = await fetch(`https://api.twilio.com/2010-04-01/Accounts/${T_SID}/IncomingPhoneNumbers.json`, { method: "POST", headers: { Authorization: tBasic(), "Content-Type": "application/x-www-form-urlencoded" }, body: form(b) });
   const buyj: any = await buy.json().catch(() => ({}));
   if (!buy.ok || !buyj?.phone_number) return { ok: false as const, error: buyj?.message || `Couldn't purchase a number (Twilio ${buy.status}).` };
-  return { ok: true as const, number: buyj.phone_number, sid: buyj.sid, pretty: buyj.friendly_name || buyj.phone_number };
+  return { ok: true as const, number: buyj.phone_number, sid: buyj.sid, pretty: buyj.friendly_name || buyj.phone_number, area: found.area };
 }
 async function twilioReleaseBySid(sid: string) { try { await fetch(`https://api.twilio.com/2010-04-01/Accounts/${T_SID}/IncomingPhoneNumbers/${sid}.json`, { method: "DELETE", headers: { Authorization: tBasic() } }); } catch (_e) { /* best effort */ } }
 async function twilioReleaseByNumber(num: string) { try { const r = await fetch(`https://api.twilio.com/2010-04-01/Accounts/${T_SID}/IncomingPhoneNumbers.json?PhoneNumber=${encodeURIComponent(num)}`, { headers: { Authorization: tBasic() } }); const j: any = await r.json().catch(() => ({})); const sid = (j?.incoming_phone_numbers || [])[0]?.sid; if (sid) await twilioReleaseBySid(sid); } catch (_e) { /* best effort */ } }
@@ -81,6 +109,8 @@ Deno.serve(async (req: Request) => {
   let body: any = {}; try { body = await req.json(); } catch { /* area code optional */ }
   const replace = body?.replace === true;
   const rawArea = String(body?.area_code ?? "").replace(/\D/g, "");
+  const nearDigits = String(body?.near ?? "").replace(/\D/g, "").slice(-10);
+  const near = nearDigits.length === 10 ? "+1" + nearDigits : "";
   if (rawArea && rawArea.length !== 3) return json({ ok: false, error: "Enter a 3-digit US area code." });
 
   const { data: asst } = await admin.from("assistants").select("id, twilio_number").eq("account_id", accountId).order("created_at").limit(1).maybeSingle();
@@ -94,7 +124,7 @@ Deno.serve(async (req: Request) => {
   if (!trunkSid || !term || !user2 || !pass) return json({ ok: false, error: "Phone provisioning isn't fully configured yet. Please reach out and we'll set up your number." });
   const nickname = acct.name || "Donna client";
 
-  const bought = await twilioBuy(rawArea, trunkSid, nickname);
+  const bought = await twilioBuy(rawArea, trunkSid, nickname, near);
   if (!bought.ok) return json({ ok: false, error: bought.error });
 
   const imp = await retellImport(bought.number, nickname, term, user2, pass);
@@ -116,5 +146,6 @@ Deno.serve(async (req: Request) => {
     }
   } catch (_e) { /* non-fatal */ }
 
-  return json({ ok: true, phone_number: bought.number, phone_number_pretty: bought.pretty, replaced: !!(existing && replace) });
+  const note = rawArea && bought.area && bought.area !== rawArea ? `${rawArea} had no numbers left, so this is a ${bought.area} number in the same area.` : "";
+  return json({ ok: true, phone_number: bought.number, phone_number_pretty: bought.pretty, replaced: !!(existing && replace), area_used: bought.area, requested_area: rawArea, note });
 });
