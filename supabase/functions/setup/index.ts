@@ -1,7 +1,7 @@
 import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 
-// Donna — setup (v1). The "Donna proposes, you confirm" onboarding engine, shared by every vertical.
+// Donna — setup (v5). v5: website hours parsed into per-day schedule; knowledge embeds via sweep. The "Donna proposes, you confirm" onboarding engine, shared by every vertical.
 //
 //   lookup  {query, website?, hint?}   -> find the business (Google Places) + read its website -> a PROPOSAL the wizard shows to confirm
 //   apply   {proposal}                 -> write the confirmed proposal (account, assistant, hours, services, knowledge) in one go
@@ -119,8 +119,8 @@ async function llmJson(system: string, user: string, maxTokens = 3000): Promise<
   try { return JSON.parse(text.slice(a, b + 1)); } catch { return null; }
 }
 const EXTRACT_SYSTEM = `You read a small business's website text and pull out ONLY facts that are actually stated, for an AI phone receptionist's setup. Never invent. Leave fields empty when the site does not say.
-Return ONLY JSON: {"industry":"hair_salon|nail_salon|barbershop|spa|lash_brow|contractor|property_management|real_estate|restaurant|professional|other","trades":["hvac","plumbing","electrical","landscaping","lawn","pool","handyman","roofing","painting","remodeling","flooring","fencing","concrete","garage_door","appliance","pest","pressure_washing","windows","gutters","tree"],"tagline":"one sentence describing the business in its own words","services":[{"name":"","duration_min":30,"price":"as written, e.g. $45 or from $120, or empty","category":""}],"team":[{"name":"","role":""}],"service_area":"cities/areas served, if stated","hours_text":"hours if stated, verbatim-ish","faq":[{"q":"a question a caller would ask","a":"the answer, from the site"}],"policies":"cancellation/deposit/payment policies if stated","languages":["en","es"]}
-Rules: services max 40, keep the site's names and prices; duration_min only if stated or obvious (haircut 30-45, color 90-120, estimate visit 60) else 30. faq max 12, short answers. team only real people with names. trades only for contractors.`;
+Return ONLY JSON: {"name":"the business name as the site states it","address":"main street address if stated","city":"","state":"two-letter US state if stated","phone":"main phone if stated","industry":"hair_salon|nail_salon|barbershop|spa|lash_brow|contractor|property_management|real_estate|restaurant|professional|other","trades":["hvac","plumbing","electrical","landscaping","lawn","pool","handyman","roofing","painting","remodeling","flooring","fencing","concrete","garage_door","appliance","pest","pressure_washing","windows","gutters","tree"],"tagline":"one sentence describing the business in its own words","services":[{"name":"","duration_min":30,"price":"as written, e.g. $45 or from $120, or empty","category":""}],"team":[{"name":"","role":""}],"service_area":"cities/areas served, if stated","hours_text":"hours if stated, verbatim-ish","hours":[{"day":0,"open":"09:00","close":"17:00"}],"faq":[{"q":"a question a caller would ask","a":"the answer, from the site"}],"policies":"cancellation/deposit/payment policies if stated","languages":["en","es"]}
+Rules: hours is one entry per open day (day 0=Sunday..6=Saturday, 24h HH:MM); omit days that are closed; empty array if the site does not state hours. services max 40, keep the site's names and prices; duration_min only if stated or obvious (haircut 30-45, color 90-120, estimate visit 60) else 30. faq max 12, short answers. team only real people with names. trades only for contractors.`;
 
 // ---------------------------------------------------------------- proposal helpers
 function dayHoursToWizard(hours: Record<number, { open: string; close: string }>) {
@@ -140,12 +140,15 @@ async function buildProposal(acctId: string, query: string, website: string, hin
   const trades: string[] = Array.from(new Set([...(Array.isArray(ext?.trades) ? ext.trades : []), ...(best?.trade_guess ? [best.trade_guess] : [])]));
   const services = (Array.isArray(ext?.services) ? ext.services : []).filter((s: any) => s && s.name).slice(0, 40).map((s: any) => ({ name: String(s.name).slice(0, 80), duration_min: Math.max(10, Math.min(480, Number(s.duration_min) || 30)), price: String(s.price || "").slice(0, 40), category: String(s.category || "").slice(0, 40), keep: true }));
   const team = (Array.isArray(ext?.team) ? ext.team : []).filter((t: any) => t && t.name).slice(0, 25).map((t: any) => ({ name: String(t.name).slice(0, 60), role: String(t.role || "").slice(0, 60), keep: true }));
+  // Hours the website states (used when Google gave none).
+  const webHours: Record<number, { open: string; close: string }> = {};
+  for (const h of (Array.isArray(ext?.hours) ? ext.hours : [])) { const d = Number(h?.day); const o = String(h?.open || "").slice(0, 5), c = String(h?.close || "").slice(0, 5); if (d >= 0 && d <= 6 && /^\d{2}:\d{2}$/.test(o) && /^\d{2}:\d{2}$/.test(c) && c > o) webHours[d] = { open: o, close: c }; }
   const faq = (Array.isArray(ext?.faq) ? ext.faq : []).filter((f: any) => f && f.q && f.a).slice(0, 12).map((f: any) => ({ q: String(f.q).slice(0, 200), a: String(f.a).slice(0, 600), keep: true }));
   return {
     found: !!best, candidates: candidates.slice(0, 4),
-    business: best ? { name: best.name, phone: best.phone, address: best.address, city: best.city, state: best.state, zip: best.zip, website: site, maps_url: best.maps_url, place_id: best.place_id, rating: best.rating, reviews: best.reviews, tz: best.tz } : { name: query, phone: "", address: "", city: "", state: "", zip: "", website: site, maps_url: "", place_id: "", rating: null, reviews: 0, tz: "America/Chicago" },
-    industry, trades, hours: best ? dayHoursToWizard(best.hours) : { days: [false, true, true, true, true, true, false], open: "09:00", close: "17:00", per_day: {} },
-    hours_source: best && Object.keys(best.hours).length ? "google" : (ext?.hours_text ? "website" : "default"), hours_text: ext?.hours_text || "",
+    business: best ? { name: best.name, phone: best.phone, address: best.address, city: best.city, state: best.state, zip: best.zip, website: site, maps_url: best.maps_url, place_id: best.place_id, rating: best.rating, reviews: best.reviews, tz: best.tz } : { name: String(ext?.name || "").trim().slice(0, 120) || query, phone: normPhone(String(ext?.phone || "")), address: String(ext?.address || "").slice(0, 200), city: String(ext?.city || "").slice(0, 80), state: String(ext?.state || "").toUpperCase().slice(0, 2), zip: "", website: site, maps_url: "", place_id: "", rating: null, reviews: 0, tz: tzFor(String(ext?.state || "").toUpperCase().slice(0, 2), null) },
+    industry, trades, hours: best && Object.keys(best.hours).length ? dayHoursToWizard(best.hours) : (Object.keys(webHours).length ? dayHoursToWizard(webHours) : { days: [false, true, true, true, true, true, false], open: "09:00", close: "17:00", per_day: {} }),
+    hours_source: best && Object.keys(best.hours).length ? "google" : (Object.keys(webHours).length ? "website" : "default"), hours_text: ext?.hours_text || "",
     tagline: String(ext?.tagline || "").slice(0, 240), service_area: String(ext?.service_area || "").slice(0, 240), policies: String(ext?.policies || "").slice(0, 600), languages: Array.isArray(ext?.languages) && ext.languages.length ? ext.languages : ["en"],
     services, team, faq,
     sources: { google: !!best, website: !!web, pages: web?.pages || [] },
