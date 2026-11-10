@@ -1044,6 +1044,34 @@ async function saveDispatch(id){
   else if(m){ m.style.color='var(--danger)'; m.textContent='Error'; }
 }
 // People on the team who can own listings / properties / jobs (active, any role). Loaded lazily for assignment selects.
+// Audit trail (activity_log; RLS lets owners/managers read their account's rows).
+async function loadActivity(limit){
+  const el=$("#act-list"); if(!el) return;
+  const money=c=>'$'+(Math.round(c||0)/100).toLocaleString('en-US',{minimumFractionDigits:2,maximumFractionDigits:2});
+  try{
+    const { data, error }=await db.from('activity_log').select('*').eq('account_id',state.account.id).order('created_at',{ascending:false}).limit(limit||40);
+    if(error) throw error; const rows=data||[];
+    if(!rows.length){ el.innerHTML='<p style="font-size:13px;color:var(--muted)">Nothing yet. Voids, price changes, approvals and team changes will show up here with who did them.</p>'; return; }
+    const verb=r=>{ const d=r.details||{}; const L=r.label?`<b>${esc(r.label)}</b>`:'';
+      switch(r.action){
+        case 'invoice.void': return `voided invoice ${L}${d.total_cents?` (${money(d.total_cents)})`:''}`;
+        case 'invoice.reprice': return `changed invoice ${L} from ${money(d.from_cents)} to ${money(d.to_cents)}`;
+        case 'invoice.paid': return `marked invoice ${L} paid${d.method?` (${esc(d.method)})`:''}${d.total_cents?` · ${money(d.total_cents)}`:''}`;
+        case 'estimate.void': return `voided estimate ${L}`;
+        case 'estimate.approve': return `approved estimate ${L}${d.total_cents?` (${money(d.total_cents)})`:''} to go out`;
+        case 'estimate.reprice': return `changed estimate ${L} from ${money(d.from_cents)} to ${money(d.to_cents)}`;
+        case 'user.deactivate': return `deactivated ${L}`;
+        case 'user.reactivate': return `reactivated ${L}`;
+        case 'user.create': return `added ${L}${d.role?` as ${esc(d.role==='admin'?'manager':providerLabel())}`:''}${d.invited?' (invited by email)':''}`;
+        case 'user.role': return `changed ${L}'s role from ${esc(d.from||'')} to ${esc(d.to||'')}`;
+        case 'user.bookable_on': return `made ${L} bookable`;
+        case 'user.bookable_off': return `took ${L} off the booking list`;
+        default: if(/\.reassign$/.test(r.action)) return `moved ${r.entity} ${L} ${d.from?`from ${esc(d.from)} `:''}to ${esc(d.to||'unassigned')}`; return `${esc(r.action)} ${L}`;
+      } };
+    el.innerHTML=`<div style="display:flex;flex-direction:column">${rows.map(r=>`<div style="display:flex;gap:10px;padding:8px 0;border-top:1px solid var(--line-2);font-size:13px"><div style="min-width:150px;color:var(--muted);font-size:12px">${esc(new Date(r.created_at).toLocaleString('en-US',{month:'short',day:'numeric',hour:'numeric',minute:'2-digit'}))}</div><div><b>${esc(r.actor_name||(r.actor_user_id?'Someone':aName()))}</b> ${verb(r)}</div></div>`).join('')}</div>`;
+    const more=$("#act-more"); if(more) more.style.display=(rows.length>=(limit||40)&&(limit||40)<200)?'':'none';
+  }catch(e){ el.innerHTML='<p style="font-size:13px;color:var(--danger)">Could not load.</p>'; }
+}
 async function ensureTeam(){ if(!(state.staff&&state.staff.length)){ try{ await loadStaff(); }catch(_e){} } return (state.staff||[]).filter(u=>u.is_active!==false); }
 function teamOpts(sel, blank){ return `<option value="">${esc(blank||'—')}</option>`+(state.staff||[]).filter(u=>u.is_active!==false||u.id===sel).map(u=>`<option value="${u.id}" ${sel===u.id?'selected':''}>${esc(u.full_name||u.email)}${u.role==='owner'?' (owner)':''}</option>`).join(''); }
 function teamName(id){ if(!id) return ''; const u=(state.staff||[]).find(x=>x.id===id); return u?(u.full_name||u.email):''; }
@@ -1107,7 +1135,12 @@ function pageStaff(){
       <div id="st-msg" style="font-size:12.5px;color:var(--muted);min-height:16px;margin:4px 0"></div>
       <div><button class="btn primary" id="st-add">+ Add to the team</button></div>
     </div>
+    <div class="card"><div class="card-h"><h2>Activity</h2><button class="btn sm" id="act-more" style="display:none">Show more</button></div>
+      <p style="font-size:12.5px;color:var(--muted);margin:-4px 0 10px">Who voided, repriced, marked paid, approved, reassigned or deactivated what. Only owners and managers see this.</p>
+      <div id="act-list"><p style="font-size:13px;color:var(--muted)">Loading…</p></div></div>
   </div>`;
+  loadActivity(40);
+  $("#act-more").onclick=()=>loadActivity(200);
   $("#st-refresh").onclick=async()=>{ const b=$("#st-refresh"); b.disabled=true; b.textContent="…"; await loadStaff(); pageStaff(); };
   $("#st-gen").onclick=()=>{ $("#st-pass").value=genPassword(); };
   $("#st-how").onchange=()=>{ $("#st-pass-wrap").style.display=$("#st-how").value==='password'?'block':'none'; };
@@ -2262,6 +2295,9 @@ async function pageJobs(){
       </div>
     </div>
     <div class="card"><div class="card-h"><h2>Today</h2><button class="btn sm" id="jb-refresh">Refresh</button></div><div id="jb-today"><p style="font-size:13px;color:var(--muted)">Loading…</p></div></div>
+    ${isManager()&&teamAllowed()?`<div class="card"><div class="card-h"><h2>By ${esc(providerLabel())}</h2><select class="inp" id="jb-tech-range" style="min-width:150px"><option value="30">Last 30 days</option><option value="month">This month</option><option value="90">Last 90 days</option><option value="ytd">This year</option></select></div>
+      <p style="font-size:12.5px;color:var(--muted);margin:-4px 0 10px">What each person billed and collected. Every dollar lands in the company's account; this is just who did the work.</p>
+      <div id="jb-tech"><p style="font-size:13px;color:var(--muted)">Loading…</p></div></div>`:''}
     <div class="card"><div class="card-h"><h2>Estimates</h2><div style="display:flex;gap:8px"><select class="inp" id="jb-est-filter" style="min-width:150px"><option value="open">Open</option><option value="review">Waiting on my OK</option><option value="approved">Approved, not scheduled</option><option value="all">All</option></select></div></div>
       <p style="font-size:12.5px;color:var(--muted);margin:-4px 0 10px">Your techs write every number (text QUOTE or tap Estimate in the app). ${esc(aName())} sends it, nudges after 3 days, and books the job at exactly the approved total when the customer taps Approve.</p>
       <div id="jb-est"><p style="font-size:13px;color:var(--muted)">Loading…</p></div></div>
@@ -2323,9 +2359,15 @@ async function pageJobs(){
       el.querySelectorAll('[data-paid]').forEach(b=>b.onclick=async()=>{ const how=prompt('How did they pay? cash / check / card','cash'); if(how===null) return; await db.functions.invoke('payments',{ body:{ action:'invoice_mark_paid', id:b.dataset.paid, method:['cash','check','card'].includes(how.trim().toLowerCase())?how.trim().toLowerCase():'other' } }); loadInv(); });
       el.querySelectorAll('[data-void]').forEach(b=>b.onclick=async()=>{ if(!confirm('Void this invoice? The customer link will show it as cancelled.')) return; await db.functions.invoke('payments',{ body:{ action:'invoice_void', id:b.dataset.void } }); loadInv(); });
     }catch(e){ el.innerHTML='<p style="font-size:13px;color:var(--danger)">Could not load.</p>'; } };
+  const loadTech=async()=>{ const el=$("#jb-tech"); if(!el) return; const r=$("#jb-tech-range").value; const now=new Date(); let from; if(r==='month') from=new Date(now.getFullYear(),now.getMonth(),1); else if(r==='ytd') from=new Date(now.getFullYear(),0,1); else from=new Date(now.getTime()-Number(r)*864e5);
+    try{ const { data, error }=await db.rpc('donna_tech_earnings',{ p_from:from.toISOString(), p_to:new Date(now.getTime()+864e5).toISOString() }); if(error) throw error; const rows=(data||[]).filter(t=>t.is_active!==false||t.invoices>0); if(!rows.length){ el.innerHTML='<p style="font-size:13px;color:var(--muted)">Nothing billed in this period.</p>'; return; }
+      const tot=k=>rows.reduce((s,t)=>s+Number(t[k]||0),0);
+      el.innerHTML=`<table class="tbl" style="width:100%"><thead><tr><th>Who</th><th style="text-align:right">Jobs done</th><th style="text-align:right">Invoices</th><th style="text-align:right">Billed</th><th style="text-align:right">Collected</th><th style="text-align:right">Still open</th></tr></thead><tbody>${rows.map(t=>`<tr style="${t.is_active===false?'opacity:.6':''}"><td><b>${esc(t.full_name||'')}</b> <span style="font-size:12px;color:var(--muted)">${t.role==='owner'?'Owner':t.role==='admin'?'Manager':''}${t.is_active===false?' · deactivated':''}</span></td><td style="text-align:right">${t.jobs_done||0}</td><td style="text-align:right">${t.invoices||0}</td><td style="text-align:right">${money(t.billed_cents)}</td><td style="text-align:right;font-weight:700">${money(t.paid_cents)}</td><td style="text-align:right;${Number(t.open_cents)>0?'color:var(--warn,#b45309)':''}">${money(t.open_cents)}</td></tr>`).join('')}</tbody><tfoot><tr style="border-top:2px solid var(--line)"><td><b>Company total</b></td><td style="text-align:right">${tot('jobs_done')}</td><td style="text-align:right">${tot('invoices')}</td><td style="text-align:right">${money(tot('billed_cents'))}</td><td style="text-align:right;font-weight:700">${money(tot('paid_cents'))}</td><td style="text-align:right">${money(tot('open_cents'))}</td></tr></tfoot></table>`;
+    }catch(e){ el.innerHTML='<p style="font-size:13px;color:var(--danger)">Could not load.</p>'; } };
+  if($("#jb-tech-range")) $("#jb-tech-range").onchange=loadTech;
   $("#jb-refresh").onclick=loadToday; $("#jb-filter").onchange=loadInv;
   $("#jb-export").onclick=async()=>{ const b=$("#jb-export"); b.disabled=true; try{ const { data }=await db.functions.invoke('payments',{ body:{ action:'export_csv' } }); const dl=(name,text)=>{ const a=document.createElement('a'); a.href=URL.createObjectURL(new Blob([text],{type:'text/csv'})); a.download=name; document.body.appendChild(a); a.click(); a.remove(); }; const stamp=new Date().toISOString().slice(0,10); dl(`invoices-${stamp}.csv`,data.invoices_csv); setTimeout(()=>dl(`payments-${stamp}.csv`,data.payments_csv),400); }catch(e){ alert('Export failed.'); } b.disabled=false; };
-  loadToday(); loadInv(); loadEst(); loadRoutes();
+  loadToday(); loadInv(); loadEst(); loadRoutes(); loadTech();
 }
 
 // ---------- Getting paid (shared payments module; Stripe Connect, the business's OWN account) ----------
@@ -3246,6 +3288,8 @@ async function saveNotifyCopies(){
 }
 function pageSettings(){
   const ac=state.account;
+  // On-call ladder and lead-routing pickers need the roster; fetch it once and repaint.
+  if(isManager()&&teamAllowed()&&!(state.staff&&state.staff.length)&&!state._staffTried){ state._staffTried=true; loadStaff().then(()=>{ if(state.view==='settings') pageSettings(); }).catch(()=>{}); }
   const xfer=(state.assistant&&state.assistant.routing&&state.assistant.routing.transfer)||{};
   const isPro=((ac.plan||'')==='pro');
   $("#page").innerHTML=`
@@ -3917,6 +3961,7 @@ function reSettingsCardHTML(){
       <div class="field" style="grid-column:1/-1"><label class="lab">Showing agreement text <span class="sub">what buyers/renters sign before ${esc(aName())} books a showing; placeholders fill in automatically</span></label><textarea class="inp" id="re-s-show" rows="7" style="font-family:ui-monospace,monospace;font-size:12.5px">${esc(s.showing_agreement_text||RE_DEFAULT_SHOWING_TEXT)}</textarea><div style="font-size:12px;color:var(--muted);margin-top:4px">Placeholders: {{signer_name}} {{agent_name}} {{company}} {{broker_name}} {{property_address}} {{showing_date}}. <button class="btn sm" id="re-s-reset" style="margin-left:6px">Reset to default</button></div></div>
       <div class="field"><label class="lab">Require a signed showing agreement before booking a showing?</label><select class="inp" id="re-s-require"><option value="1" ${s.require_showing_agreement===false?'':'selected'}>Yes — ${esc(aName())} holds the time, texts it, and confirms once it's signed</option><option value="0" ${s.require_showing_agreement===false?'selected':''}>No — confirm right away, send it for the record</option></select><div style="font-size:12px;color:var(--muted);margin-top:4px">Either way you're texted when it's signed (or declined). Callers who signed one in the last 6 months aren't asked again.</div></div>
       <div class="field"><label class="lab">Showing length</label><select class="inp" id="re-s-showlen">${[[20,'20 minutes'],[30,'30 minutes'],[45,'45 minutes'],[60,'1 hour']].map(x=>`<option value="${x[0]}" ${Number(s.showing_minutes||30)===x[0]?'selected':''}>${x[1]}</option>`).join('')}</select></div>
+      ${teamAllowed()?(()=>{ const agents=(state.staff||[]).filter(u=>u.is_active!==false&&u.role!=='owner'); const cur=s.unassigned_leads||'broker'; return `<div class="field" style="grid-column:1/-1"><label class="lab">Leads with no listing go to <span class="sub">a listing's lead always goes to that listing's agent</span></label><select class="inp" id="re-s-unassigned"><option value="broker" ${cur==='broker'?'selected':''}>Me (the broker / owner)</option><option value="round_robin" ${cur==='round_robin'?'selected':''}>Round robin across my agents</option>${agents.map(u=>`<option value="${u.id}" ${cur===u.id?'selected':''}>Always ${esc(u.full_name||u.email)}</option>`).join('')}</select><div style="font-size:12px;color:var(--muted);margin-top:4px">Buyers, sellers, renters and landlords who call about nothing specific. Round robin gives each new lead to whichever agent has waited longest; hot-lead texts follow the assignment.</div></div>`; })():''}
     </div>
     <div id="re-s-msg" style="font-size:12.5px;color:var(--muted);margin-top:6px"></div></div>`;
 }
@@ -3926,7 +3971,7 @@ function reBindSettingsCard(){
   sv.onclick=async()=>{ sv.disabled=true; const msg=$("#re-s-msg");
     const settings=Object.assign({}, state.account.settings||{}); const cur=settings.real_estate||{};
     const lines=[...document.querySelectorAll('[data-re-line]:checked')].map(c=>c.dataset.reLine); if(!lines.length) lines.push('residential');
-    settings.real_estate=Object.assign({}, cur, { lines, manages_rentals:$("#re-s-manage").checked, license_no:$("#re-s-lic").value.trim(), broker_name:$("#re-s-broker").value.trim(), iabs_url:$("#re-s-iabs").value.trim(), application_fee_cents:reCents($("#re-s-fee").value)||0, lender_partner:{ name:$("#re-s-lname").value.trim(), phone:$("#re-s-lphone").value.trim() }, showing_agreement_text:$("#re-s-show").value, require_showing_agreement:$("#re-s-require").value==='1', showing_minutes:Number($("#re-s-showlen").value)||30 });
+    settings.real_estate=Object.assign({}, cur, { lines, manages_rentals:$("#re-s-manage").checked, license_no:$("#re-s-lic").value.trim(), broker_name:$("#re-s-broker").value.trim(), iabs_url:$("#re-s-iabs").value.trim(), application_fee_cents:reCents($("#re-s-fee").value)||0, lender_partner:{ name:$("#re-s-lname").value.trim(), phone:$("#re-s-lphone").value.trim() }, showing_agreement_text:$("#re-s-show").value, require_showing_agreement:$("#re-s-require").value==='1', showing_minutes:Number($("#re-s-showlen").value)||30, unassigned_leads:($("#re-s-unassigned")?$("#re-s-unassigned").value:(cur.unassigned_leads||'broker')) });
     const feat=Object.assign({}, settings.features||{}); if($("#re-s-manage").checked) feat.property_management=true; else delete feat.property_management; settings.features=feat;
     const { error }=await db.from('accounts').update({ settings }).eq('id',state.account.id);
     sv.disabled=false;

@@ -6,6 +6,7 @@ import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 // Donna never gives legal advice, never quotes commission, never steers by neighborhood makeup (Fair Housing), and never
 // reads lockbox codes or tenant details to callers. Showings are booked through the same booking RPC as every other
 // Donna appointment; the showing agreement (the agent's own document) is texted through re-sign.
+// v2: leads with no listing follow settings.real_estate.unassigned_leads (broker | round_robin | <agent user id>).
 
 const SUPA_URL = Deno.env.get("SUPABASE_URL")!;
 const SERVICE_ROLE = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
@@ -90,7 +91,24 @@ async function upsertContact(accountId: string, name: string, phone: string, ema
     const { data: n } = await supabase.from("contacts").insert({ account_id: accountId, name: name || "Caller", phone, email }).select("id").maybeSingle(); return n?.id || null;
   } catch { return null; }
 }
-async function upsertLead(accountId: string, args: any, listing: any | null, fromNumber: string): Promise<any> {
+// Who gets a lead that isn't tied to a listing. settings.real_estate.unassigned_leads:
+//   "broker" (default) -> nobody assigned; the owner's phone gets the hot-lead text
+//   "round_robin"      -> the active agent (non-owner) who has waited longest since their last new lead
+//   "<user_id>"        -> always that agent (if still active)
+async function routeUnassigned(accountId: string, settings: any): Promise<string | null> {
+  const rule = String(settings?.real_estate?.unassigned_leads || "broker");
+  if (rule === "broker") return null;
+  const { data: agents } = await supabase.from("users").select("id, role, created_at").eq("account_id", accountId).eq("is_active", true).neq("role", "owner").order("created_at");
+  const list = (agents || []) as any[];
+  if (!list.length) return null;
+  if (rule !== "round_robin") return list.some((a) => a.id === rule) ? rule : null;
+  const { data: recent } = await supabase.from("re_leads").select("agent_user_id, created_at").eq("account_id", accountId).not("agent_user_id", "is", null).gte("created_at", new Date(Date.now() - 90 * 86400000).toISOString()).order("created_at", { ascending: false });
+  const last = new Map<string, string>();
+  for (const r of (recent || []) as any[]) if (!last.has(r.agent_user_id)) last.set(r.agent_user_id, r.created_at);
+  list.sort((a, b) => (last.get(a.id) || "").localeCompare(last.get(b.id) || "") || String(a.created_at).localeCompare(String(b.created_at)));
+  return list[0].id;
+}
+async function upsertLead(accountId: string, args: any, listing: any | null, fromNumber: string, settings?: any): Promise<any> {
   const phone = normPhone(args.phone || args.callback_number || fromNumber);
   const name = String(args.name || args.caller_name || "").trim();
   const email = String(args.email || "").trim() || null;
@@ -110,7 +128,8 @@ async function upsertLead(accountId: string, args: any, listing: any | null, fro
   // Same phone + kind in the last 30 days → update rather than duplicate.
   let existing: any = null;
   if (phone) { const { data } = await supabase.from("re_leads").select("*").eq("account_id", accountId).eq("phone", phone).eq("kind", kind).gte("created_at", new Date(Date.now() - 30 * 86400000).toISOString()).order("created_at", { ascending: false }).limit(1); existing = data?.[0] || null; }
-  if (existing) { if (patch.notes && existing.notes && !existing.notes.includes(patch.notes)) patch.notes = (existing.notes + "\n" + patch.notes).slice(0, 2000); delete patch.account_id; const { data } = await supabase.from("re_leads").update(patch).eq("id", existing.id).select("*").maybeSingle(); return data || existing; }
+  if (existing) { if (patch.notes && existing.notes && !existing.notes.includes(patch.notes)) patch.notes = (existing.notes + "\n" + patch.notes).slice(0, 2000); delete patch.account_id; if (existing.agent_user_id) delete patch.agent_user_id; const { data } = await supabase.from("re_leads").update(patch).eq("id", existing.id).select("*").maybeSingle(); return data || existing; }
+  if (!patch.agent_user_id) { const to = await routeUnassigned(accountId, settings); if (to) patch.agent_user_id = to; }
   const { data, error } = await supabase.from("re_leads").insert(patch).select("*").maybeSingle(); if (error) console.error("re_leads insert", error.message); return data;
 }
 async function maybeSendIabs(acct: any, lead: any) {
@@ -150,7 +169,7 @@ Deno.serve(async (req: Request) => {
   // ---------- re_lead ----------
   if (tool === "re_lead") {
     let listing: any = null; if (args.listing_id) { const { data } = await supabase.from("re_listings").select("*").eq("id", args.listing_id).eq("account_id", acct.id).maybeSingle(); listing = data; } else if (args.listing_address) { const rows = await findListings(acct.id, { query: args.listing_address }); listing = rows[0] || null; }
-    const lead = await upsertLead(acct.id, args, listing, fromNumber);
+    const lead = await upsertLead(acct.id, args, listing, fromNumber, acct.settings);
     if (!lead) return say("Got it. I've noted that for the agent.");
     const iabs = await maybeSendIabs(acct, lead);
     const hot = truthy(args.hot) || (lead.kind === "seller") || (lead.kind === "buyer" && lead.preapproved === true) || (lead.kind === "landlord");

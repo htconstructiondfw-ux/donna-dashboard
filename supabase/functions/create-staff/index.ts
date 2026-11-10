@@ -37,6 +37,10 @@ function defaultTitle(acct: any, role: string): string {
   if (f.salon || ind === "salon") return "Stylist";
   return "Staff";
 }
+// v6: audit trail (activity_log) for create / deactivate / reactivate.
+async function logActivity(accountId: string, actor: string | null, action: string, entity: string, entityId: string | null, label: string | null, details: Record<string, unknown> = {}) {
+  try { await admin.rpc("log_activity", { p_account: accountId, p_actor: actor || null, p_action: action, p_entity: entity, p_entity_id: entityId, p_label: label, p_details: details }); } catch (e) { console.error("log_activity", String(e)); }
+}
 
 Deno.serve(async (req: Request) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: CORS });
@@ -90,6 +94,7 @@ Deno.serve(async (req: Request) => {
     if (bErr) return json({ ok: false, error: "Couldn't update the login. Try again." });
     await admin.from("users").update({ is_active: active, deactivated_at: active ? null : new Date().toISOString(), is_bookable: active ? undefined : false }).eq("id", target.id);
     if (!active) { try { await admin.auth.admin.signOut(target.id as any); } catch { /* sessions expire on their own */ } }
+    await logActivity(accountId, callerId, active ? "user.reactivate" : "user.deactivate", "user", target.id, target.full_name);
     return json({ ok: true, is_active: active });
   }
 
@@ -138,5 +143,6 @@ Deno.serve(async (req: Request) => {
     return json({ ok: false, error: "Login created but the team record looks off. Refresh the list.", user_id: createdId });
   }
   if (phone) await admin.from("users").update({ phone }).eq("id", createdId);
+  await logActivity(accountId, callerId, "user.create", "user", createdId, fullName, { role: staffUser.role, invited: invite });
   return json({ ok: true, user_id: createdId, email, full_name: fullName, is_bookable: staffUser.is_bookable, role: staffUser.role, title: staffUser.title, invited: invite });
 });

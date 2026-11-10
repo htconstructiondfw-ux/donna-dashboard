@@ -2,7 +2,7 @@ import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import Stripe from "https://esm.sh/stripe@14.25.0?target=denonext";
 
-// Donna shared payments module (v11). Any vertical can use it; the dashboard exposes it to contractors first.
+// Donna shared payments module (v17: activity log on void / reprice / mark paid). Any vertical can use it; the dashboard exposes it to contractors first.
 // Tenants connect THEIR OWN Stripe account (Connect, Accounts v2, SaaS pattern). Donna never holds, touches or routes money:
 // Checkout Sessions are created directly on the tenant's account (Stripe-Account header), no application fee.
 //
@@ -77,6 +77,10 @@ async function resolveCaller(req: Request, body?: any): Promise<{ userId: string
 }
 const isAdmin = (role: string) => ["owner", "admin", "manager"].includes(String(role || "").toLowerCase());
 // A team member may act on an invoice they created or whose job is assigned to them; admins on any.
+// v17: audit trail. Owners/managers read activity_log on the Team page.
+async function logActivity(accountId: string, actor: string | null, action: string, entity: string, entityId: string | null, label: string | null, details: Record<string, unknown> = {}) {
+  try { await supabase.rpc("log_activity", { p_account: accountId, p_actor: actor || null, p_action: action, p_entity: entity, p_entity_id: entityId, p_label: label, p_details: details }); } catch (e) { console.error("log_activity", String(e)); }
+}
 async function canTouchInvoice(caller: any, inv: any): Promise<boolean> {
   if (isAdmin(caller.role)) return true;
   if (inv.created_by && inv.created_by === caller.userId) return true;
@@ -335,6 +339,7 @@ Deno.serve(async (req: Request) => {
     if (body.lines) { const lines = normLines(body.lines); if (!lines.length) return json({ ok: false, error: "no_lines" }, 400); upd.lines = lines; }
     for (const k of ["notes", "customer_name", "customer_phone", "customer_email", "service_address"]) if (body[k] !== undefined) upd[k] = String(body[k] || "").trim() || null;
     const { data } = await supabase.from("invoices").update(upd).eq("id", id).select("*").maybeSingle();
+    if (body.lines && inv.status !== "draft" && data && data.total_cents !== inv.total_cents) await logActivity(acct.id, caller.userId, "invoice.reprice", "invoice", inv.id, inv.number, { from_cents: inv.total_cents, to_cents: data.total_cents });
     return json({ ok: true, invoice: data, pay_url: payUrl(data.pay_token) });
   }
 
@@ -368,6 +373,7 @@ Deno.serve(async (req: Request) => {
     if (!(await canTouchInvoice(caller, inv))) return json({ ok: false, error: "not_yours", message: "That invoice belongs to someone else on the team." }, 403);
     const method = ["cash", "check", "card", "other"].includes(body.method) ? body.method : "cash";
     const upd = await markPaid(inv, method, "manual", null, String(body.note || "").slice(0, 200) || null);
+    await logActivity(acct.id, caller.userId, "invoice.paid", "invoice", inv.id, inv.number, { method, total_cents: inv.total_cents });
     return json({ ok: true, invoice: upd });
   }
 
@@ -422,6 +428,7 @@ Deno.serve(async (req: Request) => {
     const id = String(body.id || ""); const { data: inv } = await supabase.from("invoices").select("*").eq("id", id).eq("account_id", acct.id).maybeSingle();
     if (!inv) return json({ ok: false, error: "not_found" }, 404); if (inv.paid_at) return json({ ok: false, error: "already_paid" });
     const { data } = await supabase.from("invoices").update({ status: "void", updated_at: new Date().toISOString() }).eq("id", id).select("*").maybeSingle();
+    await logActivity(acct.id, caller.userId, "invoice.void", "invoice", inv.id, inv.number, { total_cents: inv.total_cents });
     return json({ ok: true, invoice: data });
   }
 

@@ -1,7 +1,7 @@
 import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 
-// Donna estimates (v1). Donna never prices anything: the tech writes the estimate (lines from the price book or typed),
+// Donna estimates (v5: activity log on approve / void / reprice). Donna never prices anything: the tech writes the estimate (lines from the price book or typed),
 // Donna sends it, tracks it, nudges, and turns an approval into a booked job at exactly the approved total.
 // Owner can require review of estimates over settings.contractor.estimate_review_over_cents before they go out.
 // User actions (JWT, or service role + user_id): create | update | send | approve_review | list | convert | void
@@ -30,6 +30,9 @@ function normLines(raw: any[]): any[] {
     const cents = l.cents != null ? Math.round(Number(l.cents)) : Math.round(qty * unit) * (kind === "discount" ? -1 : 1);
     return { desc: String(l.desc || l.name || "").slice(0, 140), qty, unit_cents: unit, cents, kind };
   }).filter((l) => l.desc);
+}
+async function logActivity(accountId: string, actor: string | null, action: string, entity: string, entityId: string | null, label: string | null, details: Record<string, unknown> = {}) {
+  try { await supabase.rpc("log_activity", { p_account: accountId, p_actor: actor || null, p_action: action, p_entity: entity, p_entity_id: entityId, p_label: label, p_details: details }); } catch (e) { console.error("log_activity", String(e)); }
 }
 // Optional ("if we find X") lines don't count toward the total the customer approves.
 const total = (lines: any[]) => lines.filter((l) => l.kind !== "optional").reduce((s, l) => s + (Number(l.cents) || 0), 0);
@@ -158,11 +161,13 @@ Deno.serve(async (req: Request) => {
     for (const k of ["notes", "customer_name", "customer_phone", "customer_email", "service_address"]) if (body[k] !== undefined) upd[k] = String(body[k] || "").trim() || null;
     if (body.valid_days) upd.valid_days = Math.max(1, Math.min(180, Number(body.valid_days)));
     const { data } = await supabase.from("estimates").update(upd).eq("id", id).select("*").maybeSingle();
+    if (upd.lines && est.status !== "draft" && data && data.total_cents !== est.total_cents) await logActivity(acct.id, caller.userId, "estimate.reprice", "estimate", est.id, est.number, { from_cents: est.total_cents, to_cents: data.total_cents });
     return json({ ok: true, estimate: data, url: quoteUrl(data.approve_token) });
   }
   if (action === "approve_review") {
     if (!isAdmin(caller.role)) return json({ ok: false, error: "admins_only" }, 403);
     const { data } = await supabase.from("estimates").update({ status: "draft", updated_at: now }).eq("id", id).select("*").maybeSingle();
+    await logActivity(acct.id, caller.userId, "estimate.approve", "estimate", est.id, est.number, { total_cents: est.total_cents });
     return body.send ? json(await doSend(acct, data)) : json({ ok: true, estimate: data });
   }
   if (action === "send") {
@@ -172,7 +177,7 @@ Deno.serve(async (req: Request) => {
     if (body.to || body.email) await supabase.from("estimates").update({ customer_phone: est.customer_phone, customer_email: est.customer_email }).eq("id", id);
     return json(await doSend(acct, est));
   }
-  if (action === "void") { if (!isAdmin(caller.role)) return json({ ok: false, error: "admins_only", message: "Only an owner or manager can void an estimate." }, 403); const { data } = await supabase.from("estimates").update({ status: "void", updated_at: now }).eq("id", id).select("*").maybeSingle(); return json({ ok: true, estimate: data }); }
+  if (action === "void") { if (!isAdmin(caller.role)) return json({ ok: false, error: "admins_only", message: "Only an owner or manager can void an estimate." }, 403); const { data } = await supabase.from("estimates").update({ status: "void", updated_at: now }).eq("id", id).select("*").maybeSingle(); await logActivity(acct.id, caller.userId, "estimate.void", "estimate", est.id, est.number, { total_cents: est.total_cents }); return json({ ok: true, estimate: data }); }
 
   // Approved estimate -> a booked job at exactly the approved lines. new_date YYYY-MM-DD, new_time HH:MM (shop time).
   if (action === "convert") {
