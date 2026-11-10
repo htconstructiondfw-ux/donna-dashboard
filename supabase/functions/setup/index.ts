@@ -1,7 +1,7 @@
 import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 
-// Donna — setup (v5). v5: website hours parsed into per-day schedule; knowledge embeds via sweep. The "Donna proposes, you confirm" onboarding engine, shared by every vertical.
+// Donna — setup (v6). v6: phone setup applies once per call, "try my cell" uses the number Donna called. v5: website hours parsed into per-day schedule; knowledge embeds via sweep. The "Donna proposes, you confirm" onboarding engine, shared by every vertical.
 //
 //   lookup  {query, website?, hint?}   -> find the business (Google Places) + read its website -> a PROPOSAL the wizard shows to confirm
 //   apply   {proposal}                 -> write the confirmed proposal (account, assistant, hours, services, knowledge) in one go
@@ -255,11 +255,13 @@ What you already know (do not re-ask; confirm briefly if useful): {{known}}
 
 Ask these, in order, skipping any already answered: {{questions}}
 
-How to behave: warm, quick, plain spoken. One question per turn. Accept whatever they say, repeat back numbers and prices once, do not lecture. If they say "I don't know" or "skip", move on. After the last question say you've got everything, that you'll be answering their phone from now on, and that you'll text them a summary. Then call end_call. Keep the whole call under five minutes. Do not say you are an AI language model; you are Donna, their receptionist.`;
+How to behave: warm, quick, plain spoken. One question per turn. Accept whatever they say, repeat back numbers and prices once, do not lecture. If they say "I don't know" or "skip", move on. If an answer is vague, sounds like a slogan or a figure of speech ("we do it right", "the usual"), or does not actually answer the question, repeat it back in one short sentence and ask whether you should say exactly that to callers or whether they meant something else; if it is still unclear, say "no problem, I'll leave that out" and move on. Never invent details to fill a gap. If the owner answers in another language (Spanish, Vietnamese, Chinese, Korean, or anything else), switch to that language for the rest of the call and keep the same questions. After the last question say you've got everything, that you'll be answering their phone from now on, and that you'll text them a summary. Then call end_call. Keep the whole call under five minutes. Do not say you are an AI language model; you are Donna, their receptionist.`;
 async function ensureSetupAgent(): Promise<{ agent_id: string; llm_id: string } | null> {
   let llm = await cfgGet("setup_llm_id"), agent = await cfgGet("setup_agent_id");
   if (!llm) { const r = await fetch("https://api.retellai.com/create-retell-llm", { method: "POST", headers: rh(), body: JSON.stringify({ general_prompt: SETUP_PROMPT, begin_message: "Hi {{owner_name}}, it's Donna — your new receptionist for {{business_name}}. Got three minutes? I'll ask a few quick questions and then I'm ready to answer your phones.", general_tools: [{ type: "end_call", name: "end_call", description: "End the call once every question is answered or the owner wants to stop." }] }) }); const j: any = await r.json().catch(() => ({})); if (!j?.llm_id) { console.error("setup llm", JSON.stringify(j).slice(0, 300)); return null; } llm = j.llm_id; await cfgSet("setup_llm_id", llm); }
   if (!agent) { const r = await fetch("https://api.retellai.com/create-agent", { method: "POST", headers: rh(), body: JSON.stringify({ response_engine: { type: "retell-llm", llm_id: llm }, voice_id: "minimax-Cimo", agent_name: "Donna Setup Interview", webhook_url: `${SELF}/retell-call-events` }) }); const j: any = await r.json().catch(() => ({})); if (!j?.agent_id) { console.error("setup agent", JSON.stringify(j).slice(0, 300)); return null; } agent = j.agent_id; await cfgSet("setup_agent_id", agent); }
+  // Keep the live interview prompt in step with this file: re-push it whenever the text here changes.
+  try { const sig = String(SETUP_PROMPT.length) + ":" + Array.from(SETUP_PROMPT).reduce((h, c) => ((h * 31 + c.charCodeAt(0)) >>> 0), 7); if ((await cfgGet("setup_prompt_sig")) !== sig) { const u = await fetch(`https://api.retellai.com/update-retell-llm/${llm}`, { method: "PATCH", headers: rh(), body: JSON.stringify({ general_prompt: SETUP_PROMPT }) }); if (u.ok) await cfgSet("setup_prompt_sig", sig); else console.error("setup llm update", u.status); await fetch(`https://api.retellai.com/update-agent/${agent}`, { method: "PATCH", headers: rh(), body: JSON.stringify({ language: "multi" }) }).catch(() => {}); } } catch (e) { console.error("setup llm sig", String(e)); }
   return { agent_id: agent, llm_id: llm };
 }
 const CHECK_PROMPT = `You are Donna. This is a 15-second automated check of call forwarding. If a human answers, say: "Hi, this is Donna checking your call forwarding. It looks like calls to this line aren't reaching me yet — I'll text you the steps. Bye for now!" then call end_call immediately. If voicemail answers, say nothing and call end_call.`;
@@ -282,7 +284,7 @@ function interviewQuestions(industry: string, known: any): string[] {
   return q;
 }
 const EXTRACT_CALL_SYSTEM = `You turn a phone interview between Donna (an AI receptionist) and a business owner into structured setup facts. Only what the OWNER said. Never invent.
-Return ONLY JSON: {"hours":{"days":[sun,mon,tue,wed,thu,fri,sat as true/false],"open":"HH:MM","close":"HH:MM"} or null,"services":[{"name":"","duration_min":30,"price":"$45 or empty"}],"team":[{"name":"","role":""}],"transfer":{"mode":"cell|message","number":"+1... if given"},"after_hours":"what they said, or empty","trip_fee":"what they said, or empty","always_say":"","never_say":"","service_area":"","notes":"anything else useful, one or two sentences","summary_for_owner":"2 sentences in Donna's voice summarizing what she set up"}`;
+Return ONLY JSON: {"hours":{"days":[sun,mon,tue,wed,thu,fri,sat as true/false],"open":"HH:MM","close":"HH:MM"} or null,"services":[{"name":"","duration_min":30,"price":"$45 or empty"}],"team":[{"name":"","role":""}],"transfer":{"mode":"cell|message","number":"+1... if given"},"after_hours":"what they said, or empty","trip_fee":"what they said, or empty","always_say":"a concrete, specific instruction the owner clearly wants said to callers (e.g. \"we are closed July 4th\"); EMPTY for slogans, figures of speech, or unclear remarks","motto":"a slogan or tagline the owner used, if any (e.g. \"we do it right\"), else empty","never_say":"","service_area":"","notes":"other FACTS a receptionist should know, one or two sentences; never commentary about the call itself or what was not discussed (empty if none)","summary_for_owner":"2 sentences in Donna's voice summarizing what she set up"}`;
 
 Deno.serve(async (req: Request) => {
   if (req.method === "OPTIONS") return new Response(null, { headers: CORS });
@@ -410,20 +412,27 @@ Deno.serve(async (req: Request) => {
     const status = j.call_status || ""; if (status !== "ended" && status !== "error") return json({ ok: true, status, done: false });
     const transcript = String(j.transcript || "");
     if (transcript.replace(/\s/g, "").length < 80) return json({ ok: true, status, done: true, empty: true, message: "The call was too short to set anything up." });
+    // Idempotent: the wizard polls, and two polls can race once the call ends. Apply once per call.
+    if (body.apply) {
+      const { data: a0 } = await supabase.from("accounts").select("settings").eq("id", caller.accountId).maybeSingle(); const s0: any = Object.assign({}, (a0 as any)?.settings || {}); const ob0: any = s0.onboarding || {};
+      if (ob0.phone_setup_applied_call === callId) { if (!ob0.phone_setup_done_at || ob0.phone_setup_done_at < ob0.phone_setup_started_at) return json({ ok: true, status, done: false, applying: true }); return json({ ok: true, status, done: true, proposal: ob0.phone_setup_proposal || {}, summary: ob0.phone_setup_summary || "", applied: { ok: true, repeat: true } }); }
+      s0.onboarding = Object.assign({}, ob0, { phone_setup_applied_call: callId }); await supabase.from("accounts").update({ settings: s0 }).eq("id", caller.accountId); // claim before the slow extraction
+    }
     const ext = await llmJson(EXTRACT_CALL_SYSTEM, `Transcript:\n${transcript.slice(0, 30000)}\n\nReturn the JSON now.`);
     if (!ext) return json({ ok: false, error: "extract_failed" });
+    const ownerCell = normPhone(String(j.to_number || ""));
     const proposal: any = { services: (ext.services || []).map((s: any) => ({ ...s, keep: true })), team: (ext.team || []).map((t: any) => ({ ...t, keep: true })), faq: [] as any[] };
     if (ext.hours && Array.isArray(ext.hours.days)) proposal.hours = { days: ext.hours.days, open: ext.hours.open || "09:00", close: ext.hours.close || "17:00", per_day: {} };
-    if (ext.transfer?.mode === "cell" && ext.transfer?.number) proposal.transfer_number = ext.transfer.number;
+    if (ext.transfer?.mode === "cell") proposal.transfer_number = normPhone(String(ext.transfer?.number || "")) || ownerCell; // "try my cell" = the number Donna just called
     if (ext.service_area) proposal.service_area = ext.service_area;
-    const pol = [ext.after_hours ? `After hours: ${ext.after_hours}` : "", ext.trip_fee ? `Trip fee: ${ext.trip_fee}` : "", ext.always_say ? `Always tell callers: ${ext.always_say}` : "", ext.never_say ? `Never say: ${ext.never_say}` : "", ext.notes || ""].filter(Boolean).join(" ");
+    const pol = [ext.after_hours ? `After hours: ${ext.after_hours}` : "", ext.trip_fee ? `Trip fee: ${ext.trip_fee}` : "", ext.always_say ? `Always tell callers: ${ext.always_say}` : "", ext.motto ? `Motto: "${ext.motto}" (use it naturally when it fits; never recite it as a rule).` : "", ext.never_say ? `Never say: ${ext.never_say}` : "", ext.notes || ""].filter(Boolean).join(" ");
     if (pol) proposal.policies = pol;
     let applied: any = null;
     if (body.apply) {
       // Merge onto what is already there: keep the business block from the account.
       const { data: acct } = await supabase.from("accounts").select("name, industry, settings").eq("id", caller.accountId).maybeSingle(); const s: any = acct?.settings || {};
       applied = await applyProposal(caller, Object.assign({ business: { name: acct?.name, phone: s.business?.phone, address: s.business?.address, website: s.business?.website, tz: s.timezone }, industry: acct?.industry }, proposal));
-      const { data: fresh } = await supabase.from("accounts").select("settings").eq("id", caller.accountId).maybeSingle(); const settings: any = Object.assign({}, fresh?.settings || {}); settings.onboarding = Object.assign({}, settings.onboarding || {}, { phone_setup_done_at: new Date().toISOString(), phone_setup_summary: ext.summary_for_owner || "" }); await supabase.from("accounts").update({ settings }).eq("id", caller.accountId);
+      const { data: fresh } = await supabase.from("accounts").select("settings").eq("id", caller.accountId).maybeSingle(); const settings: any = Object.assign({}, fresh?.settings || {}); settings.onboarding = Object.assign({}, settings.onboarding || {}, { phone_setup_done_at: new Date().toISOString(), phone_setup_summary: ext.summary_for_owner || "", phone_setup_applied_call: callId, phone_setup_proposal: proposal }); await supabase.from("accounts").update({ settings }).eq("id", caller.accountId);
     }
     return json({ ok: true, status, done: true, proposal, summary: ext.summary_for_owner || "", applied });
   }
