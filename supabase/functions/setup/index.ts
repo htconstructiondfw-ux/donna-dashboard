@@ -1,7 +1,7 @@
 import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 
-// Donna — setup (v6). v6: phone setup applies once per call, "try my cell" uses the number Donna called. v5: website hours parsed into per-day schedule; knowledge embeds via sweep. The "Donna proposes, you confirm" onboarding engine, shared by every vertical.
+// Donna — setup (v7). v7: owner language (users.language): setup call opens and stays in it, follow-up texts translated. v6: phone setup applies once per call, "try my cell" uses the number Donna called. v5: website hours parsed into per-day schedule; knowledge embeds via sweep. The "Donna proposes, you confirm" onboarding engine, shared by every vertical.
 //
 //   lookup  {query, website?, hint?}   -> find the business (Google Places) + read its website -> a PROPOSAL the wizard shows to confirm
 //   apply   {proposal}                 -> write the confirmed proposal (account, assistant, hours, services, knowledge) in one go
@@ -249,7 +249,15 @@ async function ensureOutboundNumber(): Promise<string> {
   const j: any = await r.json().catch(() => ({})); if (j?.phone_number) { n = j.phone_number; await cfgSet("qa_tester_number", n); }
   return n;
 }
-const SETUP_PROMPT = `You are Donna, a friendly AI receptionist, calling {{owner_name}} who just signed up for you to answer the phone for {{business_name}} ({{vertical_label}}). This call IS their setup: you ask a few short questions, one at a time, and that is all they need to do.
+const LANG_NAME: Record<string, string> = { en: "English", es: "Spanish", vi: "Vietnamese", zh: "Mandarin Chinese", ko: "Korean", fr: "French", pt: "Portuguese" };
+const OPENING: Record<string, (n: string, b: string) => string> = {
+  en: (n, b) => `Hi ${n}, it's Donna, your new receptionist for ${b}. Got three minutes? I'll ask a few quick questions and then I'm ready to answer your phones.`,
+  es: (n, b) => `Hola ${n}, soy Donna, su nueva recepcionista para ${b}. ¿Tiene tres minutos? Le hago unas preguntas rápidas y quedo lista para contestar sus llamadas.`,
+  vi: (n, b) => `Chào ${n}, tôi là Donna, lễ tân mới của ${b}. Anh/chị có ba phút không? Tôi hỏi vài câu ngắn rồi sẽ sẵn sàng trả lời điện thoại cho anh/chị.`,
+  zh: (n, b) => `${n}您好，我是Donna，${b}的新前台。有三分钟时间吗？我问几个简单的问题，然后就可以帮您接电话了。`,
+  ko: (n, b) => `${n}님 안녕하세요, ${b}의 새 리셉셔니스트 Donna입니다. 3분 정도 괜찮으세요? 간단한 질문 몇 가지만 드리고 바로 전화 응대를 시작하겠습니다.`,
+};
+const SETUP_PROMPT = `You are Donna, a friendly AI receptionist, calling {{owner_name}} who just signed up for you to answer the phone for {{business_name}} ({{vertical_label}}). This call IS their setup: you ask a few short questions, one at a time, and that is all they need to do. Speak {{owner_language}} for the whole call unless the owner switches languages.
 
 What you already know (do not re-ask; confirm briefly if useful): {{known}}
 
@@ -258,10 +266,10 @@ Ask these, in order, skipping any already answered: {{questions}}
 How to behave: warm, quick, plain spoken. One question per turn. Accept whatever they say, repeat back numbers and prices once, do not lecture. If they say "I don't know" or "skip", move on. If an answer is vague, sounds like a slogan or a figure of speech ("we do it right", "the usual"), or does not actually answer the question, repeat it back in one short sentence and ask whether you should say exactly that to callers or whether they meant something else; if it is still unclear, say "no problem, I'll leave that out" and move on. Never invent details to fill a gap. If the owner answers in another language (Spanish, Vietnamese, Chinese, Korean, or anything else), switch to that language for the rest of the call and keep the same questions. After the last question say you've got everything, that you'll be answering their phone from now on, and that you'll text them a summary. Then call end_call. Keep the whole call under five minutes. Do not say you are an AI language model; you are Donna, their receptionist.`;
 async function ensureSetupAgent(): Promise<{ agent_id: string; llm_id: string } | null> {
   let llm = await cfgGet("setup_llm_id"), agent = await cfgGet("setup_agent_id");
-  if (!llm) { const r = await fetch("https://api.retellai.com/create-retell-llm", { method: "POST", headers: rh(), body: JSON.stringify({ general_prompt: SETUP_PROMPT, begin_message: "Hi {{owner_name}}, it's Donna — your new receptionist for {{business_name}}. Got three minutes? I'll ask a few quick questions and then I'm ready to answer your phones.", general_tools: [{ type: "end_call", name: "end_call", description: "End the call once every question is answered or the owner wants to stop." }] }) }); const j: any = await r.json().catch(() => ({})); if (!j?.llm_id) { console.error("setup llm", JSON.stringify(j).slice(0, 300)); return null; } llm = j.llm_id; await cfgSet("setup_llm_id", llm); }
+  if (!llm) { const r = await fetch("https://api.retellai.com/create-retell-llm", { method: "POST", headers: rh(), body: JSON.stringify({ general_prompt: SETUP_PROMPT, begin_message: "{{opening}}", general_tools: [{ type: "end_call", name: "end_call", description: "End the call once every question is answered or the owner wants to stop." }] }) }); const j: any = await r.json().catch(() => ({})); if (!j?.llm_id) { console.error("setup llm", JSON.stringify(j).slice(0, 300)); return null; } llm = j.llm_id; await cfgSet("setup_llm_id", llm); }
   if (!agent) { const r = await fetch("https://api.retellai.com/create-agent", { method: "POST", headers: rh(), body: JSON.stringify({ response_engine: { type: "retell-llm", llm_id: llm }, voice_id: "minimax-Cimo", agent_name: "Donna Setup Interview", webhook_url: `${SELF}/retell-call-events` }) }); const j: any = await r.json().catch(() => ({})); if (!j?.agent_id) { console.error("setup agent", JSON.stringify(j).slice(0, 300)); return null; } agent = j.agent_id; await cfgSet("setup_agent_id", agent); }
   // Keep the live interview prompt in step with this file: re-push it whenever the text here changes.
-  try { const sig = String(SETUP_PROMPT.length) + ":" + Array.from(SETUP_PROMPT).reduce((h, c) => ((h * 31 + c.charCodeAt(0)) >>> 0), 7); if ((await cfgGet("setup_prompt_sig")) !== sig) { const u = await fetch(`https://api.retellai.com/update-retell-llm/${llm}`, { method: "PATCH", headers: rh(), body: JSON.stringify({ general_prompt: SETUP_PROMPT }) }); if (u.ok) await cfgSet("setup_prompt_sig", sig); else console.error("setup llm update", u.status); await fetch(`https://api.retellai.com/update-agent/${agent}`, { method: "PATCH", headers: rh(), body: JSON.stringify({ language: "multi" }) }).catch(() => {}); } } catch (e) { console.error("setup llm sig", String(e)); }
+  try { const sig = String(SETUP_PROMPT.length) + ":" + Array.from(SETUP_PROMPT).reduce((h, c) => ((h * 31 + c.charCodeAt(0)) >>> 0), 7); if ((await cfgGet("setup_prompt_sig")) !== sig) { const u = await fetch(`https://api.retellai.com/update-retell-llm/${llm}`, { method: "PATCH", headers: rh(), body: JSON.stringify({ general_prompt: SETUP_PROMPT, begin_message: "{{opening}}" }) }); if (u.ok) await cfgSet("setup_prompt_sig", sig); else console.error("setup llm update", u.status); await fetch(`https://api.retellai.com/update-agent/${agent}`, { method: "PATCH", headers: rh(), body: JSON.stringify({ language: "multi" }) }).catch(() => {}); } } catch (e) { console.error("setup llm sig", String(e)); }
   return { agent_id: agent, llm_id: llm };
 }
 const CHECK_PROMPT = `You are Donna. This is a 15-second automated check of call forwarding. If a human answers, say: "Hi, this is Donna checking your call forwarding. It looks like calls to this line aren't reaching me yet — I'll text you the steps. Bye for now!" then call end_call immediately. If voicemail answers, say nothing and call end_call.`;
@@ -284,7 +292,7 @@ function interviewQuestions(industry: string, known: any): string[] {
   return q;
 }
 const EXTRACT_CALL_SYSTEM = `You turn a phone interview between Donna (an AI receptionist) and a business owner into structured setup facts. Only what the OWNER said. Never invent.
-Return ONLY JSON: {"hours":{"days":[sun,mon,tue,wed,thu,fri,sat as true/false],"open":"HH:MM","close":"HH:MM"} or null,"services":[{"name":"","duration_min":30,"price":"$45 or empty"}],"team":[{"name":"","role":""}],"transfer":{"mode":"cell|message","number":"+1... if given"},"after_hours":"what they said, or empty","trip_fee":"what they said, or empty","always_say":"a concrete, specific instruction the owner clearly wants said to callers (e.g. \"we are closed July 4th\"); EMPTY for slogans, figures of speech, or unclear remarks","motto":"a slogan or tagline the owner used, if any (e.g. \"we do it right\"), else empty","never_say":"","service_area":"","notes":"other FACTS a receptionist should know, one or two sentences; never commentary about the call itself or what was not discussed (empty if none)","summary_for_owner":"2 sentences in Donna's voice summarizing what she set up"}`;
+Return ONLY JSON: {"hours":{"days":[sun,mon,tue,wed,thu,fri,sat as true/false],"open":"HH:MM","close":"HH:MM"} or null,"services":[{"name":"","duration_min":30,"price":"$45 or empty"}],"team":[{"name":"","role":""}],"transfer":{"mode":"cell|message","number":"+1... if given"},"after_hours":"what they said, or empty","trip_fee":"what they said, or empty","always_say":"a concrete, specific instruction the owner clearly wants said to callers (e.g. \"we are closed July 4th\"); EMPTY for slogans, figures of speech, or unclear remarks","motto":"a slogan or tagline the owner used, if any (e.g. \"we do it right\"), else empty","never_say":"","service_area":"","notes":"other FACTS a receptionist should know, one or two sentences; never commentary about the call itself or what was not discussed (empty if none)","summary_for_owner":"2 sentences in Donna's voice summarizing what she set up, in the language the owner spoke"}`;
 
 Deno.serve(async (req: Request) => {
   if (req.method === "OPTIONS") return new Response(null, { headers: CORS });
@@ -305,9 +313,12 @@ Deno.serve(async (req: Request) => {
   if (action === "queue") return json({ ok: true, items: await openQueue(caller.accountId) });
   if (action === "ask") {
     const key = String(body.key || ""); const items = await openQueue(caller.accountId); const it = items.find((i) => i.key === key); if (!it) return json({ ok: false, error: "not_open" });
-    const { data: me } = await supabase.from("users").select("phone, full_name").eq("id", caller.userId).maybeSingle(); const to = normPhone((me as any)?.phone || body.phone || ""); if (!to) return json({ ok: false, error: "no_phone" });
+    const { data: me } = await supabase.from("users").select("phone, full_name, language").eq("id", caller.userId).maybeSingle(); const to = normPhone((me as any)?.phone || body.phone || ""); if (!to) return json({ ok: false, error: "no_phone" });
     const { data: acct } = await supabase.from("accounts").select("name, settings").eq("id", caller.accountId).maybeSingle();
-    const r = await fetch(`${SELF}/msg-send`, { method: "POST", headers: { "Content-Type": "application/json", Authorization: `Bearer ${SERVICE_ROLE}` }, body: JSON.stringify({ account_id: caller.accountId, to, body: `Hi${(me as any)?.full_name ? " " + String((me as any).full_name).split(" ")[0] : ""}, it's Donna (setting up for ${acct?.name || "you"}). ${it.question}` }) });
+    let text = `Hi${(me as any)?.full_name ? " " + String((me as any).full_name).split(" ")[0] : ""}, it's Donna (setting up for ${acct?.name || "you"}). ${it.question}`;
+    const olang = String((me as any)?.language || "en").slice(0, 2);
+    if (olang !== "en" && LANG_NAME[olang]) { const t = await llmJson(`Translate the user's text message into ${LANG_NAME[olang]} for a business owner. Keep names, numbers and quoted reply words (like "varies" or "message") as they are, and add the English reply word in parentheses the first time it appears. Return ONLY JSON: {"text":"..."}`, text, 600); if (t?.text) text = String(t.text); }
+    const r = await fetch(`${SELF}/msg-send`, { method: "POST", headers: { "Content-Type": "application/json", Authorization: `Bearer ${SERVICE_ROLE}` }, body: JSON.stringify({ account_id: caller.accountId, to, body: text }) });
     const j: any = await r.json().catch(() => ({}));
     const settings: any = Object.assign({}, acct?.settings || {}); settings.onboarding = Object.assign({}, settings.onboarding || {}); settings.onboarding.asked = Object.assign({}, settings.onboarding.asked || {}, { [key]: new Date().toISOString() }); settings.onboarding.pending_question = key;
     await supabase.from("accounts").update({ settings }).eq("id", caller.accountId);
@@ -325,7 +336,7 @@ Deno.serve(async (req: Request) => {
     const { data: asst } = await supabase.from("assistants").select("id, routing").eq("account_id", caller.accountId).limit(1).maybeSingle();
     const phoneIn = normPhone(text.match(/\+?1?[\s(.-]*\d{3}[\s).-]*\d{3}[\s.-]*\d{4}/)?.[0] || "");
     if (key === "transfer" && asst) {
-      const routing = Object.assign({}, (asst as any).routing || {}); const msgOnly = /message|text me|no transfer|don't|dont/i.test(text) && !phoneIn;
+      const routing = Object.assign({}, (asst as any).routing || {}); const msgOnly = /message|text me|no transfer|don't|dont|mensaje|texto|tin nhắn|留言|메시지/i.test(text) && !phoneIn;
       routing.transfer = Object.assign({}, routing.transfer || {}, { enabled: !msgOnly && !!phoneIn, number: phoneIn || routing.transfer?.number || "" });
       await supabase.from("assistants").update({ routing }).eq("id", (asst as any).id); note = msgOnly ? "She'll take a message and text it to you." : (phoneIn ? `She'll try ${phoneIn} first, then take a message.` : "Saved as a note; add a number to turn transfers on.");
     } else if (key === "trip_fee" && acct?.industry === "contractor") {
@@ -380,7 +391,7 @@ Deno.serve(async (req: Request) => {
     if (!RETELL_API_KEY) return json({ ok: false, error: "no_retell" });
     const { data: acct } = await supabase.from("accounts").select("name, industry, settings").eq("id", caller.accountId).maybeSingle();
     const { data: asst } = await supabase.from("assistants").select("twilio_number").eq("account_id", caller.accountId).limit(1).maybeSingle();
-    const { data: me } = await supabase.from("users").select("full_name").eq("id", caller.userId).maybeSingle();
+    const { data: me } = await supabase.from("users").select("full_name, language").eq("id", caller.userId).maybeSingle();
     if (action === "test_call") {
       const donnaNum = (asst as any)?.twilio_number; if (!donnaNum) return json({ ok: false, error: "needs_number", message: "Set up the phone number first." });
       // Same brain as a real inbound call: ask retell-inbound for this account's variables, then dial out from the account's own number.
@@ -394,12 +405,17 @@ Deno.serve(async (req: Request) => {
     // Setup by phone
     const sa = await ensureSetupAgent(); const from = await ensureOutboundNumber(); if (!sa || !from) return json({ ok: false, error: "no_outbound" });
     const s: any = acct?.settings || {}; const industry = acct?.industry || "other";
+    // The owner's own language: the call opens in it and stays in it (callers' languages are a separate setting).
+    const lang = String(body.language || (me as any)?.language || "en").toLowerCase().slice(0, 2); const langName = LANG_NAME[lang] || "English";
+    if (body.language) await supabase.from("users").update({ language: lang }).eq("id", caller.userId);
+    const ownerFirst = String((me as any)?.full_name || "").split(" ")[0] || (lang === "es" ? "" : "there");
+    const opening = (OPENING[lang] || OPENING.en)(ownerFirst || "", acct?.name || (lang === "es" ? "su negocio" : "your business")).replace(/^Hi ,/, "Hi,").replace(/^Hola ,/, "Hola,");
     const { data: types } = await supabase.from("appointment_types").select("name, price").eq("account_id", caller.accountId).eq("is_active", true).limit(12);
     const { data: rules } = await supabase.from("availability_rules").select("day_of_week").eq("user_id", caller.userId).eq("rule_type", "working");
     const known: any = { hours: !!(rules || []).length, services: !!(types || []).length, team: !!(s.onboarding?.team_found || []).length };
     const knownText = [acct?.name ? `business: ${acct.name}` : "", s.business?.address ? `address: ${s.business.address}` : "", known.hours ? "hours: already on file" : "", (types || []).length ? `services on file: ${(types || []).map((t: any) => t.name + (t.price ? " " + t.price : "")).join(", ")}` : ""].filter(Boolean).join("; ") || "nothing yet besides the business name";
     const questions = interviewQuestions(industry, known).map((q, i) => `${i + 1}. ${q}`).join(" ");
-    const r = await fetch("https://api.retellai.com/v2/create-phone-call", { method: "POST", headers: rh(), body: JSON.stringify({ from_number: from, to_number: to, override_agent_id: sa.agent_id, retell_llm_dynamic_variables: { owner_name: String((me as any)?.full_name || "there").split(" ")[0], business_name: acct?.name || "your business", vertical_label: VERTICAL_LABEL[industry] || "a small business", known: knownText, questions }, metadata: { kind: "setup_interview", account_id: caller.accountId, user_id: caller.userId } }) });
+    const r = await fetch("https://api.retellai.com/v2/create-phone-call", { method: "POST", headers: rh(), body: JSON.stringify({ from_number: from, to_number: to, override_agent_id: sa.agent_id, retell_llm_dynamic_variables: { owner_name: ownerFirst || "there", business_name: acct?.name || "your business", vertical_label: VERTICAL_LABEL[industry] || "a small business", known: knownText, questions, owner_language: langName, opening }, metadata: { kind: "setup_interview", account_id: caller.accountId, user_id: caller.userId } }) });
     const j: any = await r.json().catch(() => ({})); if (!j?.call_id) return json({ ok: false, error: "call_failed", detail: j });
     const settings: any = Object.assign({}, acct?.settings || {}); settings.onboarding = Object.assign({}, settings.onboarding || {}, { phone_setup_call_id: j.call_id, phone_setup_started_at: new Date().toISOString() }); await supabase.from("accounts").update({ settings }).eq("id", caller.accountId);
     return json({ ok: true, call_id: j.call_id, from });

@@ -5815,7 +5815,7 @@ function renderWizard(){
     owner:(state.owner&&state.owner.name)||'', phone:(state.owner&&state.owner.phone)||'',
     proposal: ob.proposal_draft||null, applied: !!ob.proposal_applied_at,
     voice:(state.assistant&&state.assistant.voice)||'warm-female', aname:(state.assistant&&state.assistant.name)||DEFAULT_NAME,
-    industry: state.account.industry||'', carrier:'att_wireless', mode:'forward'
+    industry: state.account.industry||'', carrier:'att_wireless', mode:'forward', ownerLang: ob.owner_language||'en'
   }; }
   const step=state.wizStep||0;
   (WZ_RENDER[step]||WZ_RENDER[0])();
@@ -5827,24 +5827,26 @@ const WZ_RENDER={
   0:function(){
     const g=state.wz;
     document.getElementById("root").innerHTML=wzShell(`
-      <h1>Hi, I'm ${esc(DEFAULT_NAME)}. Where can I read about you?</h1>
-      <p class="lede">Paste your website and I'll read it — services, prices, hours, your team, the questions people ask — and set myself up from that. You just tell me what's right. About two minutes.</p>
+      <div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:10px" id="wz-olang">${[['en','English'],['es','Español'],['vi','Tiếng Việt'],['zh','中文'],['ko','한국어']].map(l=>`<span class="wz-chip ${(g.ownerLang||'en')===l[0]?'sel':''}" data-olang="${l[0]}">${l[1]}</span>`).join('')}</div>
+      <h1>${(g.ownerLang||'en')==='es'?`Hola, soy ${esc(DEFAULT_NAME)}. ¿Dónde puedo leer sobre su negocio?`:`Hi, I'm ${esc(DEFAULT_NAME)}. Where can I read about you?`}</h1>
+      <p class="lede">${(g.ownerLang||'en')==='es'?`Pegue su sitio web y lo leo — servicios, precios, horario, su equipo — y me configuro sola. Usted solo confirma. O toque <b>Que ${esc(DEFAULT_NAME)} me llame</b> y lo hacemos por teléfono, en español.`:`Paste your website and I'll read it — services, prices, hours, your team, the questions people ask — and set myself up from that. You just tell me what's right. About two minutes.`}</p>
       <div class="wz-field"><label>Your website</label><input class="wz-inp" id="wz-web" value="${esc(g.website)}" placeholder="yourbusiness.com" autofocus></div>
       <div class="wz-field"><label>Business name <span class="hint">if it's not obvious from the site, or you don't have one yet</span></label><input class="wz-inp" id="wz-q" value="${esc(g.query)}" placeholder="e.g. Bella Hair Studio"></div>
       <div class="wz-msg" id="wz-m"></div>
       <div class="wz-or">or</div>
       <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap">
-        <button class="btn sm" id="wz-call-me">Have ${esc(DEFAULT_NAME)} call me and set it up by phone</button>
-        <span class="hint" style="font-size:12.5px;color:var(--muted)">Three minutes, no typing. She asks, you answer.</span>
+        <button class="btn sm ${(g.ownerLang||'en')!=='en'?'primary':''}" id="wz-call-me">${(g.ownerLang||'en')==='es'?`Que ${esc(DEFAULT_NAME)} me llame y lo configuramos por teléfono`:`Have ${esc(DEFAULT_NAME)} call me and set it up by phone`}</button>
+        <span class="hint" style="font-size:12.5px;color:var(--muted)">${(g.ownerLang||'en')==='es'?'Tres minutos, sin escribir. Ella pregunta, usted responde — en español.':'Three minutes, no typing. She asks, you answer.'+((g.ownerLang||'en')!=='en'?' In your language.':'')}</span>
       </div>
       <div id="wz-call-box" style="display:none;margin-top:12px"></div>
     `,{nextLabel:'Find my business'});
     $("#wz-q").onkeydown=e=>{ if(e.key==='Enter') $("#wz-next").click(); };
-    $("#wz-call-me").onclick=()=>{ const b=$("#wz-call-box"); b.style.display='block'; b.innerHTML=`<div class="wz-row2"><div class="wz-field"><label>Your mobile</label><input class="wz-inp" id="wz-cm-phone" value="${esc(g.phone)}" placeholder="+1 817 555 1234"></div><div class="wz-field"><label>Business name <span class="hint">so she knows who she's calling about</span></label><input class="wz-inp" id="wz-cm-name" value="${esc($("#wz-q").value||g.query)}" placeholder="Bella Hair Studio"></div></div><button class="btn primary" id="wz-cm-go">Call me now</button><div class="wz-msg" id="wz-cm-msg"></div>`;
+    document.querySelectorAll('[data-olang]').forEach(c=>c.onclick=async()=>{ g.ownerLang=c.dataset.olang; g.langs=Array.from(new Set([...(g.langs||['en']), g.ownerLang])); await wzPersist({ owner_language:g.ownerLang }); try{ await db.from('users').update({ language:g.ownerLang }).eq('id',state.owner.id); }catch(_e){} WZ_RENDER[0](); if(g.ownerLang!=='en'){ const b=$("#wz-call-me"); if(b) b.click(); } });
+    $("#wz-call-me").onclick=()=>{ const b=$("#wz-call-box"); b.style.display='block'; const es=(g.ownerLang||'en')==='es'; b.innerHTML=`<div class="wz-row2"><div class="wz-field"><label>${es?'Su celular':'Your mobile'}</label><input class="wz-inp" id="wz-cm-phone" value="${esc(g.phone)}" placeholder="+1 817 555 1234"></div><div class="wz-field"><label>${es?'Nombre del negocio':'Business name'} <span class="hint">${es?'para que sepa de quién se trata':'so she knows who she\'s calling about'}</span></label><input class="wz-inp" id="wz-cm-name" value="${esc($("#wz-q").value||g.query)}" placeholder="Bella Hair Studio"></div></div><button class="btn primary" id="wz-cm-go">${es?'Llámeme ahora':'Call me now'}</button><div class="wz-msg" id="wz-cm-msg"></div>`;
       $("#wz-cm-go").onclick=async()=>{ const ph=normPhone($("#wz-cm-phone").value), nm=$("#wz-cm-name").value.trim(); const m=$("#wz-cm-msg"); if(!/^\+1\d{10}$/.test(ph)){ m.style.color='var(--danger)'; m.textContent='Enter a US mobile number.'; return; } const b=$("#wz-cm-go"); b.disabled=true; b.textContent='Calling…';
         g.phone=ph; if(nm){ g.query=nm; await db.from('accounts').update({ name:nm }).eq('id',state.account.id); state.account.company=nm; }
         await db.from('users').update({ phone:ph }).eq('id',state.owner.id); state.owner.phone=ph;
-        const r=await setupApi({ action:'phone_setup_start', to:ph }); if(!r.ok){ m.style.color='var(--danger)'; m.textContent=r.error==='no_outbound'?'Calling isn\'t switched on yet. Use the screen setup for now.':('Could not place the call: '+(r.error||'')); b.disabled=false; b.textContent='Call me now'; return; }
+        const r=await setupApi({ action:'phone_setup_start', to:ph, language:g.ownerLang||'en' }); if(!r.ok){ m.style.color='var(--danger)'; m.textContent=r.error==='no_outbound'?'Calling isn\'t switched on yet. Use the screen setup for now.':('Could not place the call: '+(r.error||'')); b.disabled=false; b.textContent='Call me now'; return; }
         g.callId=r.call_id; await wzPersist({ phone_setup_call_id:r.call_id }); wzPhoneSetupWait(); };
     };
     wzBindNav(async()=>{
@@ -5949,10 +5951,10 @@ const WZ_RENDER={
         <p style="font-size:13px;color:var(--muted);margin:0 0 8px">Connect Google or Outlook and ${esc(g.aname)} books straight onto your calendar and brings your contacts in — no export, no spreadsheet.</p>
         <div style="display:flex;gap:8px;flex-wrap:wrap"><button class="btn sm" id="wz-gcal">Connect Google</button><button class="btn sm" id="wz-mcal">Connect Outlook</button></div>
       </div>
-      <div class="wz-field" style="margin-top:14px"><label>Speaks</label><div id="wz-langs">${[['en','English'],['es','Spanish'],['vi','Vietnamese'],['zh','Chinese'],['ko','Korean']].map(l=>`<span class="wz-chip ${((state.assistant&&state.assistant.languages)||['en']).includes(l[0])?'sel':''}" data-lang="${l[0]}">${l[1]}</span>`).join('')}</div><div class="hint" style="font-size:12px;color:var(--muted)">She switches when the caller does.</div></div>
+      <div class="wz-field" style="margin-top:14px"><label>Speaks</label><div id="wz-langs">${[['en','English'],['es','Spanish'],['vi','Vietnamese'],['zh','Chinese'],['ko','Korean']].map(l=>`<span class="wz-chip ${(((state.assistant&&state.assistant.languages)||['en']).includes(l[0])||(g.ownerLang&&g.ownerLang===l[0]))?'sel':''}" data-lang="${l[0]}">${l[1]}</span>`).join('')}</div><div class="hint" style="font-size:12px;color:var(--muted)">She switches when the caller does.</div></div>
       <div class="wz-msg" id="wz-m"></div>
     `,{nextLabel:'Sounds good'});
-    const langs=new Set((state.assistant&&state.assistant.languages)||['en']);
+    const langs=new Set([...((state.assistant&&state.assistant.languages)||['en']), ...(g.ownerLang&&g.ownerLang!=='en'?[g.ownerLang]:[])]);
     document.querySelectorAll('[data-lang]').forEach(c=>c.onclick=()=>{ const l=c.dataset.lang; if(langs.has(l)&&langs.size>1) langs.delete(l); else langs.add(l); c.classList.toggle('sel',langs.has(l)); });
     $("#wz-aname").oninput=()=>{ g.aname=$("#wz-aname").value.trim()||DEFAULT_NAME; };
     $("#wz-gcal").onclick=async()=>{ await wzPersist({}); connectCalendar('google'); }; $("#wz-mcal").onclick=async()=>{ await wzPersist({}); connectCalendar('microsoft'); };
