@@ -27,7 +27,7 @@ async function sendText(accountId: string, to: string, body: string): Promise<bo
 // Ordered list of {user_id, phone, name} to page, de-duplicated, owner last.
 async function ladder(acct: any): Promise<{ user_id: string | null; phone: string; name: string }[]> {
   const ctr: any = acct.settings?.contractor || {};
-  const { data: users } = await supabase.from("users").select("id, full_name, phone, role").eq("account_id", acct.id);
+  const { data: users } = await supabase.from("users").select("id, full_name, phone, role").eq("account_id", acct.id).eq("is_active", true);
   const byId = new Map((users || []).map((u: any) => [u.id, u]));
   const out: { user_id: string | null; phone: string; name: string }[] = [];
   const push = (u: any) => { if (u?.phone && !out.some((o) => o.phone === u.phone)) out.push({ user_id: u.id || null, phone: String(u.phone).trim(), name: String(u.full_name || u.name || "").split(/\s+/)[0] || "tech" }); };
