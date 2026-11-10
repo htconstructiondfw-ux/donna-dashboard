@@ -3576,7 +3576,13 @@ function pmShortRef(){ return 'SR-'+Array.from({length:3},()=>Math.floor(Math.ra
 function pmFmtDate(d){ if(!d) return ''; try{ return new Date(d+(d.length<=10?'T00:00:00':'')).toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'}); }catch(_e){ return d; } }
 async function pmCall(action,payload){ try{ const { data, error }=await db.functions.invoke('pm-request',{ body:Object.assign({action},payload||{}) }); if(error) return { ok:false, error:error.message }; return data||{ok:false}; }catch(e){ return { ok:false, error:String(e) }; } }
 
-async function loadProperties(){ const { data }=await db.from('properties').select('*').eq('account_id',state.account.id).order('name'); state.pm=state.pm||{}; state.pm.props=data||[]; }
+async function loadProperties(){
+  const { data }=await db.from('properties').select('*').eq('account_id',state.account.id).order('name'); state.pm=state.pm||{};
+  let props=data||[];
+  // Team members (property managers) see the properties assigned to them, plus homes inside a community they manage and unassigned ones.
+  if(!isManager()){ const me=state.owner.id; const mine=new Set(props.filter(p=>p.manager_user_id===me).map(p=>p.id)); props=props.filter(p=>p.manager_user_id===me || (!p.manager_user_id && (!p.parent_property_id || mine.has(p.parent_property_id) || !props.some(q=>q.id===p.parent_property_id && q.manager_user_id)))); }
+  state.pm.props=props;
+}
 
 // ===================== Real estate: listings, leads & documents =====================
 const RE_LISTING_TYPES=[["for_sale","For sale"],["for_rent","For rent"],["for_lease","For lease (commercial)"]];
