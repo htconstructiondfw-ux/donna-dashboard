@@ -10,6 +10,7 @@
 //     features.crew_text) go to crew-text first on both paths: OMW / DONE / LATE / TODAY / photos.
 // v12: tenant-number path converses (msg-brain) ONLY when settings.sms.two_way && two_way_verified; otherwise it
 //     acknowledges inline and forwards to the owner. Notifications always leave via the toll-free (see msg-send).
+// v17: an owner/admin replying to a setup question Donna texted (settings.onboarding.pending_question) is filed via setup/answer.
 // verify_jwt = false because Twilio authenticates by signature.
 
 import "jsr:@supabase/functions-js/edge-runtime.d.ts";
@@ -81,6 +82,24 @@ async function findCrew(sb: any, from: string, accountId?: string): Promise<{ us
 async function handleShared(sb: any, from: string, bodyText: string, upper: string, media: string[]): Promise<Response> {
   const fromL10 = last10(from);
   if (fromL10.length !== 10) return xml();
+
+  // Owner answering a setup question Donna texted them (settings.onboarding.pending_question). File it, ask the next one.
+  if (bodyText) {
+    try {
+      const { data: owners } = await sb.from("users").select("id, account_id, phone, role, accounts!inner(settings)").not("phone", "is", null).eq("is_active", true).in("role", ["owner", "admin", "manager"]).limit(400);
+      const own = (owners || []).find((u: any) => last10(u.phone) === fromL10 && u.accounts?.settings?.onboarding?.pending_question);
+      if (own) {
+        const key = String(own.accounts.settings.onboarding.pending_question);
+        const a = await invoke("setup", { action: "answer", key, text: bodyText, user_id: own.id });
+        let reply = a?.ok ? String(a.note || "Got it, thanks.") : "Got it, thanks.";
+        const q = await invoke("setup", { action: "queue", user_id: own.id });
+        const next = (q?.items || []).find((i: any) => i.kind !== "link" && !i.asked_at);
+        if (next) { await invoke("setup", { action: "ask", key: next.key, user_id: own.id }); }
+        else reply += " That's everything I needed for now.";
+        return xml(reply);
+      }
+    } catch (e) { console.error("setup answer", String(e)); }
+  }
 
   // Crew member texting the shared number: run it as a command.
   const crew = await findCrew(sb, from);

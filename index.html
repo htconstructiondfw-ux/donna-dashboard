@@ -2165,6 +2165,7 @@ function pageToday(){
     <div class="page-head"><h1>Today</h1><p>${esc(dateLbl)} · ${mgr?(team?'everyone’s day at a glance':'your day at a glance'):'your day at a glance'}. Times in ${esc(tzLabel(tz))}.</p>
       <div class="td-sum"><div><b>${today.length}</b>${today.length===1?'appointment':'appointments'}</div><div><b>${today.filter(a=>new Date(a.start).getTime()>now).length}</b>still to come</div><div><b>${today.filter(a=>a.allergies).length}</b>with an allergy flag</div>${next?`<div><b style="font-size:15px;margin-top:3px">${esc(fmtAppt(next.start,false))}</b>next: ${esc(next.clientName||next.title||'')}</div>`:''}</div>
     </div>
+    ${mgr?'<div id="setup-queue"></div>':''}
     <div class="card"><div class="card-h"><h2>Schedule</h2><div style="display:flex;gap:8px"><button class="btn sm" id="td-refresh">Refresh</button>${mgr?'':`<button class="btn sm" data-v="schedule" id="td-block">Block time</button>`}</div></div>
       ${today.length?sections:`<div class="empty">${I.clock}<div>Nothing on the books today.${bookingOn?' Your booking link is live, so clients can still grab a spot.':''}</div></div>`}
     </div>
@@ -2172,6 +2173,7 @@ function pageToday(){
   </div>`;
   $("#td-refresh").onclick=async()=>{ const b=$("#td-refresh"); b.disabled=true; b.textContent='…'; await loadAppointments(); pageToday(); };
   bindCheckout();
+  if(mgr) paintSetupQueue();
   document.querySelectorAll('#page [data-v]').forEach(b=>b.onclick=()=>{ state.view=b.dataset.v; renderPage(); });
   document.querySelectorAll('#page [data-goappt]').forEach(b=>b.onclick=()=>{ state.view='appointments'; state._calSel=todayKey; renderPage(); });
   document.querySelectorAll('#page [data-late]').forEach(b=>b.onclick=()=>{ const el=document.getElementById('td-late-'+b.dataset.late); if(el) el.style.display=el.style.display==='none'?'flex':'none'; });
@@ -5692,13 +5694,16 @@ I understand that:
 
 Signed electronically. A copy of this agreement and its signing record is texted or emailed to me.`;
 const WZ_INDUSTRIES=[["property_management","Property management"],["hair_salon","Hair salon"],["nail_salon","Nail salon"],["barbershop","Barbershop"],["spa","Spa or skin care"],["lash_brow","Lash & brow"],["restaurant","Restaurant"],["contractor","Contractor or trades"],["real_estate","Real estate"],["professional","Professional services"],["other","Something else"]];
-const WZ_TITLES=["Welcome","Your business","Your assistant","Hours","Knowledge","Appointments","Calls","Notifications","Go live"];
+// ---------- Setup wizard v2: "Donna proposes, you confirm" ----------
+// One engine for every vertical. Donna finds the business (Google listing + website) and shows a confirm card; the owner taps
+// through; the phone is the only step that truly needs them; Donna calls them at the end. Anything unconfirmed goes to the
+// "Donna asks you later" queue on Today (she texts one question at a time) — so there is nothing to skip and come back to.
+const WZ_TITLES=["Welcome","Confirm","Meet Donna","Your number","Try her"];
 const WZ_TZ=[["America/New_York","Eastern"],["America/Chicago","Central"],["America/Denver","Mountain"],["America/Phoenix","Arizona"],["America/Los_Angeles","Pacific"],["America/Anchorage","Alaska"],["Pacific/Honolulu","Hawaii"]];
 function obState(){ return (state.account&&state.account.settings&&state.account.settings.onboarding)||null; }
 function needsOnboarding(){
   const ob=obState();
   if(ob && typeof ob.completed==='boolean') return ob.completed===false;
-  // No flag yet: only a brand-new account with nothing configured starts the wizard.
   return !state.assistantId && (!state.types||!state.types.length) && (!state.blocks||!state.blocks.length);
 }
 async function wzPersist(patch){
@@ -5709,26 +5714,27 @@ async function wzPersist(patch){
   if(!error) state.account.settings=settings;
   return !error;
 }
+async function setupApi(body){ const { data, error }=await db.functions.invoke("setup",{ body }); if(error){ let msg=error.message||'error'; try{ const j=await error.context.json(); msg=j.message||j.error||msg; }catch(_e){} return { ok:false, error:msg }; } return data||{ ok:false, error:'empty' }; }
 function wzShell(body,opts){
   opts=opts||{};
-  const step=state.wizStep||0, total=8;
+  const step=state.wizStep||0, total=WZ_TITLES.length-1;
   const dots=WZ_TITLES.map((t,i)=>`<span class="wz-dot ${i<step?'done':''} ${i===step?'cur':''}"></span>`).join("");
-  const footer = step===0
-    ? `<button class="btn primary" id="wz-next">Get started</button>`
+  const footer = opts.noFooter ? '' : (step===0
+    ? `<button class="btn primary" id="wz-next">${esc(opts.nextLabel||'Find my business')}</button>`
     : `<div class="wz-foot">
-         <button class="btn sm" id="wz-back">Back</button>
+         ${opts.noBack?'<span></span>':'<button class="btn sm" id="wz-back">Back</button>'}
          <div style="margin-left:auto;display:flex;gap:8px;align-items:center">
-           ${opts.canSkip?`<button class="btn sm ghost" id="wz-skip">Skip for now</button>`:''}
-           <button class="btn primary" id="wz-next">${esc(opts.nextLabel||'Save and continue')}</button>
+           ${opts.altLabel?`<button class="btn sm ghost" id="wz-alt">${esc(opts.altLabel)}</button>`:''}
+           <button class="btn primary" id="wz-next">${esc(opts.nextLabel||'Looks right')}</button>
          </div>
-       </div>`;
+       </div>`);
   return `
   <style>
-    .wz-wrap{max-width:620px;margin:0 auto;padding:40px 20px 80px}
-    .wz-top{display:flex;align-items:center;gap:10px;margin-bottom:22px}
+    .wz-wrap{max-width:640px;margin:0 auto;padding:36px 20px 80px}
+    .wz-top{display:flex;align-items:center;gap:10px;margin-bottom:20px}
     .wz-mark{width:34px;height:34px;border-radius:9px;background:var(--accent,#2f6f4f);color:#fff;display:flex;align-items:center;justify-content:center;font-weight:700}
     .wz-dots{display:flex;gap:6px;margin:0 0 6px}
-    .wz-dot{width:22px;height:4px;border-radius:3px;background:var(--line,#e4e7ea)}
+    .wz-dot{width:26px;height:4px;border-radius:3px;background:var(--line,#e4e7ea)}
     .wz-dot.done{background:var(--accent,#2f6f4f)} .wz-dot.cur{background:var(--accent,#2f6f4f);opacity:.55}
     .wz-step{font-size:12.5px;color:var(--muted);font-weight:600;text-transform:uppercase;letter-spacing:.05em}
     .wz-card{background:var(--surface,#fff);border:1px solid var(--line,#e4e7ea);border-radius:14px;padding:26px}
@@ -5736,7 +5742,6 @@ function wzShell(body,opts){
     .wz-field{margin-bottom:16px} .wz-field label{display:block;font-weight:600;font-size:13.5px;margin-bottom:6px}
     .wz-field .hint{font-weight:400;color:var(--muted);font-size:12.5px}
     .wz-inp,.wz-sel,.wz-ta{width:100%;padding:11px 12px;border:1px solid var(--line,#e4e7ea);border-radius:9px;font:inherit;font-size:14.5px;background:var(--surface,#fff);color:var(--ink,#111)}
-    .wz-ta{min-height:92px;resize:vertical}
     .wz-foot{display:flex;align-items:center;margin-top:24px}
     .wz-choices{display:grid;grid-template-columns:1fr 1fr;gap:10px}
     .wz-choice{border:1px solid var(--line,#e4e7ea);border-radius:10px;padding:13px 14px;cursor:pointer;font-weight:600;font-size:14px}
@@ -5747,329 +5752,307 @@ function wzShell(body,opts){
     .wz-msg{font-size:12.5px;margin-top:8px;min-height:16px}
     .wz-skiplink{display:block;text-align:center;margin-top:16px;color:var(--muted);font-size:12.5px;background:none;border:0;cursor:pointer;width:100%}
     .btn.ghost{background:transparent}
+    .wz-sec{border-top:1px solid var(--line-2,#eef0f2);padding-top:14px;margin-top:14px}
+    .wz-sec h3{font-size:13px;margin:0 0 8px;color:var(--muted);font-weight:700;text-transform:uppercase;letter-spacing:.04em;display:flex;justify-content:space-between;align-items:center}
+    .wz-sec h3 .src{font-weight:500;text-transform:none;letter-spacing:0;font-size:12px}
+    .wz-kv{font-size:14px;line-height:1.7} .wz-kv b{display:inline-block;min-width:76px;color:var(--muted);font-weight:600;font-size:12.5px}
+    .wz-ed{border:0;background:transparent;color:var(--accent,#2f6f4f);font:inherit;font-size:12.5px;font-weight:600;cursor:pointer;padding:0 4px}
+    .wz-svc{display:grid;grid-template-columns:auto 1fr 90px 80px;gap:6px 10px;align-items:center;font-size:13.5px;padding:5px 0;border-bottom:1px solid var(--line-2,#eef0f2)}
+    .wz-svc input[type=text]{padding:5px 8px;font-size:13px;border:1px solid var(--line,#e4e7ea);border-radius:7px;width:100%;font:inherit}
+    .wz-svc .dur{font-size:12px;color:var(--muted)}
+    .wz-chip{display:inline-block;border:1px solid var(--line,#e4e7ea);border-radius:999px;padding:5px 11px;font-size:12.5px;font-weight:600;cursor:pointer;margin:0 6px 6px 0}
+    .wz-chip.sel{border-color:var(--accent,#2f6f4f);background:#f3f9f5;color:var(--accent,#2f6f4f)}
+    .wz-faq{font-size:13px;padding:6px 0;border-bottom:1px solid var(--line-2,#eef0f2);display:flex;gap:8px;align-items:flex-start}
+    .wz-faq b{display:block;font-size:13px} .wz-faq span{color:var(--muted)}
+    .wz-big{font-size:26px;font-weight:800;letter-spacing:.02em;font-family:ui-monospace,SFMono-Regular,Menlo,monospace}
+    .wz-code{display:flex;align-items:center;gap:10px;background:#f6f7f8;border:1px solid var(--line,#e4e7ea);border-radius:10px;padding:10px 12px;margin:8px 0;font-size:14px}
+    .wz-code code{font-size:17px;font-weight:700;font-family:ui-monospace,SFMono-Regular,Menlo,monospace;flex:1}
+    .wz-pulse{display:inline-block;width:10px;height:10px;border-radius:50%;background:var(--accent,#2f6f4f);animation:wzp 1.2s infinite;margin-right:8px}
+    @keyframes wzp{0%{opacity:.3}50%{opacity:1}100%{opacity:.3}}
+    .wz-or{display:flex;align-items:center;gap:10px;color:var(--muted);font-size:12.5px;margin:18px 0 10px} .wz-or:before,.wz-or:after{content:"";flex:1;border-top:1px solid var(--line-2,#eef0f2)}
   </style>
   <div class="wz-wrap">
-    <div class="wz-top"><div class="wz-mark">${esc(DEFAULT_NAME[0])}</div><div><div class="wz-dots">${dots}</div><div class="wz-step">${step===0?'Welcome':('Step '+step+' of '+total+' · '+esc(WZ_TITLES[step]))}</div></div></div>
+    <div class="wz-top"><div class="wz-mark">${esc(DEFAULT_NAME[0])}</div><div><div class="wz-dots">${dots}</div><div class="wz-step">${step===0?'Set up in about two minutes':('Step '+step+' of '+total+' · '+esc(WZ_TITLES[step]))}</div></div></div>
     <div class="wz-card">${body}</div>
     ${footer?`<div>${footer}</div>`:''}
-    ${step>0?`<button class="wz-skiplink" id="wz-exit">Save and finish later</button>`:''}
+    ${step>0&&!opts.noExit?`<button class="wz-skiplink" id="wz-exit">Save and finish later — ${esc(DEFAULT_NAME)} will text you the rest</button>`:''}
   </div>`;
 }
 function wzBindNav(saveFn,opts){
   opts=opts||{};
   const next=$("#wz-next"); if(next) next.onclick=async()=>{
-    next.disabled=true; const o=next.textContent; next.textContent="Saving…";
-    let ok=true; if(saveFn){ ok=await saveFn(); }
-    if(!ok){ next.disabled=false; next.textContent=o; return; }
+    next.disabled=true; const o=next.textContent; next.textContent=opts.busyLabel||"Saving…";
+    let ok=true; if(saveFn){ try{ ok=await saveFn(); }catch(e){ console.error(e); ok=false; } }
+    if(ok===false){ next.disabled=false; next.textContent=o; return; }
+    if(ok==='stay'){ next.disabled=false; next.textContent=o; return; }
     state.wizStep=(state.wizStep||0)+1; await wzPersist({}); renderWizard();
   };
   const back=$("#wz-back"); if(back) back.onclick=async()=>{ state.wizStep=Math.max(0,(state.wizStep||0)-1); await wzPersist({}); renderWizard(); };
-  const skip=$("#wz-skip"); if(skip) skip.onclick=async()=>{ state.wizStep=(state.wizStep||0)+1; await wzPersist({}); renderWizard(); };
-  const exit=$("#wz-exit"); if(exit) exit.onclick=async()=>{ await wzPersist({}); renderApp(); };
+  const alt=$("#wz-alt"); if(alt&&opts.onAlt) alt.onclick=opts.onAlt;
+  const exit=$("#wz-exit"); if(exit) exit.onclick=async()=>{ await wzPersist({}); await wzFinish(true); };
 }
 function renderWizard(){
   if(typeof teardownRealtime==='function') teardownRealtime();
-  if(typeof state.wizStep!=='number'){ const ob=obState(); state.wizStep=(ob&&typeof ob.step==='number')?ob.step:0; }
-  if(!state.wz){ state.wz={
-    industry: state.account.industry||'',
-    pmTypes: ((state.account.settings&&Array.isArray(state.account.settings.property_types))?state.account.settings.property_types.slice():[]),
-    trades: ((state.account.settings&&Array.isArray(state.account.settings.trades))?state.account.settings.trades.slice():[]),
-    company: state.account.company||'',
-    tz: state.account.timezone||'America/Chicago',
-    owner: (state.owner&&state.owner.name)||'',
-    phone: (state.owner&&state.owner.phone)||'',
-    aname: (state.assistant&&state.assistant.name)||DEFAULT_NAME,
-    glabel: (state.assistant&&state.assistant.greetingLabel)||(state.account.company||'the office'),
-    voice: (state.assistant&&state.assistant.voice)||'warm-female',
-    openq: (state.assistant&&state.assistant.routing&&state.assistant.routing.opening_question)||'',
-    days: [false,true,true,true,true,true,false],
-    hstart:'09:00', hend:'17:00',
-    xfer_on:false, xfer_num:'',
-    alert: (state.account.settings&&state.account.settings.alert_email)||(state.owner&&state.owner.email)||'',
-    kb_done:false, kb_count:0
+  if(typeof state.wizStep!=='number'){ const ob=obState(); state.wizStep=(ob&&typeof ob.step==='number')?Math.min(ob.step, WZ_TITLES.length-1):0; }
+  if(!state.wz){ const ob=obState()||{}; state.wz={
+    query: state.account.company||'', website:(state.account.settings&&state.account.settings.business&&state.account.settings.business.website)||'',
+    owner:(state.owner&&state.owner.name)||'', phone:(state.owner&&state.owner.phone)||'',
+    proposal: ob.proposal_draft||null, applied: !!ob.proposal_applied_at,
+    voice:(state.assistant&&state.assistant.voice)||'warm-female', aname:(state.assistant&&state.assistant.name)||DEFAULT_NAME,
+    industry: state.account.industry||'', carrier:'att_wireless', mode:'forward'
   }; }
   const step=state.wizStep||0;
   (WZ_RENDER[step]||WZ_RENDER[0])();
 }
+const WZ_IND_LABEL={ property_management:"Property management", hair_salon:"Hair salon", nail_salon:"Nail salon", barbershop:"Barbershop", spa:"Spa or skin care", lash_brow:"Lash & brow", restaurant:"Restaurant", contractor:"Contractor or trades", real_estate:"Real estate", professional:"Professional services", other:"Something else" };
+function wzIndustryChips(cur){ return WZ_INDUSTRIES.map(x=>`<span class="wz-chip ${cur===x[0]?'sel':''}" data-ind="${x[0]}">${esc(x[1])}</span>`).join(''); }
 const WZ_RENDER={
+  // 0 — one question. Donna goes and finds the rest.
   0:function(){
     const g=state.wz;
     document.getElementById("root").innerHTML=wzShell(`
-      <h1>Let's set up ${esc(DEFAULT_NAME)}.</h1>
-      <p class="lede">${esc(DEFAULT_NAME)} is your AI receptionist. In a few short steps you'll tell her about your business, how to answer, and when you're available. You can stop any time and pick up where you left off. Your phone number stays private until you finish and go live.</p>
-      <div class="wz-field"><label>What kind of business is this? <span class="hint">helps ${esc(DEFAULT_NAME)} start with the right setup</span></label>
-      <div class="wz-choices" id="wz-ind">${WZ_INDUSTRIES.map(x=>`<div class="wz-choice ${g.industry===x[0]?'sel':''}" data-v="${x[0]}">${esc(x[1])}</div>`).join("")}</div></div>
-      <div class="wz-field" id="wz-trade-wrap" style="display:${g.industry==='contractor'?'block':'none'}"><label>What's your trade? <span class="hint">${esc(DEFAULT_NAME)} loads the right questions, emergencies and reminders for it</span></label>
-      <div class="wz-choices" id="wz-trades">${WZ_TRADES.map(x=>`<div class="wz-choice ${(g.trades||[]).includes(x[0])?'sel':''}" data-v="${x[0]}">${esc(x[1])}</div>`).join("")}</div></div>
-      <div class="wz-field" id="wz-pmtypes-wrap" style="display:${g.industry==='property_management'?'block':'none'}"><label>What do you manage? <span class="hint">pick all that apply — each works differently</span></label>
-      <div class="wz-choices" id="wz-pmtypes">${WZ_PM_TYPES.map(x=>`<div class="wz-choice ${(g.pmTypes||[]).includes(x[0])?'sel':''}" data-v="${x[0]}"><b style="display:block">${esc(x[1])}</b><span style="font-size:12px;color:var(--muted);font-weight:400">${esc(x[2])}</span></div>`).join("")}</div></div>
-      <div id="wz-re-wrap" style="display:${g.industry==='real_estate'?'block':'none'}">
-        <div class="wz-field"><label>What do you work with? <span class="hint">pick all that apply</span></label>
-        <div class="wz-choices" id="wz-relines">${WZ_RE_LINES.map(x=>`<div class="wz-choice ${(g.reLines||[]).includes(x[0])?'sel':''}" data-v="${x[0]}"><b style="display:block">${esc(x[1])}</b><span style="font-size:12px;color:var(--muted);font-weight:400">${esc(x[2])}</span></div>`).join("")}</div></div>
-        <div class="wz-field"><label class="chk" style="display:flex;gap:8px;align-items:center;font-weight:500"><input type="checkbox" id="wz-re-manage" ${g.reManages?'checked':''}> I also manage rentals for owners <span class="hint">adds ${esc(DEFAULT_NAME)}'s property-management tools: tenant repair calls, vendors, visits</span></label></div>
-        <div class="wz-row2">
-          <div class="wz-field"><label>Your license # <span class="hint">TREC, shown on documents</span></label><input class="wz-inp" id="wz-re-lic" value="${esc(g.reLicense||'')}" placeholder="0123456"></div>
-          <div class="wz-field"><label>Sponsoring broker</label><input class="wz-inp" id="wz-re-broker" value="${esc(g.reBroker||'')}" placeholder="Acme Realty, LLC"></div>
-        </div>
-        <div class="wz-field"><label>Link to your IABS form <span class="hint">optional — ${esc(DEFAULT_NAME)} texts it after the first real conversation with a buyer, seller or renter</span></label><input class="wz-inp" id="wz-re-iabs" value="${esc(g.reIabs||'')}" placeholder="https://…/iabs.pdf"></div>
+      <h1>Hi, I'm ${esc(DEFAULT_NAME)}. What's your business called?</h1>
+      <p class="lede">I'll look you up, read your website and your Google listing, and set myself up from what's already out there. You just tell me what's right. About two minutes.</p>
+      <div class="wz-field"><label>Business name <span class="hint">or paste your website</span></label><input class="wz-inp" id="wz-q" value="${esc(g.query)}" placeholder="e.g. Bella Hair Studio, Arlington"></div>
+      <div class="wz-field"><label>Website <span class="hint">optional — helps me get services and prices exactly right</span></label><input class="wz-inp" id="wz-web" value="${esc(g.website)}" placeholder="yourbusiness.com"></div>
+      <div class="wz-msg" id="wz-m"></div>
+      <div class="wz-or">or</div>
+      <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap">
+        <button class="btn sm" id="wz-call-me">Have ${esc(DEFAULT_NAME)} call me and set it up by phone</button>
+        <span class="hint" style="font-size:12.5px;color:var(--muted)">Three minutes, no typing. She asks, you answer.</span>
       </div>
-    `,{});
-    document.querySelectorAll('#wz-ind .wz-choice').forEach(el=>el.onclick=()=>{ state.wz.industry=el.dataset.v; document.querySelectorAll('#wz-ind .wz-choice').forEach(c=>c.classList.toggle('sel',c===el)); const w=$("#wz-pmtypes-wrap"); if(w) w.style.display=el.dataset.v==='property_management'?'block':'none'; const tw=$("#wz-trade-wrap"); if(tw) tw.style.display=el.dataset.v==='contractor'?'block':'none'; const rw=$("#wz-re-wrap"); if(rw) rw.style.display=el.dataset.v==='real_estate'?'block':'none'; });
-    document.querySelectorAll('#wz-relines .wz-choice').forEach(el=>el.onclick=()=>{ const v=el.dataset.v; const cur=new Set(state.wz.reLines||[]); if(cur.has(v)) cur.delete(v); else cur.add(v); state.wz.reLines=[...cur]; el.classList.toggle('sel',cur.has(v)); });
-    const reM=$("#wz-re-manage"); if(reM) reM.onchange=()=>{ state.wz.reManages=reM.checked; };
-    ['lic','broker','iabs'].forEach(k=>{ const i=$("#wz-re-"+k); if(i) i.oninput=()=>{ state.wz[{lic:'reLicense',broker:'reBroker',iabs:'reIabs'}[k]]=i.value.trim(); }; });
-    document.querySelectorAll('#wz-trades .wz-choice').forEach(el=>el.onclick=()=>{ const v=el.dataset.v; const cur=new Set(state.wz.trades||[]); if(cur.has(v)) cur.delete(v); else cur.add(v); state.wz.trades=[...cur]; el.classList.toggle('sel',cur.has(v)); });
-    document.querySelectorAll('#wz-pmtypes .wz-choice').forEach(el=>el.onclick=()=>{ const v=el.dataset.v; const cur=new Set(state.wz.pmTypes||[]); if(cur.has(v)) cur.delete(v); else cur.add(v); state.wz.pmTypes=[...cur]; el.classList.toggle('sel',cur.has(v)); });
-    wzBindNav(async()=>{ if(state.wz.industry==='property_management' && !(state.wz.pmTypes||[]).length){ const w=$("#wz-pmtypes-wrap"); if(w){ w.scrollIntoView({behavior:'smooth',block:'center'}); w.style.outline='2px solid var(--danger)'; w.style.borderRadius='10px'; setTimeout(()=>{ w.style.outline=''; },1800); } return false; } return true; },{});
+      <div id="wz-call-box" style="display:none;margin-top:12px"></div>
+    `,{nextLabel:'Find my business'});
+    $("#wz-q").onkeydown=e=>{ if(e.key==='Enter') $("#wz-next").click(); };
+    $("#wz-call-me").onclick=()=>{ const b=$("#wz-call-box"); b.style.display='block'; b.innerHTML=`<div class="wz-row2"><div class="wz-field"><label>Your mobile</label><input class="wz-inp" id="wz-cm-phone" value="${esc(g.phone)}" placeholder="+1 817 555 1234"></div><div class="wz-field"><label>Business name <span class="hint">so she knows who she's calling about</span></label><input class="wz-inp" id="wz-cm-name" value="${esc($("#wz-q").value||g.query)}" placeholder="Bella Hair Studio"></div></div><button class="btn primary" id="wz-cm-go">Call me now</button><div class="wz-msg" id="wz-cm-msg"></div>`;
+      $("#wz-cm-go").onclick=async()=>{ const ph=normPhone($("#wz-cm-phone").value), nm=$("#wz-cm-name").value.trim(); const m=$("#wz-cm-msg"); if(!/^\+1\d{10}$/.test(ph)){ m.style.color='var(--danger)'; m.textContent='Enter a US mobile number.'; return; } const b=$("#wz-cm-go"); b.disabled=true; b.textContent='Calling…';
+        g.phone=ph; if(nm){ g.query=nm; await db.from('accounts').update({ name:nm }).eq('id',state.account.id); state.account.company=nm; }
+        await db.from('users').update({ phone:ph }).eq('id',state.owner.id); state.owner.phone=ph;
+        const r=await setupApi({ action:'phone_setup_start', to:ph }); if(!r.ok){ m.style.color='var(--danger)'; m.textContent=r.error==='no_outbound'?'Calling isn\'t switched on yet. Use the screen setup for now.':('Could not place the call: '+(r.error||'')); b.disabled=false; b.textContent='Call me now'; return; }
+        g.callId=r.call_id; await wzPersist({ phone_setup_call_id:r.call_id }); wzPhoneSetupWait(); };
+    };
+    wzBindNav(async()=>{
+      const q=$("#wz-q").value.trim(), web=$("#wz-web").value.trim(); const m=$("#wz-m");
+      if(!q&&!web){ m.style.color='var(--danger)'; m.textContent='Tell me the name or paste your website.'; return false; }
+      g.query=q||web.replace(/^https?:\/\//,'').replace(/\/.*$/,''); g.website=web;
+      m.style.color='var(--muted)'; m.innerHTML='<span class="wz-pulse"></span>Looking you up and reading your site… this takes about 20 seconds.';
+      const r=await setupApi({ action:'lookup', query:g.query, website:web });
+      if(!r.ok||!r.proposal){ m.style.color='var(--danger)'; m.textContent='I couldn\'t look that up just now. Try again, or add your website.'; return false; }
+      g.proposal=r.proposal; g.proposal.owner={ name:g.owner, phone:g.phone }; if(!g.proposal.industry||g.proposal.industry==='other') g.proposal.industry=g.industry||'other';
+      g.hasPlaces=!!r.has_places; await wzPersist({ proposal_draft:g.proposal });
+      return true;
+    },{busyLabel:'Looking…'});
   },
+  // 1 — the confirm card. Everything Donna found, editable inline. One tap saves it all.
   1:function(){
-    const g=state.wz;
+    const g=state.wz; const p=g.proposal;
+    if(!p){ state.wizStep=0; renderWizard(); return; }
+    const b=p.business||{}; const h=p.hours||{days:[false,true,true,true,true,true,false],open:'09:00',close:'17:00'};
+    const srcTxt=p.sources&&p.sources.google&&p.sources.website?'from your Google listing and website':(p.sources&&p.sources.google?'from your Google listing':(p.sources&&p.sources.website?'from your website':'nothing found online — fill in the basics'));
+    const cand=(p.candidates||[]).length>1?`<div style="font-size:12.5px;color:var(--muted);margin-top:6px">Not this one? ${(p.candidates||[]).slice(0,4).map((c,i)=>`<button class="wz-ed" data-cand="${i}">${esc(c.name)}${c.city?' · '+esc(c.city):''}</button>`).join(' ')}</div>`:'';
     document.getElementById("root").innerHTML=wzShell(`
-      <h1>Your business</h1>
-      <p class="lede">The basics ${esc(DEFAULT_NAME)} needs to represent you.</p>
-      <div class="wz-field"><label>Business name</label><input class="wz-inp" id="wz-company" value="${esc(g.company)}" placeholder="Acme Property Management"></div>
-      <div class="wz-row2">
-        <div class="wz-field"><label>Your name</label><input class="wz-inp" id="wz-owner" value="${esc(g.owner)}" placeholder="Jordan Lee"></div>
-        <div class="wz-field"><label>Your mobile <span class="hint">optional</span></label><input class="wz-inp" id="wz-phone" value="${esc(g.phone)}" placeholder="+18175551234"></div>
+      <h1>Here's what I found. Right?</h1>
+      <p class="lede">Pulled ${srcTxt}. Tap anything to fix it; the rest I'll take as confirmed. Prices and hours can always be changed later from the dashboard.</p>
+      <div class="wz-sec" style="border-top:0;padding-top:0;margin-top:0"><h3>Business</h3>
+        <div class="wz-row2">
+          <div class="wz-field"><label>Name</label><input class="wz-inp" id="wz-bname" value="${esc(b.name||g.query)}"></div>
+          <div class="wz-field"><label>Business phone <span class="hint">the one customers call</span></label><input class="wz-inp" id="wz-bphone" value="${esc(b.phone||'')}" placeholder="+1 817 555 0100"></div>
+        </div>
+        <div class="wz-field"><label>Address <span class="hint">optional</span></label><input class="wz-inp" id="wz-baddr" value="${esc(b.address||'')}" placeholder="street, city, state"></div>
+        <div class="wz-row2">
+          <div class="wz-field"><label>Website</label><input class="wz-inp" id="wz-bweb" value="${esc(b.website||'')}"></div>
+          <div class="wz-field"><label>Time zone</label><select class="wz-sel" id="wz-tz">${WZ_TZ.map(t=>`<option value="${t[0]}" ${(b.tz||'America/Chicago')===t[0]?'selected':''}>${esc(t[1])}</option>`).join('')}</select></div>
+        </div>
+        ${cand}
       </div>
-      <div class="wz-field"><label>Time zone</label><select class="wz-sel" id="wz-tz">${WZ_TZ.map(t=>`<option value="${t[0]}" ${g.tz===t[0]?'selected':''}>${esc(t[1])}</option>`).join("")}</select></div>
+      <div class="wz-sec"><h3>Kind of business</h3><div id="wz-ind">${wzIndustryChips(p.industry||'other')}</div>
+        <div id="wz-trades" style="display:${p.industry==='contractor'?'block':'none'};margin-top:6px"><div class="hint" style="font-size:12.5px;color:var(--muted);margin-bottom:6px">Trades</div>${WZ_TRADES.map(x=>`<span class="wz-chip ${(p.trades||[]).includes(x[0])?'sel':''}" data-trade="${x[0]}">${esc(x[1])}</span>`).join('')}</div>
+        <div id="wz-pmtypes" style="display:${p.industry==='property_management'?'block':'none'};margin-top:6px"><div class="hint" style="font-size:12.5px;color:var(--muted);margin-bottom:6px">What you manage</div>${WZ_PM_TYPES.map(x=>`<span class="wz-chip ${(p.pm_types||['residential']).includes(x[0])?'sel':''}" data-pm="${x[0]}">${esc(x[1])}</span>`).join('')}</div>
+        <div id="wz-relines" style="display:${p.industry==='real_estate'?'block':'none'};margin-top:6px"><div class="hint" style="font-size:12.5px;color:var(--muted);margin-bottom:6px">You work with</div>${WZ_RE_LINES.map(x=>`<span class="wz-chip ${(p.re_lines||['residential']).includes(x[0])?'sel':''}" data-re="${x[0]}">${esc(x[1])}</span>`).join('')}</div>
+      </div>
+      <div class="wz-sec"><h3>Hours <span class="src">${p.hours_source==='google'?'from Google':(p.hours_source==='website'?'from your site':'typical — change if needed')}</span></h3>
+        <div class="wz-days" id="wz-days">${DAYS.map((d,i)=>`<div class="wz-day ${h.days[i]?'on':''}" data-i="${i}">${d.slice(0,3)}</div>`).join('')}</div>
+        <div class="wz-row2" style="margin-top:8px"><div class="wz-field"><label>Opens</label><input class="wz-inp" type="time" id="wz-hopen" value="${esc(h.open||'09:00')}"></div><div class="wz-field"><label>Closes</label><input class="wz-inp" type="time" id="wz-hclose" value="${esc(h.close||'17:00')}"></div></div>
+        ${p.hours_text&&p.hours_source!=='google'?`<div class="hint" style="font-size:12px;color:var(--muted)">Your site says: “${esc(p.hours_text)}”</div>`:''}
+      </div>
+      <div class="wz-sec"><h3>What people book <span class="src">${(p.services||[]).length?(p.services||[]).length+' found · untick what you don\'t want':'none found — add a couple, or I\'ll ask you later'}</span></h3>
+        <div id="wz-svcs">${(p.services||[]).map((s,i)=>`<div class="wz-svc"><input type="checkbox" data-sk="${i}" ${s.keep!==false?'checked':''}><input type="text" data-sn="${i}" value="${esc(s.name)}"><input type="text" data-sp="${i}" value="${esc(s.price||'')}" placeholder="price"><span class="dur">${s.duration_min} min</span></div>`).join('')}</div>
+        <button class="wz-ed" id="wz-svc-add" style="margin-top:6px">+ add one</button>
+      </div>
+      ${(p.team||[]).length?`<div class="wz-sec"><h3>People I saw on your site</h3><div>${(p.team||[]).map((t,i)=>`<span class="wz-chip ${t.keep!==false?'sel':''}" data-team="${i}">${esc(t.name)}${t.role?' · '+esc(t.role):''}</span>`).join('')}</div><div class="hint" style="font-size:12px;color:var(--muted)">I'll ask you for their numbers later so clients can book with them.</div></div>`:''}
+      ${(p.faq||[]).length||p.policies?`<div class="wz-sec"><h3>Things I'll tell callers <span class="src">from your site · untick to drop</span></h3>
+        ${p.tagline?`<div class="wz-faq"><input type="checkbox" id="wz-tag" checked><div><b>About you</b><span>${esc(p.tagline)}</span></div></div>`:''}
+        ${p.policies?`<div class="wz-faq"><input type="checkbox" id="wz-pol" checked><div><b>Policies</b><span>${esc(p.policies)}</span></div></div>`:''}
+        ${(p.faq||[]).map((f,i)=>`<div class="wz-faq"><input type="checkbox" data-fk="${i}" ${f.keep!==false?'checked':''}><div><b>${esc(f.q)}</b><span>${esc(f.a)}</span></div></div>`).join('')}
+      </div>`:''}
+      <div class="wz-sec"><h3>You</h3><div class="wz-row2"><div class="wz-field"><label>Your name</label><input class="wz-inp" id="wz-oname" value="${esc(g.owner)}" placeholder="Jordan Lee"></div><div class="wz-field"><label>Your mobile <span class="hint">${esc(DEFAULT_NAME)} texts you here</span></label><input class="wz-inp" id="wz-ophone" value="${esc(g.phone)}" placeholder="+1 817 555 1234"></div></div></div>
       <div class="wz-msg" id="wz-m"></div>
-    `,{});
+    `,{nextLabel:'Looks right — set it up'});
+    const root=document.getElementById('root');
+    root.querySelectorAll('[data-cand]').forEach(bt=>bt.onclick=async()=>{ const c=p.candidates[+bt.dataset.cand]; if(!c) return; p.business=Object.assign({}, p.business, { name:c.name, phone:c.phone, address:c.address, city:c.city, state:c.state, zip:c.zip, website:c.website||p.business.website, maps_url:c.maps_url, place_id:c.place_id, tz:c.tz }); if(c.industry_guess) p.industry=c.industry_guess; WZ_RENDER[1](); });
+    root.querySelectorAll('#wz-ind .wz-chip').forEach(c=>c.onclick=()=>{ p.industry=c.dataset.ind; root.querySelectorAll('#wz-ind .wz-chip').forEach(x=>x.classList.toggle('sel',x===c)); $("#wz-trades").style.display=p.industry==='contractor'?'block':'none'; $("#wz-pmtypes").style.display=p.industry==='property_management'?'block':'none'; $("#wz-relines").style.display=p.industry==='real_estate'?'block':'none'; });
+    const tog=(sel,key,attr)=>root.querySelectorAll(sel).forEach(c=>c.onclick=()=>{ const v=c.dataset[attr]; const cur=new Set(p[key]||[]); if(cur.has(v)) cur.delete(v); else cur.add(v); p[key]=[...cur]; c.classList.toggle('sel',cur.has(v)); });
+    tog('[data-trade]','trades','trade'); tog('[data-pm]','pm_types','pm'); tog('[data-re]','re_lines','re');
+    root.querySelectorAll('#wz-days .wz-day').forEach(el=>el.onclick=()=>{ const i=+el.dataset.i; h.days[i]=!h.days[i]; el.classList.toggle('on',h.days[i]); if(h.per_day){ if(!h.days[i]) delete h.per_day[i]; else if(!h.per_day[i]) h.per_day[i]={open:$("#wz-hopen").value,close:$("#wz-hclose").value}; } });
+    root.querySelectorAll('[data-team]').forEach(c=>c.onclick=()=>{ const t=p.team[+c.dataset.team]; t.keep=t.keep===false; c.classList.toggle('sel',t.keep!==false); });
+    $("#wz-svc-add").onclick=()=>{ p.services=p.services||[]; p.services.push({name:'',price:'',duration_min:30,keep:true}); wzSyncSvcs(); WZ_RENDER[1](); setTimeout(()=>{ const last=root.querySelectorAll('[data-sn]'); if(last.length) last[last.length-1].focus(); },30); };
+    function wzSyncSvcs(){ root.querySelectorAll('[data-sn]').forEach(i=>{ const s=p.services[+i.dataset.sn]; if(s) s.name=i.value.trim(); }); root.querySelectorAll('[data-sp]').forEach(i=>{ const s=p.services[+i.dataset.sp]; if(s) s.price=i.value.trim(); }); root.querySelectorAll('[data-sk]').forEach(i=>{ const s=p.services[+i.dataset.sk]; if(s) s.keep=i.checked; }); }
     wzBindNav(async()=>{
-      const company=$("#wz-company").value.trim();
-      if(!company){ $("#wz-m").style.color='var(--danger)'; $("#wz-m").textContent='Please enter your business name.'; return false; }
-      state.wz.company=company; state.wz.owner=$("#wz-owner").value.trim(); state.wz.phone=$("#wz-phone").value.trim(); state.wz.tz=$("#wz-tz").value;
-      if(!state.wz.glabel || state.wz.glabel==='the office') state.wz.glabel=company;
-      const settings=Object.assign({}, state.account.settings||{}, {timezone:state.wz.tz});
-      // Turn on the features for this industry; for property management, record what they manage.
-      const feat=Object.assign({}, settings.features||{}, INDUSTRY_FEATURES[state.wz.industry]||{});
-      if(state.wz.industry==='property_management'){ settings.property_types=(state.wz.pmTypes||[]).slice(); if(feat.salon) delete feat.salon; }
-      if(state.wz.industry==='real_estate'){
-        const lines=(state.wz.reLines||[]).slice(); if(!lines.length) lines.push('residential');
-        settings.real_estate=Object.assign({ showing_agreement_text:RE_DEFAULT_SHOWING_TEXT, application_fee_cents:0 }, settings.real_estate||{}, { lines, manages_rentals:!!state.wz.reManages, license_no:state.wz.reLicense||'', broker_name:state.wz.reBroker||'', iabs_url:state.wz.reIabs||'' });
-        if(state.wz.reManages) feat.property_management=true; else delete feat.property_management;
-        if(feat.salon) delete feat.salon;
-        if(!settings.sms) settings.sms={ enabled:true, confirmations:true, reminders:true };
-      }
-      if(state.wz.industry==='contractor'){ settings.trades=(state.wz.trades||[]).slice(); settings.contractor=Object.assign({ trip_fee_cents:0, trip_fee_waived_if_work:true, after_hours_multiplier:1.5, day_start_hour:7, day_end_hour:19 }, settings.contractor||{}); if(!settings.sms) settings.sms={ enabled:true, confirmations:true, reminders:true }; }
-      else if(INDUSTRY_FEATURES[state.wz.industry] && INDUSTRY_FEATURES[state.wz.industry].salon && feat.property_management){ delete feat.property_management; }
-      settings.features=feat;
-      const { error:e1 }=await db.from('accounts').update({ name:company, industry:state.wz.industry||null, settings }).eq('id',state.account.id);
-      if(!e1){ state.account.company=company; state.account.industry=state.wz.industry||null; state.account.settings=settings; state.account.timezone=state.wz.tz; }
-      if(state.owner&&state.owner.id){ await db.from('users').update({ full_name:state.wz.owner||null, phone:state.wz.phone||null }).eq('id',state.owner.id); if(state.wz.owner) state.owner.name=state.wz.owner; if(state.wz.phone!==undefined) state.owner.phone=state.wz.phone; }
-      if(e1){ $("#wz-m").style.color='var(--danger)'; $("#wz-m").textContent='Could not save. Please try again.'; return false; }
+      const m=$("#wz-m"); wzSyncSvcs();
+      p.services=(p.services||[]).filter(s=>s.name);
+      root.querySelectorAll('[data-fk]').forEach(i=>{ const f=p.faq[+i.dataset.fk]; if(f) f.keep=i.checked; });
+      if($("#wz-tag")&&!$("#wz-tag").checked) p.tagline=''; if($("#wz-pol")&&!$("#wz-pol").checked) p.policies='';
+      const name=$("#wz-bname").value.trim(); if(!name){ m.style.color='var(--danger)'; m.textContent='I need the business name.'; return false; }
+      p.business=Object.assign({}, p.business, { name, phone:normPhone($("#wz-bphone").value)||'', address:$("#wz-baddr").value.trim(), website:$("#wz-bweb").value.trim(), tz:$("#wz-tz").value });
+      const open=$("#wz-hopen").value||'09:00', close=$("#wz-hclose").value||'17:00'; if(close<=open){ m.style.color='var(--danger)'; m.textContent='Closing time must be after opening.'; return false; }
+      if(open!==h.open||close!==h.close) h.per_day={}; h.open=open; h.close=close; p.hours=h;
+      g.owner=$("#wz-oname").value.trim(); g.phone=normPhone($("#wz-ophone").value)||''; p.owner={ name:g.owner, phone:g.phone };
+      if(p.industry==='property_management'&&!(p.pm_types||[]).length){ m.style.color='var(--danger)'; m.textContent='Pick what you manage.'; return false; }
+      m.style.color='var(--muted)'; m.innerHTML='<span class="wz-pulse"></span>Setting up '+esc(name)+'…';
+      const r=await setupApi({ action:'apply', proposal:p });
+      if(!r.ok){ m.style.color='var(--danger)'; m.textContent='Could not save: '+(r.error||'try again'); return false; }
+      g.applied=true; g.industry=p.industry;
+      try{ await loadData(); }catch(_e){}
+      await wzPersist({ proposal_draft:null });
       return true;
-    },{});
+    },{busyLabel:'Setting up…'});
   },
+  // 2 — meet Donna: voice + how she introduces herself. Defaults chosen; most people just tap through.
   2:function(){
-    const g=state.wz;
+    const g=state.wz; const biz=state.account.company||(g.proposal&&g.proposal.business&&g.proposal.business.name)||'your business';
     document.getElementById("root").innerHTML=wzShell(`
-      <h1>Your assistant</h1>
-      <p class="lede">How ${esc(DEFAULT_NAME)} introduces herself and sounds on the phone.</p>
-      <div class="wz-row2">
-        <div class="wz-field"><label>Assistant's name</label><input class="wz-inp" id="wz-aname" value="${esc(g.aname)}" placeholder="${esc(DEFAULT_NAME)}"></div>
-        <div class="wz-field"><label>Voice</label><select class="wz-sel" id="wz-voice">${VOICES.map(v=>`<option value="${v[0]}" ${g.voice===v[0]?'selected':''}>${esc(v[1])}</option>`).join("")}</select></div>
+      <h1>Meet ${esc(g.aname)}.</h1>
+      <p class="lede">This is how she'll answer. She picks up every call, 24/7, books within your hours, and texts you anything that needs you.</p>
+      <div class="wz-code" style="font-size:15px;line-height:1.5">“Hello, thanks for calling ${esc(biz)}, this is ${esc(g.aname)}. How can I help you today?”</div>
+      <div class="wz-row2" style="margin-top:14px">
+        <div class="wz-field"><label>Voice</label><select class="wz-sel" id="wz-voice">${VOICES.map(v=>`<option value="${v[0]}" ${g.voice===v[0]?'selected':''}>${esc(v[1])}</option>`).join('')}</select></div>
+        <div class="wz-field"><label>Her name <span class="hint">most people keep Donna</span></label><input class="wz-inp" id="wz-aname" value="${esc(g.aname)}"></div>
       </div>
-      <div class="wz-field"><label>Greeting <span class="hint">she says "Hello, this is NAME with ___"</span></label><input class="wz-inp" id="wz-glabel" value="${esc(g.glabel)}" placeholder="${esc(g.company||'your business')}"></div>
-      <div class="wz-field"><label>Opening question <span class="hint">optional, how she invites the caller to talk</span></label><input class="wz-inp" id="wz-openq" value="${esc(g.openq)}" placeholder="How can I help you today?"></div>
+      <div class="wz-field"><label>Speaks</label><div id="wz-langs">${[['en','English'],['es','Spanish'],['vi','Vietnamese'],['zh','Chinese'],['ko','Korean']].map(l=>`<span class="wz-chip ${((state.assistant&&state.assistant.languages)||['en']).includes(l[0])?'sel':''}" data-lang="${l[0]}">${l[1]}</span>`).join('')}</div><div class="hint" style="font-size:12px;color:var(--muted)">She switches when the caller does.</div></div>
       <div class="wz-msg" id="wz-m"></div>
-    `,{});
+    `,{nextLabel:'Sounds good'});
+    const langs=new Set((state.assistant&&state.assistant.languages)||['en']);
+    document.querySelectorAll('[data-lang]').forEach(c=>c.onclick=()=>{ const l=c.dataset.lang; if(langs.has(l)&&langs.size>1) langs.delete(l); else langs.add(l); c.classList.toggle('sel',langs.has(l)); });
+    $("#wz-aname").oninput=()=>{ g.aname=$("#wz-aname").value.trim()||DEFAULT_NAME; };
     wzBindNav(async()=>{
-      const aname=$("#wz-aname").value.trim()||DEFAULT_NAME;
-      state.wz.aname=aname; state.wz.voice=$("#wz-voice").value; state.wz.glabel=$("#wz-glabel").value.trim()||state.wz.company; state.wz.openq=$("#wz-openq").value.trim();
-      const routing=Object.assign({}, (state.assistant&&state.assistant.routing)||{}, { recording_notice:true, opening_question:state.wz.openq });
-      const row={ assistant_name:aname, greeting_label:state.wz.glabel, voice_id:state.wz.voice, languages:['en'], is_active:true, routing };
-      let error;
-      if(state.assistantId){ ({error}=await db.from('assistants').update(row).eq('id',state.assistantId)); }
-      else { row.account_id=state.account.id; const r=await db.from('assistants').insert(row).select().single(); error=r.error; if(r.data){ state.assistantId=r.data.id; } }
-      if(!error){ state.assistant=Object.assign({}, state.assistant||{}, { name:aname, greetingLabel:state.wz.glabel, voice:state.wz.voice, languages:['en'], routing }); }
-      else { $("#wz-m").style.color='var(--danger)'; $("#wz-m").textContent='Could not save. Please try again.'; return false; }
+      g.voice=$("#wz-voice").value; g.aname=$("#wz-aname").value.trim()||DEFAULT_NAME;
+      const row={ assistant_name:g.aname, voice_id:g.voice, languages:[...langs], is_active:true };
+      if(state.assistantId){ await db.from('assistants').update(row).eq('id',state.assistantId); }
+      else { const r=await db.from('assistants').insert(Object.assign({ account_id:state.account.id, greeting_label:biz, routing:{recording_notice:true} }, row)).select().single(); if(r.data) state.assistantId=r.data.id; }
+      state.assistant=Object.assign({}, state.assistant||{}, { name:g.aname, voice:g.voice, languages:[...langs] });
       return true;
     },{});
   },
+  // 3 — the phone. The only step that truly needs the owner. Provision now; forward or take a new number; verify by calling.
   3:function(){
-    const g=state.wz;
-    // Returning owner (re-running setup): start from the hours already on file instead of the defaults.
-    if(!g._hoursLoaded && state.owner && state.owner.id){
-      g._hoursLoaded=true;
-      db.from('availability_rules').select('rule_type,day_of_week,start_time,end_time').eq('user_id',state.owner.id).then(({data})=>{
-        const rows=(data||[]); const use=rows.filter(r=>r.rule_type==='bookable').length?rows.filter(r=>r.rule_type==='bookable'):rows.filter(r=>r.rule_type==='working');
-        if(!use.length) return;
-        g.days=[false,false,false,false,false,false,false]; use.forEach(r=>{ g.days[Number(r.day_of_week)]=true; });
-        g.hstart=String(use[0].start_time).slice(0,5); g.hend=String(use[0].end_time).slice(0,5);
-        if(state.wizStep===3) WZ_RENDER[3]();
-      }).catch(()=>{});
-    }
+    const g=state.wz; const a=state.assistant||{}; const donna=a.number||'';
+    const bizPhone=(state.account.settings&&state.account.settings.business&&state.account.settings.business.phone)||'';
+    const area=(bizPhone.replace(/\D/g,'').slice(-10,-7))||(g.phone.replace(/\D/g,'').slice(-10,-7))||'817';
     document.getElementById("root").innerHTML=wzShell(`
-      <h1>Hours</h1>
-      <p class="lede">The days and times you're open. ${esc(DEFAULT_NAME)} answers around the clock, but she only books and transfers within these. You can fine-tune each day later under Schedule.</p>
-      <div class="wz-field"><label>Open days</label><div class="wz-days" id="wz-days">${DAYS.map((d,i)=>`<div class="wz-day ${g.days[i]?'on':''}" data-i="${i}">${d.slice(0,3)}</div>`).join("")}</div></div>
-      <div class="wz-row2">
-        <div class="wz-field"><label>Opens</label><input class="wz-inp" type="time" id="wz-hstart" value="${g.hstart}"></div>
-        <div class="wz-field"><label>Closes</label><input class="wz-inp" type="time" id="wz-hend" value="${g.hend}"></div>
+      <h1>Your phone.</h1>
+      <p class="lede">${donna?`${esc(g.aname)}'s number is <b>${esc(prettyPhone(donna))}</b>. Keep your current number and forward it to her, or give the new number out.`:`First I'll get ${esc(g.aname)} her own number${area?' in the '+esc(area)+' area':''}. Then you decide whether to forward your current line to it.`}</p>
+      ${donna?'':`<button class="btn primary" id="wz-prov">Get ${esc(g.aname)}'s number</button><div class="wz-msg" id="wz-pm"></div>`}
+      <div id="wz-fwd" style="display:${donna?'block':'none'}">
+        <div class="wz-choices" style="margin:10px 0 14px">
+          <div class="wz-choice ${g.mode==='forward'?'sel':''}" data-mode="forward"><b style="display:block">Keep my number</b><span style="font-size:12.5px;color:var(--muted);font-weight:400">Forward ${bizPhone?esc(prettyPhone(bizPhone)):'your line'} to ${esc(g.aname)}. Customers notice nothing.</span></div>
+          <div class="wz-choice ${g.mode==='new'?'sel':''}" data-mode="new"><b style="display:block">Use the new number</b><span style="font-size:12.5px;color:var(--muted);font-weight:400">Put ${esc(prettyPhone(donna))} on your site, Google and cards.</span></div>
+        </div>
+        <div id="wz-fwd-box" style="display:${g.mode==='forward'?'block':'none'}">
+          <div class="wz-field"><label>Your current business line</label><input class="wz-inp" id="wz-bizphone" value="${esc(bizPhone)}" placeholder="+1 817 555 0100"></div>
+          <div class="wz-field"><label>It's on</label><div id="wz-carriers"></div></div>
+          <div id="wz-codes"></div>
+          <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-top:10px"><button class="btn sm primary" id="wz-fcheck">I did it — check it</button><span id="wz-fmsg" style="font-size:12.5px;color:var(--muted)"></span></div>
+        </div>
       </div>
       <div class="wz-msg" id="wz-m"></div>
-    `,{canSkip:true});
-    document.querySelectorAll('#wz-days .wz-day').forEach(el=>el.onclick=()=>{ const i=+el.dataset.i; state.wz.days[i]=!state.wz.days[i]; el.classList.toggle('on',state.wz.days[i]); });
-    wzBindNav(async()=>{
-      state.wz.hstart=$("#wz-hstart").value||'09:00'; state.wz.hend=$("#wz-hend").value||'17:00';
-      if(state.wz.hend<=state.wz.hstart){ $("#wz-m").style.color='var(--danger)'; $("#wz-m").textContent='Closing time must be after opening time.'; return false; }
-      if(!state.owner||!state.owner.id) return true;
-      await db.from('availability_rules').delete().eq('user_id', state.owner.id);
-      const rows=[];
-      state.wz.days.forEach((on,i)=>{ if(on){
-        rows.push({account_id:state.account.id,user_id:state.owner.id,rule_type:'working',day_of_week:i,start_time:state.wz.hstart,end_time:state.wz.hend});
-        rows.push({account_id:state.account.id,user_id:state.owner.id,rule_type:'bookable',appointment_type_id:null,day_of_week:i,start_time:state.wz.hstart,end_time:state.wz.hend});
-      }});
-      if(rows.length){ const { error }=await db.from('availability_rules').insert(rows); if(error){ $("#wz-m").style.color='var(--danger)'; $("#wz-m").textContent='Could not save hours. Please try again.'; return false; } }
-      return true;
-    },{});
+    `,{nextLabel:'Continue', altLabel:(donna?'Skip forwarding for now':''), onAlt:async()=>{ g.mode='new'; state.wizStep=4; await wzPersist({}); renderWizard(); }});
+    const prov=$("#wz-prov"); if(prov) prov.onclick=async()=>{ const m=$("#wz-pm"); prov.disabled=true; prov.textContent='Getting a number…'; try{ const { data, error }=await db.functions.invoke("provision-phone-number",{ body:{ area_code:area } }); if(error||!data||!data.ok){ m.style.color='var(--danger)'; m.textContent=(data&&data.error)||'Could not get a number just now. Try again in a minute.'; prov.disabled=false; prov.textContent=`Get ${g.aname}'s number`; return; } state.assistant=Object.assign({}, state.assistant||{}, { number:data.phone_number }); WZ_RENDER[3](); }catch(e){ m.style.color='var(--danger)'; m.textContent='Could not get a number.'; prov.disabled=false; } };
+    if(!donna){ wzBindNav(async()=>{ $("#wz-m").style.color='var(--danger)'; $("#wz-m").textContent=`Get ${g.aname}'s number first.`; return false; },{}); return; }
+    document.querySelectorAll('[data-mode]').forEach(c=>c.onclick=()=>{ g.mode=c.dataset.mode; document.querySelectorAll('[data-mode]').forEach(x=>x.classList.toggle('sel',x===c)); $("#wz-fwd-box").style.display=g.mode==='forward'?'block':'none'; });
+    let codes=null;
+    const paintCodes=()=>{ const box=$("#wz-codes"); if(!codes||!box) return; const c=codes[g.carrier]; if(!c) return; const n=donna.replace(/^\+1/,''); const line=(lbl,code)=>{ const dial=/^[*#\d]+$/.test(code.replace(/\{n\}/g,n).replace(/\s/g,''))?code.replace(/\{n\}/g,n):''; return `<div class="wz-code"><span style="color:var(--muted);font-size:12.5px;min-width:120px">${lbl}</span><code>${esc(code.replace(/\{n\}/g,n))}</code>${dial?`<a class="btn sm primary" href="tel:${encodeURIComponent(dial)}">Dial it</a>`:''}</div>`; };
+      box.innerHTML=`${line('Send all calls',c.all)}${line('Only when busy / no answer',c.busy_noanswer)}<div class="hint" style="font-size:12px;color:var(--muted);margin-top:4px">On a cell phone, tap <b>Dial it</b>, press call, and wait for the confirmation tone. To undo later: <code>${esc(c.off)}</code>.</div>`; };
+    const paintCarriers=()=>{ const el=$("#wz-carriers"); if(!codes||!el) return; el.innerHTML=Object.keys(codes).map(k=>`<span class="wz-chip ${g.carrier===k?'sel':''}" data-car="${k}">${esc(codes[k].name)}</span>`).join(''); el.querySelectorAll('[data-car]').forEach(x=>x.onclick=()=>{ g.carrier=x.dataset.car; paintCarriers(); paintCodes(); }); };
+    setupApi({ action:'forward_codes' }).then(r=>{ if(r.ok){ codes=r.codes; paintCarriers(); paintCodes(); } });
+    $("#wz-fcheck").onclick=async()=>{ const b=$("#wz-fcheck"), m=$("#wz-fmsg"); const biz=normPhone($("#wz-bizphone").value); if(!/^\+1\d{10}$/.test(biz)){ m.textContent='Enter your business line first.'; return; } b.disabled=true; m.innerHTML='<span class="wz-pulse"></span>'+esc(g.aname)+' is calling your line…';
+      const settings=Object.assign({}, state.account.settings||{}); settings.business=Object.assign({}, settings.business||{}, { phone:biz }); await db.from('accounts').update({settings}).eq('id',state.account.id); state.account.settings=settings;
+      const r=await setupApi({ action:'forward_check', business_number:biz }); if(!r.ok){ m.textContent='Could not place the check call: '+(r.error||''); b.disabled=false; return; }
+      let n=0; const t=setInterval(async()=>{ n++; const s=await setupApi({ action:'forward_status', since:r.since }); if(s.ok&&s.forwarded){ clearInterval(t); m.style.color='var(--ok)'; m.textContent='It works — calls to your line now reach '+g.aname+'.'; g.fwdOk=true; b.textContent='Verified'; return; } if(n>=10){ clearInterval(t); m.style.color='var(--danger)'; m.textContent='I didn\'t get the call. Check the code and try again, or continue and I\'ll remind you.'; b.disabled=false; } },4000); };
+    wzBindNav(async()=>{ if(g.mode==='forward'){ const biz=normPhone($("#wz-bizphone").value); if(biz){ const settings=Object.assign({}, state.account.settings||{}); settings.business=Object.assign({}, settings.business||{}, { phone:biz }); settings.phone=Object.assign({}, settings.phone||{}, { mode:'forward', carrier:g.carrier, forwarding_verified:!!g.fwdOk }); await db.from('accounts').update({settings}).eq('id',state.account.id); state.account.settings=settings; } } else { const settings=Object.assign({}, state.account.settings||{}); settings.phone=Object.assign({}, settings.phone||{}, { mode:'new' }); await db.from('accounts').update({settings}).eq('id',state.account.id); state.account.settings=settings; } return true; },{});
   },
+  // 4 — try her. Donna calls the owner's cell. Then live.
   4:function(){
-    const g=state.wz;
+    const g=state.wz; const donna=(state.assistant&&state.assistant.number)||'';
     document.getElementById("root").innerHTML=wzShell(`
-      <h1>Knowledge</h1>
-      <p class="lede">Give ${esc(DEFAULT_NAME)} something to answer from. Paste your website and she'll read your main pages and turn them into answers for you to review. You can also add documents and type answers later under Knowledge.</p>
-      <div class="wz-field"><label>Website address <span class="hint">optional</span></label><input class="wz-inp" id="wz-kburl" placeholder="https://yourbusiness.com"></div>
-      <button class="btn sm" id="wz-kbgo">Read my website</button>
-      <div class="wz-msg" id="wz-m">${g.kb_done?('Imported '+g.kb_count+' items. Review and approve them under Knowledge after setup.'):''}</div>
-    `,{canSkip:true, nextLabel:'Continue'});
-    $("#wz-kbgo").onclick=async()=>{
-      const url=$("#wz-kburl").value.trim(); const m=$("#wz-m"); const b=$("#wz-kbgo");
-      if(!url){ m.style.color='var(--danger)'; m.textContent='Enter your website address, or skip this step.'; return; }
-      b.disabled=true; const o=b.textContent; b.textContent='Reading…'; m.style.color='var(--muted)'; m.textContent='Reading your website, this can take a moment…';
-      try{
-        const { data, error }=await db.functions.invoke("knowledge-ingest-website",{ body:{ url } });
-        if(error||(data&&data.ok===false)) throw new Error((data&&data.error)||'failed');
-        const n=(data&&(data.count||data.entries||data.created))||0;
-        state.wz.kb_done=true; state.wz.kb_count=n;
-        m.style.color='var(--muted)'; m.textContent=(n?('Imported '+n+' items. '):'Website read. ')+'Review and approve them under Knowledge after setup.';
-      }catch(e){ m.style.color='var(--danger)'; m.textContent='Could not read that site. You can skip this and add knowledge later.'; }
-      b.disabled=false; b.textContent=o;
-    };
-    wzBindNav(async()=>true,{});
-  },
-  5:function(){
-    const g=state.wz;
-    const list=(state.types||[]).map(t=>`<div style="font-size:13.5px;padding:6px 0;border-bottom:1px solid var(--line,#eee)">${esc(t.name)} · ${t.dur} min${t.price?' · '+esc(t.price):''}${t.travel?' · at the customer\'s place':''}</div>`).join("");
-    const salonish=!!(INDUSTRY_FEATURES[g.industry]&&INDUSTRY_FEATURES[g.industry].salon);
-    document.getElementById("root").innerHTML=wzShell(`
-      <h1>What can people book?</h1>
-      <p class="lede">Add the things customers usually call about, with how long each takes and what it costs. ${esc(DEFAULT_NAME)} uses this to offer the right amount of time and to answer "how much is it?" Skip if ${esc(DEFAULT_NAME)} won't be booking for you; you can always add more later.</p>
-      ${list?`<div style="margin-bottom:14px">${list}</div>`:''}
-      <div class="wz-row2">
-        <div class="wz-field"><label>What it's called</label><input class="wz-inp" id="wz-tname" placeholder="${salonish?'Haircut':(g.industry==='contractor'?'Estimate visit':(g.industry==='professional'?'Consultation':'e.g. Full detail, Lesson, Estimate'))}"></div>
-        <div class="wz-field"><label>How long</label><select class="wz-sel" id="wz-tdur"><option value="15">15 min</option><option value="30" selected>30 min</option><option value="45">45 min</option><option value="60">1 hour</option><option value="90">1.5 hours</option><option value="120">2 hours</option><option value="180">3 hours</option><option value="240">4 hours</option></select></div>
-      </div>
-      <div class="wz-row2">
-        <div class="wz-field"><label>Price <span class="hint">optional, as you'd say it</span></label><input class="wz-inp" id="wz-tprice" placeholder="e.g. $80, or from $120"></div>
-        <div class="wz-field"><label>Where it happens</label><select class="wz-sel" id="wz-tmode"><option value="in_person">${salonish?'At our place':'At my place of business'}</option>${salonish?'':'<option value="travel">At the customer\'s place (we go to them)</option>'}<option value="phone">On the phone</option><option value="virtual">Video call</option></select></div>
-      </div>
-      <button class="btn sm" id="wz-taddbtn">+ Add it</button>
-      <div class="wz-msg" id="wz-m"></div>
-    `,{canSkip:true, nextLabel:'Continue'});
-    $("#wz-taddbtn").onclick=async()=>{
-      const name=$("#wz-tname").value.trim(); const m=$("#wz-m");
-      if(!name){ m.style.color='var(--danger)'; m.textContent='Give the appointment a name first.'; return; }
-      const where=$("#wz-tmode").value; const travel=where==='travel'; const price=($("#wz-tprice").value||'').trim();
-      const row={ account_id:state.account.id, name, mode:travel?'in_person':where, default_duration_min:+$("#wz-tdur").value||30, buffer_before_min:0, buffer_after_min:0, requires_travel:travel, price:price||null };
-      const { data, error }=await db.from('appointment_types').insert(row).select().single();
-      if(!error&&data){ state.types=state.types||[]; state.types.push({id:data.id,name:data.name,mode:data.mode,dur:data.default_duration_min,before:0,after:0,travel:travel,price:price}); WZ_RENDER[5](); }
-      else { m.style.color='var(--danger)'; m.textContent='Could not add that. Please try again.'; }
-    };
-    wzBindNav(async()=>true,{});
-  },
-  6:function(){
-    const g=state.wz;
-    document.getElementById("root").innerHTML=wzShell(`
-      <h1>Calls</h1>
-      <p class="lede">When someone needs a person, who should ${esc(DEFAULT_NAME)} reach? Leave this off and she'll take a message instead.</p>
-      <div class="wz-field"><label><input type="checkbox" id="wz-xon" ${g.xfer_on?'checked':''}> Let ${esc(DEFAULT_NAME)} transfer live calls</label></div>
-      <div class="wz-field"><label>Transfer to this number</label><input class="wz-inp" id="wz-xnum" value="${esc(g.xfer_num)}" placeholder="+18175551234"></div>
-      <div class="wz-msg" id="wz-m"></div>
-    `,{canSkip:true});
-    wzBindNav(async()=>{
-      const on=$("#wz-xon").checked; const num=($("#wz-xnum").value||'').trim().replace(/[\s()\-.]/g,"");
-      state.wz.xfer_on=on; state.wz.xfer_num=num;
-      if((on||num) && !/^\+[1-9]\d{1,14}$/.test(num)){ $("#wz-m").style.color='var(--danger)'; $("#wz-m").textContent='Enter the number in full format, like +18175551234, or turn transfer off.'; return false; }
-      if(!state.assistantId) return true;
-      const routing=Object.assign({}, (state.assistant&&state.assistant.routing)||{}); routing.transfer=Object.assign({}, routing.transfer||{}, {enabled:on, number:num});
-      const { error }=await db.from('assistants').update({routing}).eq('id',state.assistantId);
-      if(error){ $("#wz-m").style.color='var(--danger)'; $("#wz-m").textContent='Could not save. Please try again.'; return false; }
-      if(state.assistant) state.assistant.routing=routing;
-      return true;
-    },{});
-  },
-  7:function(){
-    const g=state.wz;
-    document.getElementById("root").innerHTML=wzShell(`
-      <h1>Notifications</h1>
-      <p class="lede">Where should ${esc(DEFAULT_NAME)} send messages, missed calls, and bookings so you don't miss anything?</p>
-      <div class="wz-field"><label>Your email</label><input class="wz-inp" id="wz-alert" value="${esc(g.alert)}" placeholder="you@yourbusiness.com"></div>
-      <div class="wz-msg" id="wz-m"></div>
-    `,{});
-    wzBindNav(async()=>{
-      const email=$("#wz-alert").value.trim();
-      if(!email || !/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)){ $("#wz-m").style.color='var(--danger)'; $("#wz-m").textContent='Please enter a valid email so you get your messages.'; return false; }
-      state.wz.alert=email;
-      const settings=Object.assign({}, state.account.settings||{}, {alert_email:email});
-      const { error }=await db.from('accounts').update({settings}).eq('id',state.account.id);
-      if(error){ $("#wz-m").style.color='var(--danger)'; $("#wz-m").textContent='Could not save. Please try again.'; return false; }
-      state.account.settings=settings;
-      return true;
-    },{});
-  },
-  8:function(){
-    const g=state.wz;
-    const missing=[];
-    if(!state.account.company) missing.push('business name');
-    if(!state.assistantId) missing.push('assistant');
-    if(!(state.account.settings&&state.account.settings.alert_email)) missing.push('notification email');
-    document.getElementById("root").innerHTML=wzShell(`
-      <h1>Ready to go live</h1>
-      <p class="lede">Here's what ${esc(DEFAULT_NAME)} knows. When you go live she starts answering, and we create your dedicated email address so customers can reach her by email too.</p>
-      <div style="font-size:14px;line-height:1.9;margin-bottom:6px">
-        <div><b>Business:</b> ${esc(state.account.company||'not set')}</div>
-        <div><b>Assistant:</b> ${esc(g.aname)} (${esc((VOICES.find(v=>v[0]===g.voice)||['','voice'])[1])})</div>
-        <div><b>Open days:</b> ${esc(DAYS.filter((d,i)=>state.wz.days[i]).map(d=>d.slice(0,3)).join(', ')||'set later')} ${state.wz.days.some(Boolean)?(esc(g.hstart)+' to '+esc(g.hend)):''}</div>
-        <div><b>Transfer:</b> ${g.xfer_on&&g.xfer_num?esc(g.xfer_num):'takes a message'}</div>
-        <div><b>Notifications:</b> ${esc((state.account.settings&&state.account.settings.alert_email)||'not set')}</div>
-        <div><b>Appointments:</b> ${(state.types&&state.types.length)?esc(state.types.map(t=>t.name).join(', ')):'none yet'}</div>
-      </div>
-      ${missing.length?`<div class="wz-msg" style="color:var(--danger)">Before going live, please add: ${esc(missing.join(', '))}.</div>`:`<div class="wz-msg" id="wz-m"></div>`}
-    `,{nextLabel: missing.length?'Fix above':'Go live'});
-    wzBindNav(async()=>{
-      if(missing.length){ // jump back to the earliest missing step
-        state.wizStep = !state.account.company?1:(!state.assistantId?2:7); await wzPersist({}); renderWizard(); return false;
-      }
-      const m=$("#wz-m"); if(m){ m.style.color='var(--muted)'; m.textContent='Creating your email address and going live…'; }
-      // Mark onboarding complete FIRST so the server-side calls below merge onto fresh settings (no clobber).
-      await wzPersist({ completed:true, completed_at:new Date().toISOString(), tutorial_done:false });
-      let address='';
-      try{ const { data }=await db.functions.invoke("provision-email",{ body:{} }); if(data&&data.ok&&data.address){ address=data.address; } }catch(e){ /* non-fatal, can retry from settings */ }
-      // Apply the industry preset (persona defaults, appointment types, starter FAQ drafts). Idempotent, no-op if no preset.
-      try{ await db.functions.invoke("apply-preset",{ body:{ industry: state.wz.industry||state.account.industry||'' } }); }catch(e){ /* non-fatal */ }
-      // Reload everything so the app reflects the new email, the preset persona, and the
-      // appointment types the preset just created (otherwise they stay empty until a reload).
-      try{ await loadData(); }catch(e){
-        try{ const { data:acct }=await db.from('accounts').select('settings').eq('id',state.account.id).maybeSingle(); if(acct&&acct.settings) state.account.settings=acct.settings; }catch(_e){}
-      }
-      // Online booking is on from day one when there is something to book. The owner can switch it off under Booking page.
-      try{
-        const bk=(state.account.settings&&state.account.settings.booking)||{};
-        if(bk.enabled===undefined && state.types && state.types.length){
-          const settings=Object.assign({}, state.account.settings||{}, { booking:Object.assign({}, bk, { enabled:true }) });
-          const { error:eb }=await db.from('accounts').update({settings}).eq('id',state.account.id);
-          if(!eb) state.account.settings=settings;
-        }
-      }catch(_e){}
-      state.wizStep=0; state.wz=null;
-      renderApp();
-      wzStartTutorial(address);
-      return false; // we already moved to the app; do NOT let wzBindNav advance/re-render the wizard
-    },{});
+      <h1>Hear her for yourself.</h1>
+      <p class="lede">${esc(g.aname)} will call your cell right now, exactly the way she'll answer for your customers. Ask her your hours, your prices, book something. Then you're live.</p>
+      <div class="wz-row2"><div class="wz-field"><label>Your mobile</label><input class="wz-inp" id="wz-cell" value="${esc(g.phone||(state.owner&&state.owner.phone)||'')}" placeholder="+1 817 555 1234"></div><div class="wz-field"><label>&nbsp;</label><button class="btn primary" id="wz-callme" style="width:100%">Call me now</button></div></div>
+      <div class="wz-msg" id="wz-m">${donna?'':'<span style="color:var(--danger)">Set up the number first (previous step).</span>'}</div>
+      <div class="wz-sec"><h3>What happens when you go live</h3><div style="font-size:13.5px;line-height:1.7;color:var(--ink-2)">
+        <div>• ${esc(g.aname)} answers ${state.account.settings&&state.account.settings.phone&&state.account.settings.phone.mode==='forward'?'your forwarded line':'her number'} 24/7 and books inside your hours.</div>
+        <div>• Missed calls, messages and bookings get texted to ${g.phone?esc(prettyPhone(g.phone)):'you'} and emailed to ${esc((state.account.settings&&state.account.settings.alert_email)||'you')}.</div>
+        <div>• Anything I still need, I'll text you one question at a time over the next few days. No forms.</div>
+      </div></div>
+    `,{nextLabel:'Go live', altLabel:'', noExit:true});
+    $("#wz-callme").onclick=async()=>{ const b=$("#wz-callme"), m=$("#wz-m"); const to=normPhone($("#wz-cell").value); if(!/^\+1\d{10}$/.test(to)){ m.style.color='var(--danger)'; m.textContent='Enter a US mobile number.'; return; } b.disabled=true; b.textContent='Calling…'; g.phone=to; await db.from('users').update({ phone:to }).eq('id',state.owner.id); state.owner.phone=to;
+      const r=await setupApi({ action:'test_call', to }); if(!r.ok){ m.style.color='var(--danger)'; m.textContent=r.error==='needs_number'?'Set up the number first.':('Could not call: '+(r.message||r.error||'')); b.disabled=false; b.textContent='Call me now'; return; }
+      m.style.color='var(--ok)'; m.innerHTML='<span class="wz-pulse"></span>Ringing your phone now. Pick up and say hi.'; setTimeout(()=>{ b.disabled=false; b.textContent='Call me again'; },20000); };
+    wzBindNav(async()=>{ await wzFinish(false); return 'stay'; },{busyLabel:'Going live…'});
   }
 };
+// Finish: mark complete, create the email address, apply the preset, reload, tutorial. `partial` = "finish later" — still live, Donna chases the rest.
+async function wzFinish(partial){
+  await wzPersist({ completed:true, completed_at:new Date().toISOString(), tutorial_done:false, finished_partial:!!partial });
+  let address='';
+  try{ const { data }=await db.functions.invoke("provision-email",{ body:{} }); if(data&&data.ok&&data.address) address=data.address; }catch(_e){}
+  try{ await db.functions.invoke("apply-preset",{ body:{ industry: state.account.industry||'' } }); }catch(_e){}
+  try{ await loadData(); }catch(_e){}
+  try{ const bk=(state.account.settings&&state.account.settings.booking)||{}; if(bk.enabled===undefined && state.types && state.types.length){ const settings=Object.assign({}, state.account.settings||{}, { booking:Object.assign({}, bk, { enabled:true }) }); const { error }=await db.from('accounts').update({settings}).eq('id',state.account.id); if(!error) state.account.settings=settings; } }catch(_e){}
+  state.wizStep=0; state.wz=null;
+  renderApp();
+  if(!partial) wzStartTutorial(address);
+}
+// Setup by phone: Donna is on the line with the owner; this screen waits, then shows what she set up.
+function wzPhoneSetupWait(){
+  const g=state.wz;
+  document.getElementById("root").innerHTML=wzShell(`
+    <h1><span class="wz-pulse"></span>${esc(DEFAULT_NAME)} is calling you.</h1>
+    <p class="lede">Pick up and chat — she'll ask about your hours, what people book, and how you want calls handled. This screen fills in as you talk. Hang up whenever you're done.</p>
+    <div class="wz-msg" id="wz-m" style="color:var(--muted)">Waiting for the call to finish…</div>
+    <div id="wz-ps-out" style="margin-top:12px"></div>
+  `,{noFooter:true, noExit:true});
+  let n=0; clearInterval(state._psTimer);
+  state._psTimer=setInterval(async()=>{ n++; if(n>90){ clearInterval(state._psTimer); $("#wz-m").textContent='That took a while. You can keep going on screen.'; $("#wz-ps-out").innerHTML='<button class="btn primary" id="wz-ps-screen">Continue on screen</button>'; $("#wz-ps-screen").onclick=()=>{ state.wizStep=0; renderWizard(); }; return; }
+    const r=await setupApi({ action:'phone_setup_result', call_id:g.callId, apply:true });
+    if(!r.ok||!r.done) return;
+    clearInterval(state._psTimer);
+    if(r.empty){ $("#wz-m").textContent=r.message||'The call was too short.'; $("#wz-ps-out").innerHTML='<button class="btn primary" id="wz-ps-screen">Continue on screen</button>'; $("#wz-ps-screen").onclick=()=>{ state.wizStep=0; renderWizard(); }; return; }
+    try{ await loadData(); }catch(_e){}
+    g.applied=true; g.industry=state.account.industry||g.industry;
+    const p=r.proposal||{};
+    $("#wz-m").style.color='var(--ok)'; $("#wz-m").textContent='Got it. Here is what I set up:';
+    $("#wz-ps-out").innerHTML=`<div class="wz-kv">${r.summary?`<div style="margin-bottom:8px">${esc(r.summary)}</div>`:''}${p.hours?`<div><b>Hours</b> ${DAYS.filter((d,i)=>p.hours.days[i]).map(d=>d.slice(0,3)).join(', ')} ${esc(p.hours.open)}–${esc(p.hours.close)}</div>`:''}${(p.services||[]).length?`<div><b>Services</b> ${esc(p.services.map(s=>s.name+(s.price?' '+s.price:'')).join(', '))}</div>`:''}${(p.team||[]).length?`<div><b>Team</b> ${esc(p.team.map(t=>t.name).join(', '))}</div>`:''}${p.transfer_number?`<div><b>Transfers</b> to ${esc(prettyPhone(p.transfer_number))}</div>`:''}${p.policies?`<div><b>Notes</b> ${esc(p.policies)}</div>`:''}</div><div style="margin-top:14px"><button class="btn primary" id="wz-ps-next">Next: your phone number</button></div>`;
+    $("#wz-ps-next").onclick=async()=>{ state.wizStep=3; await wzPersist({}); renderWizard(); };
+  },5000);
+}
+function prettyPhone(p){ const d=String(p||'').replace(/\D/g,''); if(d.length===11&&d[0]==='1') return `(${d.slice(1,4)}) ${d.slice(4,7)}-${d.slice(7)}`; if(d.length===10) return `(${d.slice(0,3)}) ${d.slice(3,6)}-${d.slice(6)}`; return p||''; }
+// "Donna asks you later": what setup still needs, shown on Today and texted one question at a time. Answer here or let her text you.
+async function paintSetupQueue(){
+  const el=$("#setup-queue"); if(!el) return;
+  const ob=obState()||{}; if(ob.queue_dismissed_at && Date.now()-new Date(ob.queue_dismissed_at).getTime()<7*864e5) return;
+  const r=await setupApi({ action:'queue' }); if(!r.ok||!(r.items||[]).length){ el.innerHTML=''; return; }
+  const items=r.items.slice(0,4);
+  el.innerHTML=`<div class="card" style="border-color:#cfe3d6;background:linear-gradient(180deg,#f6fbf7,#fff)"><div class="card-h"><h2>${esc(aName())} has ${r.items.length===1?'one question':r.items.length+' questions'} for you</h2><button class="btn sm" id="sq-later">Text me instead</button></div>
+    <p style="font-size:12.5px;color:var(--muted);margin:-4px 0 10px">Answer here in a sentence, or let her text you one at a time. Either way she fills it in herself.</p>
+    ${items.map(i=>`<div style="padding:9px 0;border-top:1px solid var(--line-2)"><div style="font-size:13.5px;font-weight:600">${esc(i.question)}</div><div style="font-size:12px;color:var(--muted);margin:2px 0 6px">${esc(i.why)}</div>
+      ${i.kind==='link'?`<button class="btn sm primary" data-sq-go="${i.key}">${i.key==='stripe'?'Connect Stripe':'Open'}</button>`:`<div style="display:flex;gap:6px;flex-wrap:wrap"><input class="inp" data-sq-in="${i.key}" placeholder="Type your answer…" style="flex:1;min-width:220px"><button class="btn sm primary" data-sq-save="${i.key}">Save</button><button class="btn sm" data-sq-skip="${i.key}" title="Not relevant to me">Not needed</button></div>`}
+      <div data-sq-msg="${i.key}" style="font-size:12px;color:var(--muted);margin-top:4px;min-height:14px">${i.asked_at?'Texted you '+new Date(i.asked_at).toLocaleDateString()+' — reply there or answer here.':''}</div></div>`).join('')}
+  </div>`;
+  el.querySelectorAll('[data-sq-save]').forEach(b=>b.onclick=async()=>{ const k=b.dataset.sqSave; const inp=el.querySelector(`[data-sq-in="${k}"]`); const m=el.querySelector(`[data-sq-msg="${k}"]`); const text=(inp.value||'').trim(); if(!text){ m.textContent='Type something first.'; return; } b.disabled=true; m.textContent='Saving…'; const r2=await setupApi({ action:'answer', key:k, text }); if(r2.ok){ m.style.color='var(--ok)'; m.textContent=r2.note||'Got it.'; setTimeout(()=>{ paintSetupQueue(); try{ loadData(); }catch(_e){} },900); } else { m.style.color='var(--danger)'; m.textContent='Could not save.'; b.disabled=false; } });
+  el.querySelectorAll('[data-sq-skip]').forEach(b=>b.onclick=async()=>{ await setupApi({ action:'answered', key:b.dataset.sqSkip }); paintSetupQueue(); });
+  el.querySelectorAll('[data-sq-go]').forEach(b=>b.onclick=()=>{ const k=b.dataset.sqGo; if(k==='stripe'){ state.view=salonOn()?'money':(paymentsOn()?'jobs':'settings'); } else state.view='assistant'; renderPage(); });
+  $("#sq-later").onclick=async()=>{ const b=$("#sq-later"); b.disabled=true; const first=items.find(i=>i.kind!=='link')||items[0]; const r2=await setupApi({ action:'ask', key:first.key }); const settings=Object.assign({}, state.account.settings||{}); settings.onboarding=Object.assign({}, settings.onboarding||{}, { queue_dismissed_at:new Date().toISOString(), text_mode:true }); await db.from('accounts').update({settings}).eq('id',state.account.id); state.account.settings=settings; el.innerHTML=`<div class="card"><p style="font-size:13px;color:var(--muted);margin:0">${r2.ok&&r2.sent?esc(aName())+' just texted you the first one. She\'ll send the rest over the next few days.':'Could not text you — is your mobile on your account? '+esc(aName())+' will ask here instead.'}</p></div>`; };
+}
 function wzStartTutorial(address){
   const stops=[
     {t:"You're live.", b:(address?("Customers can now call your number and email "+address+". ") : "Customers can now reach "+aName()+". ")+aName()+" answers and handles the routine, and brings you in when it matters."},
