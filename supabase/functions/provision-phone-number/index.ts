@@ -8,6 +8,7 @@ import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 // so the number is owned in Twilio and usable for texting under the owner's A2P.
 // v15: a new number switches texting on by default (confirmations + reminders) unless the
 // owner has already made a choice under Notifications.
+// v20: trial accounts may provision (invite-gated signups; wizard needs a number on day one).
 // v19: SIP trunk credential comes from the same place as admin-api / sip-rotate (app_secrets
 // twilio_sip_username/password, falling back to the TWILIO_SIP_* edge secrets) instead of the
 // never-populated app_config keys; refuses to provision without one so a number is never imported
@@ -74,7 +75,8 @@ Deno.serve(async (req: Request) => {
   const accountId = me.account_id;
 
   const { data: acct } = await admin.from("accounts").select("status, name, settings").eq("id", accountId).maybeSingle();
-  if (!acct || acct.status !== "active") return json({ ok: false, code: "not_active", error: "A phone number is included once your plan is active. Reach out to finish setting up billing." });
+  // v20: trials get a number too — signups are invite-gated and the setup wizard needs the number on day one. Only paused/cancelled accounts are refused.
+  if (!acct || !["active", "trial"].includes(String(acct.status || ""))) return json({ ok: false, code: "not_active", error: "A phone number is included once your plan is active. Reach out to finish setting up billing." });
 
   let body: any = {}; try { body = await req.json(); } catch { /* area code optional */ }
   const replace = body?.replace === true;
