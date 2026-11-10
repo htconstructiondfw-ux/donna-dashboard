@@ -403,7 +403,7 @@ async function loadData(){
   const { data: rules } = await db.from('availability_rules').select('*').eq('user_id', me.id);
   state.schedule = DAYS.map(()=>({ working:{on:false,start:"08:00",end:"18:00"}, bookable:{on:false,start:"09:00",end:"15:00"} }));
   (rules||[]).forEach(r=>{ const w = r.rule_type==='working'?state.schedule[r.day_of_week].working:state.schedule[r.day_of_week].bookable; w.on=true; w.start=(r.start_time||"08:00").slice(0,5); w.end=(r.end_time||"18:00").slice(0,5); });
-  const { data: blocks } = await db.from('calendar_blocks').select('*').eq('user_id', me.id).order('starts_at');
+  const { data: blocks } = await db.from('calendar_blocks').select('*').eq('user_id', me.id).eq('source','manual').order('starts_at');
   state.blocks = (blocks||[]).map(b=>({ id:b.id, type:b.block_type, start:(b.starts_at||"").slice(0,10), end:(b.ends_at||"").slice(0,10), reason:b.reason||"" }));
   await loadAppointments();
   // Reception/business activity is for managers only; stylists get a focused, own-schedule view.
@@ -445,7 +445,8 @@ function renderApp(){
   if(!mgr && !['today','schedule','appointments','clients','messages','waitlist','mylink','jobs','money','account','listings','leads','requests','properties'].includes(state.view)) state.view='today';
   // A solo owner lives in their day; land there on first load, then leave navigation free.
   if(mgr && isSolo() && !state._homed){ state._homed=true; if(state.view==='assistant') state.view='today'; }
-  if(mgr && new URLSearchParams(location.search).get('calendar')) state.view='settings';
+  if(new URLSearchParams(location.search).get('mine')) state.view=mgr?'settings':'account';
+  else if(mgr && new URLSearchParams(location.search).get('calendar')) state.view='settings';
   if(mgr && new URLSearchParams(location.search).get('dues')) state.view='dues';
   if(mgr && new URLSearchParams(location.search).get('payments') && !state._payReturned){ state._payReturned=true; state.view=(salonOn()&&!paymentsOn())?'money':'settings'; setTimeout(()=>{ if($("#pay-card")) paintPaymentsCard(true); },600); try{ history.replaceState(null,'',location.pathname); }catch(e){} }
   let navConfig, navActivity, soon=[];
@@ -1029,6 +1030,7 @@ async function seedPmVisitTypes(){
 async function loadStaff(){
   const { data } = await db.from('users').select('id,full_name,email,title,role,is_bookable,phone,pronunciation,trades,service_zips,is_active,deactivated_at,commission_pct,retail_commission_pct').eq('account_id', state.account.id).order('created_at');
   state.staff = data||[];
+  state.teamCals={}; if(isManager()){ try{ const { data: tc }=await db.rpc('donna_team_calendars'); (tc||[]).forEach(r=>{ state.teamCals[r.user_id]=r; }); }catch(_e){} }
 }
 function contractorOn(){ const s=(state.account&&state.account.settings)||{}; return String(s.industry||state.account&&state.account.industry||'')==='contractor'; }
 // Contractor dispatch: which trades a tech handles (matched to the service category) and which zips they cover. Blank = anything / anywhere.
@@ -1104,7 +1106,7 @@ function staffRowHTML(u){
     + dispatchRowHTML(u) + commissionRowHTML(u);
   return `<div class="staff-row" style="${off?'opacity:.55':''}">
     <div class="staff-main"><b>${esc(u.full_name||u.email)}${you?' <small style="display:inline;color:var(--muted-2)">(you)</small>':''}</b><small>${esc(u.email)}${off?' · deactivated':''}</small>${xfer}</div>
-    <div class="staff-meta"><span class="pill ${mgr?'mgr':''}">${esc(lbl)}</span>${book}</div>
+    <div class="staff-meta"><span class="pill ${mgr?'mgr':''}">${esc(lbl)}</span>${book}${(()=>{ const c=(state.teamCals||{})[u.id]; if(off||!c) return ''; return c.status==='error'?`<span class="pill" style="color:var(--danger)" title="Their calendar sign-in expired. They can reconnect from My account.">Calendar needs reconnect</span>`:`<span class="pill ok" title="${esc(c.email||'')}">${c.provider==='microsoft'?'Outlook':'Google'} calendar</span>`; })()}</div>
     <div class="staff-act" style="display:flex;gap:6px;flex-wrap:wrap;justify-content:flex-end">${toggle}${act}</div>
   </div>`;
 }
@@ -3680,6 +3682,7 @@ function pageSettings(){
     <div class="card"><div class="card-h"><h2>Calendar</h2><span class="hint">Availability + booking</span></div>
       <div id="cal-card-body"></div>
     </div>
+    ${(state.owner&&state.owner.role!=='owner')?myCalendarCardHTML():''}
 
 
     <div class="card"><div class="card-h"><h2>Login &amp; password</h2></div>
@@ -3727,6 +3730,7 @@ function pageSettings(){
   }
   $("#set-pw-save").onclick=savePassword;
   paintCalendarCard();
+  paintMyCalendar();
 }
 function pageMyAccount(){
   // Staff (non-manager) view: who they are signed in as, plus the same change-password form managers get in Settings.
@@ -3740,6 +3744,7 @@ function pageMyAccount(){
         <div class="set-row"><span class="k">Business</span><span class="v">${esc(ac.company||'')}</span></div>
       </div>
     </div>
+    ${myCalendarCardHTML()}
     <div class="card"><div class="card-h"><h2>Change password</h2><span class="hint">Takes effect right away</span></div>
       <div class="grid-2">
         <div class="field"><label class="lab">New password</label><input class="inp" id="set-pw1" type="password" placeholder="At least 8 characters" autocomplete="new-password"></div>
@@ -3753,6 +3758,7 @@ function pageMyAccount(){
     </div>
   </div>`;
   $("#set-pw-save").onclick=savePassword;
+  paintMyCalendar();
 }
 async function savePassword(){
   const p1=$("#set-pw1").value, p2=$("#set-pw2").value, msg=$("#set-pw-msg"), btn=$("#set-pw-save");
@@ -5570,13 +5576,16 @@ const CAL_PROVIDERS = {
 };
 async function calStatus(){ try{ const {data}=await db.rpc("donna_calendar_status"); return (data&&data[0])||null; }catch(e){ return null; } }
 async function calConfig(){ try{ const {data}=await db.rpc("donna_calendar_oauth_config"); return data||{}; }catch(e){ return {}; } }
-async function connectCalendar(provider){
+// Scopes for a team member's own calendar: just their events and free/busy, nothing else.
+const CAL_USER_SCOPE={ google:"https://www.googleapis.com/auth/calendar.events https://www.googleapis.com/auth/calendar.freebusy", microsoft:"offline_access https://graph.microsoft.com/Calendars.ReadWrite https://graph.microsoft.com/User.Read" };
+async function connectCalendar(provider, scope){
+  scope=scope==='user'?'user':'company';
   const cfg=await calConfig(); const pc=cfg[provider]||{};
   if(!pc.configured||!pc.client_id){ uiAlert(CAL_PROVIDERS[provider].label+" isn't set up yet."); return; }
-  const { data: accountId, error }=await db.rpc("donna_my_account_id");
-  if(error||!accountId){ uiAlert("Could not start the connection. Please reload and try again."); return; }
+  const { data: nonce, error }=await db.rpc("donna_calendar_oauth_start",{ p_provider:provider, p_scope:scope });
+  if(error||!nonce){ uiAlert("Could not start the connection. Please reload and try again."); return; }
   const p=CAL_PROVIDERS[provider];
-  const params=new URLSearchParams(Object.assign({ client_id:pc.client_id, redirect_uri:p.callback, response_type:"code", scope:p.scope, state:accountId }, p.extra));
+  const params=new URLSearchParams(Object.assign({ client_id:pc.client_id, redirect_uri:p.callback, response_type:"code", scope:scope==='user'?CAL_USER_SCOPE[provider]:p.scope, state:nonce }, p.extra));
   window.location.href=p.authUrl+"?"+params.toString();
 }
 async function disconnectCalendar(btn){
@@ -5599,9 +5608,38 @@ async function contactsPull(btn, silent){
   if(!silent) uiAlert(r.added||r.updated?`Brought in ${r.added} new ${r.added===1?'person':'people'}${r.updated?` and filled in ${r.updated} you already had`:''} from ${r.found} found.`:`Nothing new — your ${r.found} contacts were already here.`);
   return r;
 }
+/* ---- a person's own calendar (each team member signs in to theirs) ---- */
+function myCalendarCardHTML(){
+  return `<div class="card" id="mycal-card"><div class="card-h"><h2>My calendar</h2><span class="hint">Your own Google or Outlook</span></div><div id="mycal-body"><p style="font-size:13px;color:var(--muted)">Checking…</p></div></div>`;
+}
+function myCalAgo(t){ if(!t) return 'not yet'; const m=Math.round((Date.now()-new Date(t).getTime())/60000); return m<1?'just now':m<60?m+' min ago':Math.round(m/60)+' hr ago'; }
+async function paintMyCalendar(){
+  const el=$("#mycal-body"); if(!el) return;
+  const q=new URLSearchParams(location.search); let note='';
+  if(q.get('mine')){ const c=q.get('calendar'); q.delete('mine'); q.delete('calendar'); history.replaceState({}, '', location.pathname+(q.toString()?'?'+q:''));
+    note=c==='connected'?`<div style="margin-bottom:10px;font-size:13px;color:var(--ok)">Your calendar is connected. Your appointments are on their way to it now.</div>`:c==='error'?`<div style="margin-bottom:10px;font-size:13px;color:var(--danger)">Could not connect that calendar. Please try again.</div>`:''; }
+  let me=null; try{ const { data }=await db.rpc("donna_my_calendar"); me=data||null; }catch(_e){}
+  const cfg=await calConfig();
+  const btns=["google","microsoft"].filter(pv=>(cfg[pv]||{}).configured).map(pv=>`<button class="btn sm ${me?'':'primary'} mycal-connect" data-pv="${pv}">${me?'Switch to ':'Connect '}${pv==="microsoft"?"Outlook":"Google Calendar"}</button>`).join(" ");
+  if(!me){
+    el.innerHTML=note+`<p style="font-size:13px;color:var(--muted);margin-bottom:10px">Sign in to your own calendar and every appointment ${esc(aName())} books for you shows up there, with changes and cancellations kept in step. ${esc(aName())} also sees when you're busy and won't book you then.</p><div style="display:flex;gap:10px;flex-wrap:wrap">${btns||'<span style="font-size:13px;color:var(--muted)">Calendar sign-in isn\'t set up yet.</span>'}</div>`;
+  } else {
+    const err=me.status==='error';
+    el.innerHTML=note+`<div style="display:flex;justify-content:space-between;align-items:center;gap:10px;padding:6px 0 12px;border-bottom:1px solid var(--line,#eee)"><div><div style="font-weight:600">${me.provider==='microsoft'?'Outlook':'Google Calendar'}</div><div style="font-size:11.5px;color:var(--muted)">${esc(me.email||'')}</div></div><span style="font-size:11px;font-weight:600;color:${err?'var(--danger)':'var(--ok)'};border:1px solid currentColor;border-radius:999px;padding:2px 10px">${err?'Needs attention':'Connected'}</span></div>
+      ${err?`<p style="font-size:13px;color:var(--danger);margin-top:10px">${esc(me.last_error||'Reconnect your calendar.')}</p>`:''}
+      <p style="font-size:12.5px;color:var(--muted);margin-top:10px">Your appointments go onto this calendar, and your busy time here comes back to ${esc(aName())} so you're never double booked. Busy time last checked ${myCalAgo(me.last_pulled_at)}.</p>
+      <div style="display:flex;gap:10px;flex-wrap:wrap;margin-top:8px"><button class="btn sm primary" id="mycal-sync">Sync now</button>${btns}<button class="btn sm" id="mycal-off">Disconnect</button></div>
+      <div id="mycal-msg" style="font-size:12.5px;color:var(--muted);margin-top:8px"></div>`;
+  }
+  el.querySelectorAll('.mycal-connect').forEach(b=>b.onclick=()=>connectCalendar(b.dataset.pv,'user'));
+  const sy=$("#mycal-sync"); if(sy) sy.onclick=async()=>{ sy.disabled=true; const o=sy.textContent; sy.textContent='Syncing…'; let r=null; try{ const x=await db.functions.invoke('user-calendar',{ body:{ action:'sync_me' } }); r=x.data; }catch(_e){} sy.disabled=false; sy.textContent=o;
+    const m=$("#mycal-msg"); if(!r||!r.ok||r.error){ if(m){ m.style.color='var(--danger)'; m.textContent=r&&r.error==='token'?'Your calendar sign-in expired. Reconnect below.':'Could not sync right now. Try again in a minute.'; } paintMyCalendar(); return; }
+    paintMyCalendar().then(()=>{ const m2=$("#mycal-msg"); if(m2){ const bits=[]; if(r.created) bits.push(r.created+' added'); if(r.moved) bits.push(r.moved+' moved'); if(r.removed) bits.push(r.removed+' removed'); m2.style.color='var(--ok)'; m2.textContent='Synced. '+(bits.length?bits.join(', ')+'. ':'Everything was already up to date. ')+(typeof r.pulled==='number'?r.pulled+' busy time'+(r.pulled===1?'':'s')+' on your calendar over the next 30 days.':''); } }); };
+  const off=$("#mycal-off"); if(off) off.onclick=async()=>{ if(!(await uiConfirm(`Disconnect your calendar? ${aName()} stops adding your appointments to it and stops checking it for busy time. Events already on it stay there.`,{okText:'Disconnect',cancelText:'Keep'}))) return; await db.rpc('donna_my_calendar_disconnect'); paintMyCalendar(); };
+}
 function calToast(){
   const q=new URLSearchParams(location.search); const c=q.get("calendar");
-  if(!c) return "";
+  if(!c||q.get("mine")) return "";
   q.delete("calendar"); const qs=q.toString();
   history.replaceState({}, "", location.pathname + (qs?"?"+qs:""));
   if(c==="connected"){ setTimeout(()=>{ contactsPull(null,true).then(r=>{ if(r&&r.ok&&(r.added||r.updated)){ const el=document.getElementById('cal-contacts-note'); if(el) el.textContent=`Also brought in ${r.added} contact${r.added===1?'':'s'} from this account.`; } }); },300); return `<div style="margin-bottom:12px;font-size:13px;color:var(--ok)">Calendar connected. <span id="cal-contacts-note" style="color:var(--muted)">Pulling your contacts in the background…</span></div>`; }
@@ -5992,7 +6030,7 @@ function wzBindNav(saveFn,opts){
 }
 function renderWizard(){
   if(typeof teardownRealtime==='function') teardownRealtime();
-  try{ const q=new URLSearchParams(location.search); if(q.get('calendar')==='connected'){ history.replaceState({}, '', location.pathname); setTimeout(()=>contactsPull(null,true),400); } }catch(_e){}
+  try{ const q=new URLSearchParams(location.search); if(q.get('calendar')==='connected'&&!q.get('mine')){ history.replaceState({}, '', location.pathname); setTimeout(()=>contactsPull(null,true),400); } }catch(_e){}
   if(typeof state.wizStep!=='number'){ const ob=obState(); state.wizStep=(ob&&typeof ob.step==='number')?Math.min(ob.step, WZ_TITLES.length-1):0; }
   if(!state.wz){ const ob=obState()||{}; state.wz={
     query: state.account.company||'', website:(state.account.settings&&state.account.settings.business&&state.account.settings.business.website)||'',
