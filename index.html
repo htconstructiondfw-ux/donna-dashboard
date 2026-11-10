@@ -3987,8 +3987,8 @@ function pageProperties(){
   const hoaHint = `Each property is its own world — people, on-call contacts, governing documents, and insurance stay separated, so ${esc(aName())} never mixes one community up with another.`;
   $("#page").innerHTML=`
   <div class="page">
-    <div class="page-head"><h1>Properties</h1><p>Add every property, building, or community you manage. ${hoaHint}</p></div>
-    <div class="card">
+    <div class="page-head"><h1>${isManager()?'Properties':'My properties'}</h1><p>${isManager()?'Add every property, building, or community you manage. ':'The properties assigned to you. '}${hoaHint}</p></div>
+    ${isManager()?`<div class="card">
       <div class="card-h"><h2>Add a property</h2></div>
       <div class="grid-2">
         <div class="field"><label class="lab">Name</label><input class="inp" id="np-name" placeholder="e.g. Oakwood Apartments / 1200 Main St / Sunset Ridge HOA"></div>
@@ -4000,17 +4000,17 @@ function pageProperties(){
       </div>
       <div id="np-typefields"></div>
       <div style="display:flex;align-items:center;gap:12px"><button class="btn primary" id="np-save">Add property</button><span id="np-msg" style="font-size:12.5px;color:var(--muted)"></span></div>
-    </div>
+    </div>`:''}
     <div class="card">
       <div class="card-h"><h2>Your properties</h2><button class="btn sm" id="pm-refresh">Refresh</button></div>
       <div id="pm-list"><div class="empty">Loading…</div></div>
     </div>
     <div id="pm-detail"></div>
   </div>`;
-  $("#np-save").onclick=addProperty;
+  if($("#np-save")) $("#np-save").onclick=addProperty;
   $("#pm-refresh").onclick=()=>pageProperties();
-  const paintNpType=()=>{ const t=$("#np-type").value; $("#np-typefields").innerHTML=pmTypeFields('np', t, {}); pmBindTypeFields('np'); };
-  $("#np-type").onchange=paintNpType;
+  const paintNpType=()=>{ if(!$("#np-type")) return; const t=$("#np-type").value; $("#np-typefields").innerHTML=pmTypeFields('np', t, {}); pmBindTypeFields('np'); };
+  if($("#np-type")) $("#np-type").onchange=paintNpType;
   loadProperties().then(()=>{ paintPropList(); paintNpType(); if(state.pm.sel) openProperty(state.pm.sel); });
 }
 function paintPropList(){
