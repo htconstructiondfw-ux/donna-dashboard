@@ -5,6 +5,7 @@ import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 // Every property has a TYPE (residential / commercial / hoa) and Donna runs that property's playbook.
 // Actions: identify, status, log, emergency, arc, violation, resale_cert, hvac_afterhours, access, account,
 //          amenity_list, amenity_reserve, insurance, coi_status, coi_send, upcoming, rsvp; GET ?ack=<token>.
+// v16: the property's assigned manager (properties.manager_user_id, or its community's) is paged first on emergencies.
 
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL")!;
 const SERVICE_ROLE = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
