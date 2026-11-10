@@ -6009,6 +6009,7 @@ async function wzFinish(partial){
   try{ await loadData(); }catch(_e){}
   try{ const bk=(state.account.settings&&state.account.settings.booking)||{}; if(bk.enabled===undefined && state.types && state.types.length){ const settings=Object.assign({}, state.account.settings||{}, { booking:Object.assign({}, bk, { enabled:true }) }); const { error }=await db.from('accounts').update({settings}).eq('id',state.account.id); if(!error) state.account.settings=settings; } }catch(_e){}
   state.wizStep=0; state.wz=null;
+  try{ if(location.search) history.replaceState(null,'',location.pathname); }catch(_e){}
   renderApp();
   if(!partial) wzStartTutorial(address);
 }
@@ -6106,7 +6107,7 @@ async function boot(){
   if(!session){ renderAuth(); return; }
   let ok = await loadData();
   if(!ok){ await new Promise(r=>setTimeout(r,1200)); ok = await loadData(); } // give the signup trigger a moment
-  if(ok){ if(needsOnboarding()){ renderWizard(); } else { renderApp(); } } else { renderAuth(); }
+  if(ok){ const forceSetup=new URLSearchParams(location.search).has('setup')&&isManager(); if(forceSetup){ state.wizStep=0; state.wz=null; } if(needsOnboarding()||forceSetup){ renderWizard(); } else { renderApp(); } } else { renderAuth(); }
 }
 db.auth.onAuthStateChange((event)=>{ if(event==='PASSWORD_RECOVERY'){ pendingRecovery=true; state.authMode='reset'; renderAuth(); } });
 if('speechSynthesis' in window){ window.speechSynthesis.getVoices(); window.speechSynthesis.onvoiceschanged=()=>{}; }
