@@ -5827,10 +5827,10 @@ const WZ_RENDER={
   0:function(){
     const g=state.wz;
     document.getElementById("root").innerHTML=wzShell(`
-      <h1>Hi, I'm ${esc(DEFAULT_NAME)}. What's your business called?</h1>
-      <p class="lede">I'll look you up, read your website and your Google listing, and set myself up from what's already out there. You just tell me what's right. About two minutes.</p>
-      <div class="wz-field"><label>Business name <span class="hint">or paste your website</span></label><input class="wz-inp" id="wz-q" value="${esc(g.query)}" placeholder="e.g. Bella Hair Studio, Arlington"></div>
-      <div class="wz-field"><label>Website <span class="hint">optional — helps me get services and prices exactly right</span></label><input class="wz-inp" id="wz-web" value="${esc(g.website)}" placeholder="yourbusiness.com"></div>
+      <h1>Hi, I'm ${esc(DEFAULT_NAME)}. Where can I read about you?</h1>
+      <p class="lede">Paste your website and I'll read it — services, prices, hours, your team, the questions people ask — and set myself up from that. You just tell me what's right. About two minutes.</p>
+      <div class="wz-field"><label>Your website</label><input class="wz-inp" id="wz-web" value="${esc(g.website)}" placeholder="yourbusiness.com" autofocus></div>
+      <div class="wz-field"><label>Business name <span class="hint">if it's not obvious from the site, or you don't have one yet</span></label><input class="wz-inp" id="wz-q" value="${esc(g.query)}" placeholder="e.g. Bella Hair Studio"></div>
       <div class="wz-msg" id="wz-m"></div>
       <div class="wz-or">or</div>
       <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap">
@@ -5849,9 +5849,9 @@ const WZ_RENDER={
     };
     wzBindNav(async()=>{
       const q=$("#wz-q").value.trim(), web=$("#wz-web").value.trim(); const m=$("#wz-m");
-      if(!q&&!web){ m.style.color='var(--danger)'; m.textContent='Tell me the name or paste your website.'; return false; }
+      if(!q&&!web){ m.style.color='var(--danger)'; m.textContent='Paste your website, or tell me the name if you don\'t have one.'; return false; }
       g.query=q||web.replace(/^https?:\/\//,'').replace(/\/.*$/,''); g.website=web;
-      m.style.color='var(--muted)'; m.innerHTML='<span class="wz-pulse"></span>Looking you up and reading your site… this takes about 20 seconds.';
+      m.style.color='var(--muted)'; m.innerHTML='<span class="wz-pulse"></span>'+(web?'Reading your site… this takes 30–40 seconds.':'No website — I\'ll set up the basics now and text you for services and prices.');
       const r=await setupApi({ action:'lookup', query:g.query, website:web });
       if(!r.ok||!r.proposal){ m.style.color='var(--danger)'; m.textContent='I couldn\'t look that up just now. Try again, or add your website.'; return false; }
       g.proposal=r.proposal; g.proposal.owner={ name:g.owner, phone:g.phone }; if(!g.proposal.industry||g.proposal.industry==='other') g.proposal.industry=g.industry||'other';
