@@ -6,12 +6,12 @@ IND=[
   lead='Priced right with the cheapest AI answering services, but Donna books, texts and follows up instead of just taking a message.',
   them='Typical AI answering service',them_eg='e.g. Rosie, Goodcall',them_price='$49–249',
   stat=('About the same price,','far more included','Booking, texting and a team plan come standard.'),
-  rows=[('Minutes included','250 at $49, then 25¢/min','300, then 25¢/min','1,000, then 20¢/min'),
+  rows=[('Minutes included','250 at $49, then 25¢/min','300, then 25¢/min','1,200, then 20¢/min'),
    ('Every call answered 24/7','Y','Y','Y'),('Books appointments into a calendar','Higher plans only','Y','Y'),
    ('Text confirmations and reminders','Booking links on entry plans','Y','Y'),('Email inbox answered','Varies','Y','Y'),
    ('25 languages','Varies','Y','Y'),('Logins','Varies','One person','Unlimited team')],
   win='More minutes than the leading AI answerer for about the same price ($49 a month on a 1-year plan), booking included from the first plan, and a team plan with no per-user fee.',
-  s=('$55','300 min','$49','$44'),p=('$165','1,000 min','$149','$132')),
+  s=('$55','300 min','$49','$44'),p=('$165','1,200 min','$149','$132')),
  dict(key='salon',name='Salons and spas',who='Hair, barber, nail, lash, spa and med-spa',c='#8a3a5c',deep='#3b1426',hi='#f2a7c3',
   lead='Most salons pay twice: booking software, then an AI phone add-on on top. Donna is both, for one bill.',
   them='Typical salon stack',them_eg='booking software + AI phone add-on',them_price='$75–300+',
@@ -206,7 +206,7 @@ h1,h2,.big b,.pnum{{font-family:"Inter Display","Inter",sans-serif;letter-spacin
   <div><b>Set up in minutes</b><span>Donna reads your website, proposes everything and calls you for a test call. In English, Spanish, Vietnamese, Chinese or Korean.</span></div>
  </div>
  <div class="ov"><div><h3>How extra minutes work</h3><p>Minutes are time Donna spends on calls. Examples use month-to-month prices. Go over and extra minutes are 25¢ on Starter or 20¢ on Pro, about half of what most competitors charge. And a Starter bill never goes above the Pro price.</p></div>
-  <table><tr><td>Everyday Starter, 200 min used</td><td>$55</td></tr><tr><td>Everyday Starter, 400 min used</td><td>$80</td></tr><tr><td>Everyday Starter, 900 min used</td><td>$165 (capped)</td></tr><tr><td>Everyday Pro, 1,200 min used</td><td>$205</td></tr></table></div>
+  <table><tr><td>Everyday Starter, 200 min used</td><td>$55</td></tr><tr><td>Everyday Starter, 400 min used</td><td>$80</td></tr><tr><td>Everyday Starter, 900 min used</td><td>$165 (capped)</td></tr><tr><td>Everyday Pro, 1,400 min used</td><td>$205</td></tr></table></div>
  <div class="foot"><span>Donna by Sidekick Logistics</span><span>2</span></div>
 </section>
 {pages}
