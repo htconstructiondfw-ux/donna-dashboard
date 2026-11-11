@@ -11,7 +11,7 @@ IND=[
    ('Text confirmations and reminders','Booking links on entry plans','Y','Y'),('Email inbox answered','Varies','Y','Y'),
    ('25 languages','Varies','Y','Y'),('Logins','Varies','One person','Unlimited team')],
   win='More minutes than the leading AI answerer for about the same price ($49 a month on a 1-year plan), booking included from the first plan, and a team plan with no per-user fee.',
-  s=('$54','300 min','$49','$43'),p=('$164','1,000 min','$149','$131')),
+  s=('$55','300 min','$49','$44'),p=('$165','1,000 min','$149','$132')),
  dict(key='salon',name='Salons and spas',who='Hair, barber, nail, lash, spa and med-spa',c='#8a3a5c',deep='#3b1426',hi='#f2a7c3',
   lead='Most salons pay twice: booking software, then an AI phone add-on on top. Donna is both, for one bill.',
   them='Typical salon stack',them_eg='booking software + AI phone add-on',them_price='$75–300+',
@@ -22,7 +22,7 @@ IND=[
    ('Waitlist that fills cancellations','Varies','Y','Y'),('Rebooking reminders and review asks','Varies','Y','Y'),
    ('Checkout, tips and gift cards','Y','Y','Y'),('Stylists','Often a fee per stylist','One stylist','Unlimited, each with their own calendar')],
   win='One bill instead of two, no per-text charges, and extra minutes at 25¢ instead of 50–60¢. Every stylist gets a login and their own book on Pro at no extra cost.',
-  s=('$87','400 min','$79','$70'),p=('$219','1,200 min','$199','$175')),
+  s=('$89','400 min','$79','$71'),p=('$219','1,200 min','$199','$175')),
  dict(key='contractor',name='Contractors and the trades',who='HVAC, plumbing, electrical, lawn, pool, roofing and handyman',c='#c2561a',deep='#1d2733',hi='#ffb27a',
   lead='Field-service apps sell software with the phone bolted on. Donna is the receptionist first, with jobs, estimates, invoices and the tech app included.',
   them='Typical field-service stack',them_eg='e.g. Jobber Grow + AI Receptionist',them_price='about $230–330',
@@ -33,8 +33,8 @@ IND=[
    ('After-hours emergencies paged and escalated','Varies','Y','Y'),('Estimates with an approve link','Y','Y','Y'),
    ('Invoices and card payments','Through their processing','Into your own Stripe','Into your own Stripe'),
    ('Run the day by text or one phone app','App','Y','Y'),('Dispatch by trade and zip','Higher plans','Not needed solo','Y')],
-  win='A one-truck shop pays $164 month to month on Donna Starter, or $149 on a 1-year plan, instead of about $230. As the crew grows, typical stacks jump to a team tier around $330; Donna Pro stays one flat price for unlimited techs, with every call answered, no annual contract, and payments to your own Stripe at Stripe\'s rates.',
-  s=('$164','500 min','$149','$131'),p=('$384','1,500 min','$349','$307')),
+  win='A one-truck shop pays $165 month to month on Donna Starter, or $149 on a 1-year plan, instead of about $230. As the crew grows, typical stacks jump to a team tier around $330; Donna Pro stays one flat price for unlimited techs, with every call answered, no annual contract, and payments to your own Stripe at Stripe\'s rates.',
+  s=('$165','500 min','$149','$132'),p=('$385','1,500 min','$349','$308')),
  dict(key='pm',name='Property management',who='Residential rentals, commercial and flex buildings, HOAs and condos',c='#24538a',deep='#0f2440',hi='#8cc2ff',
   lead='Donna works alongside your accounting and lease software. She replaces the answering service and the leasing and maintenance phone work, at a flat price no matter how many doors.',
   them='Typical answering service',them_eg='after-hours and overflow',them_price='$200–500',
@@ -46,18 +46,18 @@ IND=[
    ('HOA dues collection with autopay','N','Y','Y'),('Owner and board one-tap approvals','N','Y','Y'),
    ('Logins','One account','One manager','Unlimited managers')],
   win='Starter costs less than most answering services and does the follow-through they leave to you. Pro adds your whole team for a price that stays flat as the portfolio grows.',
-  s=('$164','500 min','$149','$131'),p=('$384','1,500 min','$349','$307')),
+  s=('$165','500 min','$149','$132'),p=('$385','1,500 min','$349','$308')),
  dict(key='re',name='Real estate',who='Agents, teams, brokers and the rentals you manage',c='#0f6e6a',deep='#0b2f33',hi='#7fe0d6',
   lead='Real estate AI tools usually charge per agent. Donna charges once for the whole office.',
   them='Typical per-seat AI and CRM tools',them_eg='priced per agent',them_price='$299–1,000+ per agent',
-  stat=('About ¼','the cost for a 5-agent office','$384 total, or $349 on a 1-year plan, instead of $1,500 or more.'),
+  stat=('About ¼','the cost for a 5-agent office','$385 total, or $349 on a 1-year plan, instead of $1,500 or more.'),
   rows=[('Agents covered','One per seat','One agent','The whole office'),
    ('Minutes included','Varies','500, then 25¢/min','1,500, then 20¢/min'),
    ('Listing questions answered 24/7','Varies','Y','Y'),('Showings booked, agreement texted for e-signature','Varies','Y','Y'),
    ('Hot leads texted to the right agent','Y','Y','Y'),('Fair Housing-safe answers','Varies','Y','Y'),
    ('Managed rentals and maintenance calls','Rarely','Y','Y')],
   win='A 5-agent office pays about a quarter of a per-seat stack, and every agent\'s showings land on their own calendar.',
-  s=('$164','500 min','$149','$131'),p=('$384','1,500 min','$349','$307')),
+  s=('$165','500 min','$149','$132'),p=('$385','1,500 min','$349','$308')),
 ]
 def cell(v,ours=False):
     if v=='Y': return '<span class="ck">✓</span>' if ours else '<span class="ck dim">✓</span>'
@@ -206,7 +206,7 @@ h1,h2,.big b,.pnum{{font-family:"Inter Display","Inter",sans-serif;letter-spacin
   <div><b>Set up in minutes</b><span>Donna reads your website, proposes everything and calls you for a test call. In English, Spanish, Vietnamese, Chinese or Korean.</span></div>
  </div>
  <div class="ov"><div><h3>How extra minutes work</h3><p>Minutes are time Donna spends on calls. Examples use month-to-month prices. Go over and extra minutes are 25¢ on Starter or 20¢ on Pro, about half of what most competitors charge. And a Starter bill never goes above the Pro price.</p></div>
-  <table><tr><td>Everyday Starter, 200 min used</td><td>$54</td></tr><tr><td>Everyday Starter, 400 min used</td><td>$79</td></tr><tr><td>Everyday Starter, 900 min used</td><td>$164 (capped)</td></tr><tr><td>Everyday Pro, 1,200 min used</td><td>$204</td></tr></table></div>
+  <table><tr><td>Everyday Starter, 200 min used</td><td>$55</td></tr><tr><td>Everyday Starter, 400 min used</td><td>$80</td></tr><tr><td>Everyday Starter, 900 min used</td><td>$165 (capped)</td></tr><tr><td>Everyday Pro, 1,200 min used</td><td>$205</td></tr></table></div>
  <div class="foot"><span>Donna by Sidekick Logistics</span><span>2</span></div>
 </section>
 {pages}
