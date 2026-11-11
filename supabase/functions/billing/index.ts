@@ -11,7 +11,8 @@ import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 //     (placeholder trial of 30 days at checkout, re-anchored to first call + 14 days by the sweep).
 //   - Cancel any time during the trial: the plan ends when the trial does, nothing is charged.
 //   - Month to month: cancel at period end. 1-year / 2-year: billing runs to the end of the commitment,
-//     then the plan ends. Commitments renew for the same term unless cancelled.
+//     then the plan ends if they cancelled. Otherwise it goes MONTH TO MONTH at the list price (Nov 11).
+//     Reminders 30 and 7 days before the end offer: extend 1 year, extend 2 years, or go month to month.
 //   - Extra minutes: 25c Starter / 20c Pro, added to the renewal invoice. A Starter bill never goes above
 //     the Pro price for the same price list and term. Discounts apply to the plan price only.
 //   - Plan ended (canceled / unpaid): Donna stops answering and calls forward to the business line
@@ -24,6 +25,7 @@ import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 //   confirm {session_id}           after Checkout returns: sync now instead of waiting for the webhook
 //   change {tier?, term?}          upgrade / downgrade / commit (rules in change())
 //   cancel / resume                schedule the end / undo it
+//   extend {term: 1y|2y}           add another commitment after the current one (price for that term from now)
 //   card                          Stripe Checkout in setup mode to replace the card -> {url}
 // Internal (x-cron-secret or service role):
 //   sweep                         trial anchoring, commitment renewals, 80% / 100% usage emails, status sync
@@ -387,6 +389,49 @@ async function onWebhook(req: Request) {
   return json({ ok: true, type: ev.type });
 }
 
+// ---------------------------------------------------------------- commitment end
+const sameTime = (a: any, b: any) => !!a && !!b && new Date(a).getTime() === new Date(b).getTime();
+function termOptions(f: Family, t: Tier) {
+  const p = BOOK[f][t].price;
+  return `  - Extend 1 year: ${money(p["1y"])} a month\n  - Extend 2 years: ${money(p["2y"])} a month (best price)\n  - Month to month: ${money(p.mtm)} a month, cancel any time`;
+}
+async function renewalReminder(b: any, days: number) {
+  const acct = await loadAccount(b.account_id); const c = await ownerContact(b.account_id);
+  const f = b.family as Family, t = b.tier as Tier;
+  const end = new Date(b.commitment_ends_at).toDateString();
+  await sendEmail([c.email, acct?.settings?.alert_email], days === 7 ? "Donna: your plan's commitment ends in a week" : "Donna: your plan's commitment ends next month",
+    `Hi${c.full_name ? " " + String(c.full_name).split(" ")[0] : ""},\n\nYour ${b.term === "2y" ? "2-year" : "1-year"} Donna ${t === "pro" ? "Pro" : "Starter"} plan for ${acct?.name || "your business"} ends on ${end}. After that it moves to month to month at ${money(BOOK[f][t].price.mtm)} a month unless you extend.\n\nYour options:\n${termOptions(f, t)}\n\nTo extend, open Billing in your Donna dashboard and choose Extend. Nothing else changes: same number, same minutes, same Donna.\n\nDonna by Sidekick Logistics`);
+}
+async function toMonthToMonth(b: any) {
+  const sub = await sp("GET", `/subscriptions/${b.stripe_subscription_id}`);
+  if (sub.status === "canceled" || sub.cancel_at) return;
+  const item = sub.items.data[0];
+  await sp("POST", `/subscriptions/${sub.id}`, { items: [{ id: item.id, price: await priceId(b.family, b.tier, "mtm") }], proration_behavior: "none", metadata: { ...sub.metadata, term: "mtm" } });
+  await saveBilling(b.account_id, { term: "mtm", commitment_ends_at: null, renewal_switched_at: new Date().toISOString() });
+  await syncSub(b.account_id, sub.id);
+  const acct = await loadAccount(b.account_id); const c = await ownerContact(b.account_id);
+  await sendEmail([c.email, acct?.settings?.alert_email], "Donna: you're now month to month", `Hi${c.full_name ? " " + String(c.full_name).split(" ")[0] : ""},\n\nYour Donna commitment has ended and your plan is now month to month at ${money(BOOK[b.family as Family][b.tier as Tier].price.mtm)} a month. You can cancel any time.\n\nWant the lower price back? Open Billing in your Donna dashboard and choose a 1-year (${money(BOOK[b.family as Family][b.tier as Tier].price["1y"])}) or 2-year (${money(BOOK[b.family as Family][b.tier as Tier].price["2y"])}) plan.\n\nDonna by Sidekick Logistics`);
+}
+async function extend(u: any, body: any) {
+  if (!canManage(u)) return { ok: false, error: "owner_only" };
+  const term = body.term; if (term !== "1y" && term !== "2y") return { ok: false, error: "bad_plan" };
+  const b = await loadBilling(u.account_id);
+  if (!b?.stripe_subscription_id || ["canceled", "incomplete_expired"].includes(String(b.sub_status))) return { ok: false, error: "no_plan" };
+  const committed = b.commitment_ends_at && new Date(b.commitment_ends_at) > new Date() && b.term !== "mtm";
+  if (!committed) return await change(u, { term }); // month to month: committing now is a plain plan change
+  if (TERM_MONTHS[term as Term] < TERM_MONTHS[b.term as Term]) return { ok: false, error: "committed_shorter", until: b.commitment_ends_at };
+  const sub = await sp("GET", `/subscriptions/${b.stripe_subscription_id}`);
+  if (term !== b.term) {
+    const item = sub.items.data[0];
+    await sp("POST", `/subscriptions/${sub.id}`, { items: [{ id: item.id, price: await priceId(b.family, b.tier, term) }], proration_behavior: "create_prorations", metadata: { ...sub.metadata, term } });
+  }
+  // The new commitment starts when the current one ends, so no months are lost.
+  await saveBilling(u.account_id, { term, commitment_ends_at: addMonths(new Date(b.commitment_ends_at), TERM_MONTHS[term as Term]).toISOString(), renew_notice30_for: null, renew_notice7_for: null });
+  if (sub.cancel_at) await sp("POST", `/subscriptions/${sub.id}`, { cancel_at: "" });
+  await syncSub(u.account_id, sub.id);
+  return { ok: true, ...(await status(u)) };
+}
+
 // ---------------------------------------------------------------- sweep
 async function sweep() {
   const out = { anchored: 0, renewed: 0, alerts: 0, synced: 0, errors: [] as string[] };
@@ -410,9 +455,14 @@ async function sweep() {
           continue;
         }
       }
-      // 2. Commitments renew for the same term unless the plan is set to end.
-      if (b.commitment_ends_at && b.term && b.term !== "mtm" && !b.cancel_at && new Date(b.commitment_ends_at) <= new Date() && ["active", "past_due"].includes(b.sub_status)) {
-        await saveBilling(b.account_id, { commitment_ends_at: addMonths(new Date(b.commitment_ends_at), TERM_MONTHS[b.term as Term]).toISOString() }); out.renewed++;
+      // 2. Commitment ending: reminders at 30 and 7 days, then switch to month to month in the last day
+      //    (before the renewal invoice, so the first month-to-month bill is at the list price).
+      if (b.commitment_ends_at && b.term && b.term !== "mtm" && !b.cancel_at && ["active", "past_due"].includes(b.sub_status)) {
+        const left = new Date(b.commitment_ends_at).getTime() - Date.now();
+        if (left <= 86400_000) { await toMonthToMonth(b); out.renewed++; continue; }
+        const due30 = left <= 30 * 86400_000 && !sameTime(b.renew_notice30_for, b.commitment_ends_at);
+        const due7 = left <= 7 * 86400_000 && !sameTime(b.renew_notice7_for, b.commitment_ends_at);
+        if (due7 || due30) { await renewalReminder(b, due7 ? 7 : 30); await saveBilling(b.account_id, due7 ? { renew_notice7_for: b.commitment_ends_at, renew_notice30_for: b.commitment_ends_at } : { renew_notice30_for: b.commitment_ends_at }); out.alerts++; }
       }
       // 3. Usage emails at 80% and 100% of included minutes, once per period.
       if (b.sub_status === "active" && b.family && b.tier && b.current_period_start) {
@@ -460,6 +510,7 @@ Deno.serve(async (req: Request) => {
     if (action === "cancel") return json(await cancel(u));
     if (action === "resume") return json(await resume(u));
     if (action === "card") return json(await card(u));
+    if (action === "extend") return json(await extend(u, body));
     return json({ ok: false, error: "unknown_action" }, 400);
   } catch (e) {
     console.error("billing", action, String((e as any)?.message || e));

@@ -734,9 +734,12 @@ async function pageBilling(){
       ${b.sub_status==='past_due'?`<div class="bl-note warn">We couldn't charge your card. Stripe will retry, and ${esc(aName())} keeps answering in the meantime. Update your card below to fix it now.</div>`:''}
       ${b.cancel_at&&b.sub_status!=='trialing'?`<div class="bl-note warn">Your plan is set to end on <b>${esc(blDate(b.cancel_at))}</b>. ${esc(aName())} keeps answering until then.</div>`:''}
       ${meter}
+      ${committed&&r.can_manage&&!b.cancel_at?(()=>{ const pr=r.prices.tiers[b.tier].price; const days=Math.ceil((new Date(b.commitment_ends_at)-new Date())/864e5); const soon=days<=30;
+        return `<div class="bl-note ${soon?'warn':''}" style="${soon?'':'background:#f6f8fb;border-color:var(--line)'}"><b>${soon?`Your ${b.term==='2y'?'2-year':'1-year'} commitment ends in ${days} day${days===1?'':'s'}.`:`Extend your plan any time.`}</b> After ${esc(blDate(b.commitment_ends_at))} it goes month to month at ${blMoney(pr.mtm)}. Extend to keep a lower price; the new term starts when this one ends.
+          <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:8px">${b.term==='1y'?`<button class="btn sm" data-bl-ext="1y">Extend 1 year · ${blMoney(pr['1y'])}/mo</button>`:''}<button class="btn sm primary" data-bl-ext="2y">Extend 2 years · ${blMoney(pr['2y'])}/mo</button></div></div>`; })():''}
       <div class="set-rows" style="margin-top:14px">
         <div class="set-row"><span class="k">Card</span><span class="v">${b.card_last4?`${esc((b.card_brand||'card').replace(/^./,c=>c.toUpperCase()))} ending ${esc(b.card_last4)}`:'On file'} ${r.can_manage?'<button class="btn sm" id="bl-card" style="margin-left:8px">Update card</button>':''}</span></div>
-        ${committed?`<div class="set-row"><span class="k">Commitment</span><span class="v">Until ${esc(blDate(b.commitment_ends_at))}, then renews for another ${b.term==='2y'?'2 years':'year'} unless you end it</span></div>`:''}
+        ${committed?`<div class="set-row"><span class="k">Commitment</span><span class="v">Until ${esc(blDate(b.commitment_ends_at))}, then month to month at ${blMoney(r.prices.tiers[b.tier].price.mtm)} unless you extend</span></div>`:''}
         <div class="set-row"><span class="k">Extra minutes</span><span class="v">${r.prices.overage[b.tier]}¢ each${b.tier==='starter'?', and a Starter bill never goes above the Pro price':''}</span></div>
       </div>
       <div id="bl-pick" style="display:none;margin-top:16px"></div>
@@ -756,9 +759,12 @@ async function pageBilling(){
       return done(await billingApi({ action:'change', tier, term })); }); };
   const cd=$("#bl-card"); if(cd) cd.onclick=async()=>{ cd.disabled=true; const res=await billingApi({ action:'card' }); if(res.ok&&res.url) location.href=res.url; else { cd.disabled=false; m.style.color='var(--danger)'; m.textContent=blErr(res); } };
   const cn=$("#bl-cancel"); if(cn) cn.onclick=async()=>{
-    const msg=b.sub_status==='trialing'?`Cancel your free trial? ${aName()} keeps answering until ${b.trial_anchored?blDate(b.trial_end):'the trial ends'}, then stops, and you won't be charged.`:(committed?`Your ${b.term==='2y'?'2-year':'1-year'} plan runs until ${blDate(b.commitment_ends_at)}. Billing continues monthly until then, and the plan ends that day instead of renewing.`:`End your plan? ${aName()} keeps answering until ${blDate(b.current_period_end)}, then stops. You won't be charged again.`);
+    const msg=b.sub_status==='trialing'?`Cancel your free trial? ${aName()} keeps answering until ${b.trial_anchored?blDate(b.trial_end):'the trial ends'}, then stops, and you won't be charged.`:(committed?`Your ${b.term==='2y'?'2-year':'1-year'} plan runs until ${blDate(b.commitment_ends_at)}. Billing continues monthly until then, and the plan ends that day instead of going month to month.`:`End your plan? ${aName()} keeps answering until ${blDate(b.current_period_end)}, then stops. You won't be charged again.`);
     if(!(await uiConfirm(msg,{okText:b.sub_status==='trialing'?'Cancel trial':'End plan',cancelText:'Keep my plan'}))) return;
     cn.disabled=true; done(await billingApi({ action:'cancel' })); };
+  document.querySelectorAll('[data-bl-ext]').forEach(x=>x.onclick=async()=>{ const term=x.dataset.blExt; const pr=r.prices.tiers[b.tier].price;
+    const msg=term===b.term?`Extend for another ${term==='2y'?'2 years':'year'} at ${blMoney(pr[term])} a month? It starts when your current commitment ends on ${blDate(b.commitment_ends_at)}.`:`Switch to a 2-year plan at ${blMoney(pr['2y'])} a month? The lower price starts now, and the 2 years start when your current commitment ends on ${blDate(b.commitment_ends_at)}.`;
+    if(!(await uiConfirm(msg,{okText:'Extend',cancelText:'Not now'}))) return; x.disabled=true; done(await billingApi({ action:'extend', term })); });
   const rs=$("#bl-resume"); if(rs) rs.onclick=async()=>{ rs.disabled=true; done(await billingApi({ action:'resume' })); };
 }
 // Coming back from Stripe Checkout: confirm right away (the webhook may still be on its way).

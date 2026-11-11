@@ -63,3 +63,6 @@ select cron.schedule('donna-billing-sweep', '*/15 * * * *', $c$
     headers := jsonb_build_object('Content-Type','application/json','x-cron-secret',(select value from app_secrets where key='cron_secret')),
     body := '{"action":"sweep"}'::jsonb, timeout_milliseconds := 60000);
 $c$);
+
+-- Nov 11: commitments end -> month to month; reminders 30 and 7 days before the end.
+alter table public.account_billing add column if not exists renew_notice30_for timestamptz, add column if not exists renew_notice7_for timestamptz, add column if not exists renewal_switched_at timestamptz;
