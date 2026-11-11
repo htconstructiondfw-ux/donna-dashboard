@@ -1,7 +1,7 @@
 import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 
-// Donna — Retell inbound-call webhook (emits greeting, routing, memory, voice). v45: trip_fee + after_hours vars (prepay only when cards are live). v47: card processing fee note in trip_fee. v48: real_estate var. v49: hours + approved knowledge appended to custom_instructions. v50: per-account voice test rotation.
+// Donna — Retell inbound-call webhook (emits greeting, routing, memory, voice). v45: trip_fee + after_hours vars (prepay only when cards are live). v47: card processing fee note in trip_fee. v48: real_estate var. v49: hours + approved knowledge appended to custom_instructions. v50: per-account voice test rotation. v51: voice test is staff-only (app_config).
 
 const supabase = createClient(
   Deno.env.get("SUPABASE_URL")!,
@@ -153,12 +153,14 @@ Deno.serve(async (req: Request) => {
   if (error || !asst) return empty();
 
   const retellVoice = VOICE_MAP[String((asst as any).voice_id || "")] || DEFAULT_VOICE;
-  // v50 voice test: accounts.settings.voice_test = { voices: [{id, model?, label}], backchannel? }. Each call takes the
-  // next voice in turn and Donna says which one it is first, so the owner can compare voices on one line.
+  // v51 voice test (Sidekick staff only): app_config "voice_test_<account_id>" = { voices: [{id, model?, label}], backchannel? }.
+  // app_config has no tenant policies, so only we can switch it on. Each call takes the next voice in turn and
+  // Donna says which one it is first, so we can compare voices on one line.
   let agentOv: Record<string, unknown> = { voice_id: retellVoice };
   let voiceTestIntro = "";
   try {
-    const vt: any = ((asst as any).accounts?.settings || {}).voice_test;
+    const { data: vtRow } = await supabase.from("app_config").select("value").eq("key", `voice_test_${(asst as any).account_id}`).maybeSingle();
+    let vt: any = null; try { vt = vtRow ? JSON.parse(String((vtRow as any).value || "")) : null; } catch { vt = null; }
     const list: any[] = Array.isArray(vt?.voices) ? vt.voices.filter((v: any) => v && v.id) : [];
     if (list.length) {
       const key = `voice_test_n_${(asst as any).account_id}`;
