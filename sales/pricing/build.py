@@ -11,7 +11,7 @@ IND=[
    ('Text confirmations and reminders','Booking links on entry plans','Y','Y'),('Email inbox answered','Varies','Y','Y'),
    ('25 languages','Varies','Y','Y'),('Logins','Varies','One person','Unlimited team')],
   win='More minutes than the leading AI answerer for about the same price ($49 a month on a 1-year plan), booking included from the first plan, and a team plan with no per-user fee.',
-  s=('$55','300 min','$49','$44'),p=('$165','1,200 min','$149','$132')),
+  s=('$55','300 min','$49','$47'),p=('$165','1,200 min','$149','$140')),
  dict(key='salon',name='Salons and spas',who='Hair, barber, nail, lash, spa and med-spa',c='#8a3a5c',deep='#3b1426',hi='#f2a7c3',
   lead='Most salons pay twice: booking software, then an AI phone add-on on top. Donna is both, for one bill.',
   them='Typical salon stack',them_eg='booking software + AI phone add-on',them_price='$75–300+',
@@ -22,7 +22,7 @@ IND=[
    ('Waitlist that fills cancellations','Varies','Y','Y'),('Rebooking reminders and review asks','Varies','Y','Y'),
    ('Checkout, tips and gift cards','Y','Y','Y'),('Stylists','Often a fee per stylist','One stylist','Unlimited, each with their own calendar')],
   win='One bill instead of two, no per-text charges, and extra minutes at 25¢ instead of 50–60¢. Every stylist gets a login and their own book on Pro at no extra cost.',
-  s=('$89','400 min','$79','$71'),p=('$219','1,200 min','$199','$175')),
+  s=('$89','400 min','$79','$76'),p=('$219','1,200 min','$199','$186')),
  dict(key='contractor',name='Contractors and the trades',who='HVAC, plumbing, electrical, lawn, pool, roofing and handyman',c='#c2561a',deep='#1d2733',hi='#ffb27a',
   lead='Field-service apps sell software with the phone bolted on. Donna is the receptionist first, with jobs, estimates, invoices and the tech app included.',
   them='Typical field-service stack',them_eg='e.g. Jobber Grow + AI Receptionist',them_price='about $230–330',
@@ -34,7 +34,7 @@ IND=[
    ('Invoices and card payments','Through their processing','Into your own Stripe','Into your own Stripe'),
    ('Run the day by text or one phone app','App','Y','Y'),('Dispatch by trade and zip','Higher plans','Not needed solo','Y')],
   win='A one-truck shop pays $165 month to month on Donna Starter, or $149 on a 1-year plan, instead of about $230. As the crew grows, typical stacks jump to a team tier around $330; Donna Pro stays one flat price for unlimited techs, with every call answered, no annual contract, and payments to your own Stripe at Stripe\'s rates.',
-  s=('$165','500 min','$149','$132'),p=('$385','1,500 min','$349','$308')),
+  s=('$165','500 min','$149','$140'),p=('$385','1,500 min','$349','$327')),
  dict(key='pm',name='Property management',who='Residential rentals, commercial and flex buildings, HOAs and condos',c='#24538a',deep='#0f2440',hi='#8cc2ff',
   lead='Donna works alongside your accounting and lease software. She replaces the answering service and the leasing and maintenance phone work, at a flat price no matter how many doors.',
   them='Typical answering service',them_eg='after-hours and overflow',them_price='$200–500',
@@ -46,7 +46,7 @@ IND=[
    ('HOA dues collection with autopay','N','Y','Y'),('Owner and board one-tap approvals','N','Y','Y'),
    ('Logins','One account','One manager','Unlimited managers')],
   win='Starter costs less than most answering services and does the follow-through they leave to you. Pro adds your whole team for a price that stays flat as the portfolio grows.',
-  s=('$165','500 min','$149','$132'),p=('$385','1,500 min','$349','$308')),
+  s=('$165','500 min','$149','$140'),p=('$385','1,500 min','$349','$327')),
  dict(key='re',name='Real estate',who='Agents, teams, brokers and the rentals you manage',c='#0f6e6a',deep='#0b2f33',hi='#7fe0d6',
   lead='Real estate AI tools usually charge per agent. Donna charges once for the whole office.',
   them='Typical per-seat AI and CRM tools',them_eg='priced per agent',them_price='$299–1,000+ per agent',
@@ -57,7 +57,7 @@ IND=[
    ('Hot leads texted to the right agent','Y','Y','Y'),('Fair Housing-safe answers','Varies','Y','Y'),
    ('Managed rentals and maintenance calls','Rarely','Y','Y')],
   win='A 5-agent office pays about a quarter of a per-seat stack, and every agent\'s showings land on their own calendar.',
-  s=('$165','500 min','$149','$132'),p=('$385','1,500 min','$349','$308')),
+  s=('$165','500 min','$149','$140'),p=('$385','1,500 min','$349','$327')),
 ]
 def cell(v,ours=False):
     if v=='Y': return '<span class="ck">✓</span>' if ours else '<span class="ck dim">✓</span>'
@@ -124,6 +124,15 @@ h1,h2,.big b,.pnum{{font-family:"Inter Display","Inter",sans-serif;letter-spacin
 .ov table{{width:100%;border-collapse:collapse;font-size:12px}}
 .ov td{{padding:6px 0;border-top:1px solid rgba(255,255,255,.12)}} .ov td:last-child{{text-align:right;font-weight:700}}
 .ov tr:first-child td{{border-top:none}}
+.save{{margin-top:14px;display:grid;grid-template-columns:1fr 1.9fr;gap:16px;align-items:center;background:#fff;border:2px solid #2f6f4f;border-radius:18px;padding:14px 18px}}
+.save h3{{margin:2px 0 4px;font-size:18px;font-family:"Inter Display"}} .save p{{margin:0;font-size:11.5px;color:#4a5560;line-height:1.5}}
+.terms3{{display:grid;grid-template-columns:repeat(3,1fr);gap:8px}}
+.terms3 div{{position:relative;border:1px solid #e7e5df;border-radius:12px;padding:10px 11px;background:#fbfaf7}}
+.terms3 .t1{{background:#eef6f1}} .terms3 .t2{{background:#2f6f4f;color:#fff;border-color:#2f6f4f}}
+.terms3 .tl{{display:block;font-size:10px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;opacity:.75}}
+.terms3 b{{display:block;font-family:"Inter Display";font-size:20px;margin:2px 0}}
+.terms3 small{{display:block;font-size:10.5px;opacity:.8}} .terms3 em{{display:block;font-style:normal;font-size:10.5px;font-weight:700;margin-top:5px}}
+.terms3 .badge{{position:absolute;top:-8px;right:8px;background:#7fd3a6;color:#123326;font-size:8.5px;font-weight:800;border-radius:999px;padding:2px 7px;text-transform:uppercase;letter-spacing:.05em}}
 /* industry pages */
 .ind{{border-top:10px solid var(--c)}}
 .ihead{{display:flex;justify-content:space-between;align-items:flex-start;gap:20px}}
@@ -180,13 +189,13 @@ h1,h2,.big b,.pnum{{font-family:"Inter Display","Inter",sans-serif;letter-spacin
  <h1>One flat price.<br><em>Every call answered.</em></h1>
  <p class="sub">Donna answers, books, texts and follows up for one monthly price, with no setup fee, no contract required and no per-seat fees. In every industry she costs less than the software-plus-answering stack owners pay today, and she does more of the work.</p>
  <div class="glance"><h3>The plans at a glance</h3><table><thead><tr><th>Industry</th><th>Starter · one person · month to month</th><th>Pro · unlimited team · month to month</th></tr></thead><tbody>{glance}</tbody></table>
-  <div class="note"><b>Save with a commitment:</b> 10% off with a 1-year plan, 20% off with a 2-year plan. Extra minutes: 25¢ on Starter, 20¢ on Pro. Every feature is in both plans.</div></div>
+  <div class="note"><b>Save with a commitment:</b> 10% off with a 1-year plan, 15% off with a 2-year plan. Extra minutes: 25¢ on Starter, 20¢ on Pro. Every feature is in both plans.</div></div>
  <div class="promises">
   <div><b>Never more than the next plan</b>A busy Starter month is capped at the Pro price.</div>
   <div><b>Spam is free</b>Robocalls and spam never count against your minutes.</div>
   <div><b>Texts and emails included</b>No per-message charges, ever.</div>
   <div><b>No surprises</b>Donna tells you at 80% and 100% of your minutes. Calls are never cut off.</div>
-  <div><b>Month to month, or save</b>Cancel any time, or save 10% on a 1-year or 20% on a 2-year plan.</div>
+  <div><b>Month to month, or save</b>Cancel any time, or save 10% on a 1-year or 15% on a 2-year plan.</div>
   <div><b>14 days free</b>The trial starts the day Donna answers her first real call.</div>
  </div></div>
  <div class="cfoot"><span>Pricing as of November 2026</span><span>sidekicklogistics.com</span></div>
@@ -207,6 +216,12 @@ h1,h2,.big b,.pnum{{font-family:"Inter Display","Inter",sans-serif;letter-spacin
  </div>
  <div class="ov"><div><h3>How extra minutes work</h3><p>Minutes are time Donna spends on calls. Examples use month-to-month prices. Go over and extra minutes are 25¢ on Starter or 20¢ on Pro, about half of what most competitors charge. And a Starter bill never goes above the Pro price.</p></div>
   <table><tr><td>Everyday Starter, 200 min used</td><td>$55</td></tr><tr><td>Everyday Starter, 400 min used</td><td>$80</td></tr><tr><td>Everyday Starter, 900 min used</td><td>$165 (capped)</td></tr><tr><td>Everyday Pro, 1,400 min used</td><td>$205</td></tr></table></div>
+ <div class="save"><div class="sh"><div class="kick" style="color:#2f6f4f">Commit and save</div><h3>Lock in a lower price</h3><p>Same Donna, same features. Commit for a year or two and every month costs less.</p><p style="font-size:9.5px;margin-top:5px;opacity:.75">Prices are rounded to the dollar, so savings run about 9 to 11% on 1 year and 14 to 15% on 2 years.</p></div>
+  <div class="terms3">
+   <div><span class="tl">Month to month</span><b>List price</b><small>Cancel any time</small><em>Everyday Starter $55</em></div>
+   <div class="t1"><span class="tl">1-year plan</span><b>Save 10%</b><small>Price locked for 12 months</small><em>Everyday Starter $49</em></div>
+   <div class="t2"><span class="badge">Best price</span><span class="tl">2-year plan</span><b>Save 15%</b><small>Price locked for 24 months</small><em>Everyday Starter $47</em></div>
+  </div></div>
  <div class="foot"><span>Donna by Sidekick Logistics</span><span>2</span></div>
 </section>
 {pages}
@@ -227,7 +242,7 @@ h1,h2,.big b,.pnum{{font-family:"Inter Display","Inter",sans-serif;letter-spacin
  </div></div>
  <div class="contact"><div><b>Ready to start?</b>accounts@sidekicklogistics.com · sidekicklogistics.com</div><div class="qr"><img src="../img/qr-site.svg"></div></div>
 </div>
- <div class="cfoot" style="position:absolute;left:.65in;right:.65in;bottom:.35in;font-size:9.5px;opacity:.6">Prices in US dollars, per month, before applicable taxes. 1-year and 2-year plan discounts apply to the monthly plan price, not extra minutes. Competitor figures are typical public list prices, rounded, as of November 2026, and can change.</div>
+ <div class="cfoot" style="position:absolute;left:.65in;right:.65in;bottom:.35in;font-size:9.5px;opacity:.6">Prices in US dollars, per month, before applicable taxes. 1-year and 2-year plan discounts apply to the monthly plan price, not extra minutes, and are rounded to the dollar. Competitor figures are typical public list prices, rounded, as of November 2026, and can change.</div>
 </section>
 </body></html>'''
 open('/home/claude/donna-dashboard/sales/pricing/donna-pricing.html','w').write(out)
