@@ -5,13 +5,13 @@ IND=[
  dict(key='general',name='Everyday businesses',who='Cleaners, detailers, tutors, trainers, studios, repair shops and offices',c='#2f6f4f',deep='#123326',hi='#7fd3a6',
   lead='Priced right with the cheapest AI answering services, but Donna books, texts and follows up instead of just taking a message.',
   them='Typical AI answering service',them_eg='e.g. Rosie, Goodcall',them_price='$49–249',
-  stat=('Same price,','more included','Booking, texting and a team plan come standard.'),
+  stat=('About the same price,','far more included','Booking, texting and a team plan come standard.'),
   rows=[('Minutes included','250 at $49, then 25¢/min','300, then 25¢/min','1,000, then 20¢/min'),
    ('Every call answered 24/7','Y','Y','Y'),('Books appointments into a calendar','Higher plans only','Y','Y'),
    ('Text confirmations and reminders','Booking links on entry plans','Y','Y'),('Email inbox answered','Varies','Y','Y'),
    ('25 languages','Varies','Y','Y'),('Logins','Varies','One person','Unlimited team')],
-  win='More minutes than the leading AI answerer at the same $49, booking included from the first plan, and a team plan with no per-user fee.',
-  s=('$49','300 min'),p=('$149','1,000 min')),
+  win='More minutes than the leading AI answerer for about the same price ($49 a month on a 1-year plan), booking included from the first plan, and a team plan with no per-user fee.',
+  s=('$54','300 min','$49','$43'),p=('$164','1,000 min','$149','$131')),
  dict(key='salon',name='Salons and spas',who='Hair, barber, nail, lash, spa and med-spa',c='#8a3a5c',deep='#3b1426',hi='#f2a7c3',
   lead='Most salons pay twice: booking software, then an AI phone add-on on top. Donna is both, for one bill.',
   them='Typical salon stack',them_eg='booking software + AI phone add-on',them_price='$75–300+',
@@ -22,7 +22,7 @@ IND=[
    ('Waitlist that fills cancellations','Varies','Y','Y'),('Rebooking reminders and review asks','Varies','Y','Y'),
    ('Checkout, tips and gift cards','Y','Y','Y'),('Stylists','Often a fee per stylist','One stylist','Unlimited, each with their own calendar')],
   win='One bill instead of two, no per-text charges, and extra minutes at 25¢ instead of 50–60¢. Every stylist gets a login and their own book on Pro at no extra cost.',
-  s=('$79','400 min'),p=('$199','1,200 min')),
+  s=('$87','400 min','$79','$70'),p=('$219','1,200 min','$199','$175')),
  dict(key='contractor',name='Contractors and the trades',who='HVAC, plumbing, electrical, lawn, pool, roofing and handyman',c='#c2561a',deep='#1d2733',hi='#ffb27a',
   lead='Field-service apps sell software with the phone bolted on. Donna is the receptionist first, with jobs, estimates, invoices and the tech app included.',
   them='Typical field-service stack',them_eg='e.g. Jobber Grow + AI Receptionist',them_price='about $230–330',
@@ -33,8 +33,8 @@ IND=[
    ('After-hours emergencies paged and escalated','Varies','Y','Y'),('Estimates with an approve link','Y','Y','Y'),
    ('Invoices and card payments','Through their processing','Into your own Stripe','Into your own Stripe'),
    ('Run the day by text or one phone app','App','Y','Y'),('Dispatch by trade and zip','Higher plans','Not needed solo','Y')],
-  win='A one-truck shop pays $149 on Donna Starter instead of about $230. As the crew grows, typical stacks jump to a team tier around $330; Donna Pro stays $349 for unlimited techs, with every call answered, no annual contract, and payments to your own Stripe at Stripe\'s rates.',
-  s=('$149','500 min'),p=('$349','1,500 min')),
+  win='A one-truck shop pays $164 month to month on Donna Starter, or $149 on a 1-year plan, instead of about $230. As the crew grows, typical stacks jump to a team tier around $330; Donna Pro stays one flat price for unlimited techs, with every call answered, no annual contract, and payments to your own Stripe at Stripe\'s rates.',
+  s=('$164','500 min','$149','$131'),p=('$384','1,500 min','$349','$307')),
  dict(key='pm',name='Property management',who='Residential rentals, commercial and flex buildings, HOAs and condos',c='#24538a',deep='#0f2440',hi='#8cc2ff',
   lead='Donna works alongside your accounting and lease software. She replaces the answering service and the leasing and maintenance phone work, at a flat price no matter how many doors.',
   them='Typical answering service',them_eg='after-hours and overflow',them_price='$200–500',
@@ -46,18 +46,18 @@ IND=[
    ('HOA dues collection with autopay','N','Y','Y'),('Owner and board one-tap approvals','N','Y','Y'),
    ('Logins','One account','One manager','Unlimited managers')],
   win='Starter costs less than most answering services and does the follow-through they leave to you. Pro adds your whole team for a price that stays flat as the portfolio grows.',
-  s=('$149','500 min'),p=('$349','1,500 min')),
+  s=('$164','500 min','$149','$131'),p=('$384','1,500 min','$349','$307')),
  dict(key='re',name='Real estate',who='Agents, teams, brokers and the rentals you manage',c='#0f6e6a',deep='#0b2f33',hi='#7fe0d6',
   lead='Real estate AI tools usually charge per agent. Donna charges once for the whole office.',
   them='Typical per-seat AI and CRM tools',them_eg='priced per agent',them_price='$299–1,000+ per agent',
-  stat=('About ¼','the cost for a 5-agent office','$349 total instead of $1,500 or more.'),
+  stat=('About ¼','the cost for a 5-agent office','$384 total, or $349 on a 1-year plan, instead of $1,500 or more.'),
   rows=[('Agents covered','One per seat','One agent','The whole office'),
    ('Minutes included','Varies','500, then 25¢/min','1,500, then 20¢/min'),
    ('Listing questions answered 24/7','Varies','Y','Y'),('Showings booked, agreement texted for e-signature','Varies','Y','Y'),
    ('Hot leads texted to the right agent','Y','Y','Y'),('Fair Housing-safe answers','Varies','Y','Y'),
    ('Managed rentals and maintenance calls','Rarely','Y','Y')],
   win='A 5-agent office pays about a quarter of a per-seat stack, and every agent\'s showings land on their own calendar.',
-  s=('$149','500 min'),p=('$349','1,500 min')),
+  s=('$164','500 min','$149','$131'),p=('$384','1,500 min','$349','$307')),
 ]
 def cell(v,ours=False):
     if v=='Y': return '<span class="ck">✓</span>' if ours else '<span class="ck dim">✓</span>'
@@ -71,13 +71,13 @@ def ipage(d,n):
   <p class="lead">{E(d['lead'])}</p>
   <table class="cmp">
    <thead><tr><th></th><th class="them"><span class="lbl">{E(d['them'])}</span><span class="eg">{E(d['them_eg'])}</span></th><th class="us"><span class="lbl">Donna Starter</span><span class="eg">one person</span></th><th class="us pro"><span class="tagp">Best value for teams</span><span class="lbl">Donna Pro</span><span class="eg">unlimited team</span></th></tr>
-   <tr class="price"><th>Monthly price</th><td class="them">{E(d['them_price'])}</td><td class="us"><b>{d['s'][0]}</b><small>/mo</small></td><td class="us pro"><b>{d['p'][0]}</b><small>/mo</small></td></tr></thead>
+   <tr class="price"><th>Monthly price<span class="terms">month to month</span></th><td class="them">{E(d['them_price'])}</td><td class="us"><b>{d['s'][0]}</b><small>/mo</small><span class="terms">{d['s'][2]} on 1 yr · {d['s'][3]} on 2 yr</span></td><td class="us pro"><b>{d['p'][0]}</b><small>/mo</small><span class="terms">{d['p'][2]} on 1 yr · {d['p'][3]} on 2 yr</span></td></tr></thead>
    <tbody>{rows}</tbody>
   </table>
   <div class="win"><div class="wk">Why Donna wins</div>{E(d['win'])}</div>
   <div class="foot"><span>Competitor figures are typical public list prices, rounded, as of November 2026; your costs may differ.</span><span>{n}</span></div>
 </section>'''
-glance=''.join(f'<tr style="--c:{d["c"]}"><th><i></i>{E(d["name"])}</th><td><b>{d["s"][0]}</b> · {d["s"][1]}</td><td><b>{d["p"][0]}</b> · {d["p"][1]}{", any number of doors" if d["key"]=="pm" else (", whole office" if d["key"]=="re" else "")}</td></tr>' for d in IND)
+glance=''.join(f'<tr style="--c:{d["c"]}"><th><i></i>{E(d["name"])}</th><td><b>{d["s"][0]}</b> · {d["s"][1]}<span class="gt">{d["s"][2]} on 1 yr · {d["s"][3]} on 2 yr</span></td><td><b>{d["p"][0]}</b> · {d["p"][1]}{", any number of doors" if d["key"]=="pm" else (", whole office" if d["key"]=="re" else "")}<span class="gt">{d["p"][2]} on 1 yr · {d["p"][3]} on 2 yr</span></td></tr>' for d in IND)
 pages=''.join(ipage(d,i+3) for i,d in enumerate(IND))
 out=f'''<!doctype html><html><head><meta charset="utf-8"><title>Donna pricing</title><style>
 @page{{size:Letter;margin:0}}
@@ -93,19 +93,21 @@ h1,h2,.big b,.pnum{{font-family:"Inter Display","Inter",sans-serif;letter-spacin
 .logo{{display:flex;align-items:center;gap:10px;font-weight:700;font-size:20px}}
 .logo .mk{{width:34px;height:34px;border-radius:10px;background:#fff;color:#101a24;display:flex;align-items:center;justify-content:center;font-family:"Inter Display";font-weight:800;font-size:19px}}
 .logo small{{display:block;font-size:10.5px;font-weight:500;opacity:.65;letter-spacing:.06em;text-transform:uppercase}}
-.cover h1{{font-size:50px;line-height:1.02;font-weight:800;margin:.55in 0 14px;max-width:6.6in}}
+.cover h1{{font-size:46px;line-height:1.02;font-weight:800;margin:.32in 0 12px;max-width:6.6in}}
 .cover h1 em{{font-style:normal;color:#7fd3a6}}
 .cover .sub{{font-size:15.5px;line-height:1.55;opacity:.88;max-width:6.3in;margin:0}}
-.glance{{margin-top:.38in;background:#fff;color:#18212b;border-radius:18px;padding:16px 20px 10px;box-shadow:0 24px 60px rgba(0,0,0,.4)}}
+.glance{{margin-top:.26in;background:#fff;color:#18212b;border-radius:18px;padding:16px 20px 10px;box-shadow:0 24px 60px rgba(0,0,0,.4)}}
 .glance h3{{margin:0 0 8px;font-size:11px;letter-spacing:.14em;text-transform:uppercase;color:#6b7580}}
 .glance table{{width:100%;border-collapse:collapse;font-size:13px}}
-.glance th,.glance td{{text-align:left;padding:9px 6px;border-top:1px solid #eceae4}}
+.glance th,.glance td{{text-align:left;padding:7px 6px;border-top:1px solid #eceae4}}
 .glance thead th{{border-top:none;font-size:10.5px;color:#6b7580;font-weight:600;padding-top:0}}
 .glance tbody th{{font-weight:600}}
 .glance tbody th i{{display:inline-block;width:9px;height:9px;border-radius:3px;background:var(--c);margin-right:9px}}
+.glance .gt{{display:block;font-size:10.5px;color:#6b7580;margin-top:2px}}
+.cmp .terms{{display:block;font-size:10px;color:#6b7580;font-weight:500;margin-top:3px}}
 .glance td b{{font-family:"Inter Display";font-size:16px}}
 .glance .note{{font-size:11px;color:#6b7580;padding:8px 6px 4px}}
-.promises{{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-top:.28in}}
+.promises{{display:grid;grid-template-columns:repeat(3,1fr);gap:9px;margin-top:.2in}}
 .promises div{{background:rgba(255,255,255,.08);border:1px solid rgba(255,255,255,.16);border-radius:14px;padding:11px 13px;font-size:12px;line-height:1.45}}
 .promises b{{display:block;font-size:13.5px;color:#fff;margin-bottom:2px}}
 .cover .cfoot{{position:absolute;left:.65in;right:.65in;bottom:.35in;font-size:11px;opacity:.7;display:flex;justify-content:space-between}}
@@ -176,15 +178,15 @@ h1,h2,.big b,.pnum{{font-family:"Inter Display","Inter",sans-serif;letter-spacin
 <section class="page cover"><div class="bg"></div><div class="dots"></div><div class="in">
  <div class="logo"><div class="mk">D</div><div>Donna<small>by Sidekick Logistics</small></div></div>
  <h1>One flat price.<br><em>Every call answered.</em></h1>
- <p class="sub">Donna answers, books, texts and follows up for one monthly price, with no setup fee, no contract and no per-seat fees. In every industry she costs less than the software-plus-answering stack owners pay today, and she does more of the work.</p>
- <div class="glance"><h3>The plans at a glance</h3><table><thead><tr><th>Industry</th><th>Starter · one person</th><th>Pro · unlimited team</th></tr></thead><tbody>{glance}</tbody></table>
-  <div class="note">Extra minutes: 25¢ on Starter, 20¢ on Pro. Every feature is in both plans.</div></div>
+ <p class="sub">Donna answers, books, texts and follows up for one monthly price, with no setup fee, no contract required and no per-seat fees. In every industry she costs less than the software-plus-answering stack owners pay today, and she does more of the work.</p>
+ <div class="glance"><h3>The plans at a glance</h3><table><thead><tr><th>Industry</th><th>Starter · one person · month to month</th><th>Pro · unlimited team · month to month</th></tr></thead><tbody>{glance}</tbody></table>
+  <div class="note"><b>Save with a commitment:</b> 10% off with a 1-year plan, 20% off with a 2-year plan. Extra minutes: 25¢ on Starter, 20¢ on Pro. Every feature is in both plans.</div></div>
  <div class="promises">
   <div><b>Never more than the next plan</b>A busy Starter month is capped at the Pro price.</div>
   <div><b>Spam is free</b>Robocalls and spam never count against your minutes.</div>
   <div><b>Texts and emails included</b>No per-message charges, ever.</div>
   <div><b>No surprises</b>Donna tells you at 80% and 100% of your minutes. Calls are never cut off.</div>
-  <div><b>Month to month</b>Cancel any time from your dashboard.</div>
+  <div><b>Month to month, or save</b>Cancel any time, or save 10% on a 1-year or 20% on a 2-year plan.</div>
   <div><b>14 days free</b>The trial starts the day Donna answers her first real call.</div>
  </div></div>
  <div class="cfoot"><span>Pricing as of November 2026</span><span>sidekicklogistics.com</span></div>
@@ -203,8 +205,8 @@ h1,h2,.big b,.pnum{{font-family:"Inter Display","Inter",sans-serif;letter-spacin
   <div><b>Your industry's playbook</b><span>Salon books, contractor dispatch and invoices, property work orders and HOA dues, real estate showings and listings.</span></div>
   <div><b>Set up in minutes</b><span>Donna reads your website, proposes everything and calls you for a test call. In English, Spanish, Vietnamese, Chinese or Korean.</span></div>
  </div>
- <div class="ov"><div><h3>How extra minutes work</h3><p>Minutes are time Donna spends on calls. Go over and extra minutes are 25¢ on Starter or 20¢ on Pro, about half of what most competitors charge. And a Starter bill never goes above the Pro price.</p></div>
-  <table><tr><td>Everyday Starter, 200 min used</td><td>$49</td></tr><tr><td>Everyday Starter, 400 min used</td><td>$74</td></tr><tr><td>Everyday Starter, 900 min used</td><td>$149 (capped)</td></tr><tr><td>Everyday Pro, 1,200 min used</td><td>$189</td></tr></table></div>
+ <div class="ov"><div><h3>How extra minutes work</h3><p>Minutes are time Donna spends on calls. Examples use month-to-month prices. Go over and extra minutes are 25¢ on Starter or 20¢ on Pro, about half of what most competitors charge. And a Starter bill never goes above the Pro price.</p></div>
+  <table><tr><td>Everyday Starter, 200 min used</td><td>$54</td></tr><tr><td>Everyday Starter, 400 min used</td><td>$79</td></tr><tr><td>Everyday Starter, 900 min used</td><td>$164 (capped)</td></tr><tr><td>Everyday Pro, 1,200 min used</td><td>$204</td></tr></table></div>
  <div class="foot"><span>Donna by Sidekick Logistics</span><span>2</span></div>
 </section>
 {pages}
@@ -225,7 +227,7 @@ h1,h2,.big b,.pnum{{font-family:"Inter Display","Inter",sans-serif;letter-spacin
  </div></div>
  <div class="contact"><div><b>Ready to start?</b>accounts@sidekicklogistics.com · sidekicklogistics.com</div><div class="qr"><img src="../img/qr-site.svg"></div></div>
 </div>
- <div class="cfoot" style="position:absolute;left:.65in;right:.65in;bottom:.35in;font-size:9.5px;opacity:.6">Prices in US dollars, per month, before applicable taxes. Competitor figures are typical public list prices, rounded, as of November 2026, and can change.</div>
+ <div class="cfoot" style="position:absolute;left:.65in;right:.65in;bottom:.35in;font-size:9.5px;opacity:.6">Prices in US dollars, per month, before applicable taxes. 1-year and 2-year plan discounts apply to the monthly plan price, not extra minutes. Competitor figures are typical public list prices, rounded, as of November 2026, and can change.</div>
 </section>
 </body></html>'''
 open('/home/claude/donna-dashboard/sales/pricing/donna-pricing.html','w').write(out)
