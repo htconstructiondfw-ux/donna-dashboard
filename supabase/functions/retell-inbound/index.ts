@@ -1,7 +1,7 @@
 import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 
-// Donna — Retell inbound-call webhook (emits greeting, routing, memory, voice). v45: trip_fee + after_hours vars (prepay only when cards are live). v47: card processing fee note in trip_fee. v48: real_estate var. v49: hours + approved knowledge appended to custom_instructions.
+// Donna — Retell inbound-call webhook (emits greeting, routing, memory, voice). v45: trip_fee + after_hours vars (prepay only when cards are live). v47: card processing fee note in trip_fee. v48: real_estate var. v49: hours + approved knowledge appended to custom_instructions. v50: per-account voice test rotation.
 
 const supabase = createClient(
   Deno.env.get("SUPABASE_URL")!,
@@ -153,6 +153,26 @@ Deno.serve(async (req: Request) => {
   if (error || !asst) return empty();
 
   const retellVoice = VOICE_MAP[String((asst as any).voice_id || "")] || DEFAULT_VOICE;
+  // v50 voice test: accounts.settings.voice_test = { voices: [{id, model?, label}], backchannel? }. Each call takes the
+  // next voice in turn and Donna says which one it is first, so the owner can compare voices on one line.
+  let agentOv: Record<string, unknown> = { voice_id: retellVoice };
+  let voiceTestIntro = "";
+  try {
+    const vt: any = ((asst as any).accounts?.settings || {}).voice_test;
+    const list: any[] = Array.isArray(vt?.voices) ? vt.voices.filter((v: any) => v && v.id) : [];
+    if (list.length) {
+      const key = `voice_test_n_${(asst as any).account_id}`;
+      const { data: c } = await supabase.from("app_config").select("value").eq("key", key).maybeSingle();
+      const n = (parseInt(String((c as any)?.value || "0"), 10) || 0) % list.length;
+      await supabase.from("app_config").upsert({ key, value: String(n + 1) }, { onConflict: "key" });
+      const v = list[n];
+      agentOv = { voice_id: String(v.id) };
+      if (v.model) agentOv.voice_model = String(v.model);
+      if (vt.backchannel) { agentOv.enable_backchannel = true; agentOv.backchannel_frequency = Number(vt.backchannel) || 0.6; }
+      if (vt.responsiveness) agentOv.responsiveness = Number(vt.responsiveness);
+      voiceTestIntro = `Voice test, number ${n + 1}${v.label ? ", " + String(v.label) : ""}. `;
+    }
+  } catch (e) { console.error("voice_test", String(e)); }
 
   if (!asst.is_active) {
     const pausedRouting = (asst.routing as any) || {};
@@ -457,7 +477,7 @@ Deno.serve(async (req: Request) => {
           trip_fee: tripFeeText, after_hours: afterHoursText, real_estate: realEstateText,
           paused: "no",
         },
-        agent_override: { agent: { voice_id: retellVoice }, retell_llm: { begin_message: greeting } },
+        agent_override: { agent: agentOv, retell_llm: { begin_message: voiceTestIntro + greeting } },
       },
     }),
     { headers: { "Content-Type": "application/json" } },
