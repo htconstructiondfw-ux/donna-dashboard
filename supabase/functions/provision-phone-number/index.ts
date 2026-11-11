@@ -106,6 +106,11 @@ Deno.serve(async (req: Request) => {
   // v20: trials get a number too — signups are invite-gated and the setup wizard needs the number on day one. Only paused/cancelled accounts are refused.
   if (!acct || !["active", "trial"].includes(String(acct.status || ""))) return json({ ok: false, code: "not_active", error: "A phone number is included once your plan is active. Reach out to finish setting up billing." });
 
+  // v22: a number needs a plan (card on file, trial counts). Exempt = comped / test accounts.
+  { const { data: bill } = await admin.from("account_billing").select("exempt, sub_status").eq("account_id", accountId).maybeSingle();
+    const okBill = !!bill && ((bill as any).exempt || ["trialing", "active", "past_due"].includes(String((bill as any).sub_status || "")));
+    if (!okBill) return json({ ok: false, code: "billing_required", error: "Choose a plan and add a card first. Your 14 free days start when Donna answers her first real call." }); }
+
   let body: any = {}; try { body = await req.json(); } catch { /* area code optional */ }
   const replace = body?.replace === true;
   const rawArea = String(body?.area_code ?? "").replace(/\D/g, "");

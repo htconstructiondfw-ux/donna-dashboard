@@ -1,7 +1,7 @@
 import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 
-// Donna — Retell inbound-call webhook (emits greeting, routing, memory, voice). v45: trip_fee + after_hours vars (prepay only when cards are live). v47: card processing fee note in trip_fee. v48: real_estate var. v49: hours + approved knowledge appended to custom_instructions. v50: per-account voice test rotation. v51: voice test is staff-only (app_config).
+// Donna — Retell inbound-call webhook (emits greeting, routing, memory, voice). v45: trip_fee + after_hours vars (prepay only when cards are live). v47: card processing fee note in trip_fee. v48: real_estate var. v49: hours + approved knowledge appended to custom_instructions. v50: per-account voice test rotation. v51: voice test is staff-only (app_config). v52: billing-ended accounts forward like paused.
 
 const supabase = createClient(
   Deno.env.get("SUPABASE_URL")!,
@@ -176,11 +176,22 @@ Deno.serve(async (req: Request) => {
     }
   } catch (e) { console.error("voice_test", String(e)); }
 
-  if (!asst.is_active) {
+  // v52: plan ended (cancelled / unpaid) -> same as paused: forward to the business line, or a short goodbye.
+  let billingBlocked = false;
+  try {
+    const { data: bill } = await supabase.from("account_billing").select("exempt, sub_status").eq("account_id", (asst as any).account_id).maybeSingle();
+    billingBlocked = !!bill && !(bill as any).exempt && ["canceled", "unpaid", "incomplete_expired"].includes(String((bill as any).sub_status || ""));
+  } catch (_e) { billingBlocked = false; }
+
+  if (!asst.is_active || billingBlocked) {
     const pausedRouting = (asst.routing as any) || {};
-    const fwdNumber = String(pausedRouting.paused_forward_number || "").trim();
-    if (!fwdNumber) return empty();
     const pausedAcct: any = (asst.accounts as any) || {};
+    const fwdNumber = String(pausedRouting.paused_forward_number || (billingBlocked ? pausedAcct.settings?.business?.phone : "") || "").trim();
+    if (!fwdNumber && billingBlocked) {
+      return new Response(JSON.stringify({ call_inbound: { dynamic_variables: { paused: "yes", can_transfer: "no", assistant_name: asst.assistant_name || "Donna", business_name: asst.greeting_label || pausedAcct.name || "" },
+        agent_override: { agent: { voice_id: retellVoice }, retell_llm: { begin_message: `Thanks for calling${pausedAcct.name ? " " + pausedAcct.name : ""}. We can't take your call on this line right now. Please try again later. Goodbye.` } } } }), { headers: { "Content-Type": "application/json" } });
+    }
+    if (!fwdNumber) return empty();
     return new Response(
       JSON.stringify({
         call_inbound: {

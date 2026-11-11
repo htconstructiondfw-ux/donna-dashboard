@@ -56,6 +56,27 @@
   .page{padding:30px;max-width:920px}
   .page-head{margin-bottom:24px} .page-head h1{font-size:27px;font-weight:700}
   .page-head p{color:var(--muted);font-size:14px;margin-top:4px;max-width:62ch}
+  /* billing */
+  .bl-terms{display:flex;gap:8px;margin:0 0 14px;flex-wrap:wrap}
+  .bl-term{flex:1;min-width:110px;border:1px solid var(--line);background:var(--surface);border-radius:12px;padding:9px 12px;text-align:left;cursor:pointer;font:inherit;color:var(--ink)}
+  .bl-term b{display:block;font-size:13.5px} .bl-term span{font-size:11.5px;color:var(--muted)}
+  .bl-term.on{border-color:var(--ink);box-shadow:inset 0 0 0 1px var(--ink)} .bl-term.on span{color:var(--ok);font-weight:600}
+  .bl-plans{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+  @media(max-width:640px){.bl-plans{grid-template-columns:1fr}}
+  .bl-plan{position:relative;border:1px solid var(--line);border-radius:16px;padding:16px 16px 14px;background:var(--surface);display:flex;flex-direction:column}
+  .bl-plan.pro{border-color:var(--ink);box-shadow:0 10px 30px -18px rgba(16,26,36,.45)} .bl-plan.cur{outline:2px solid var(--ok)}
+  .bl-tag{position:absolute;top:-9px;right:12px;background:var(--ink);color:#fff;font-size:10px;font-weight:700;letter-spacing:.05em;text-transform:uppercase;border-radius:999px;padding:2px 9px}
+  .bl-pn{font-size:17px;font-weight:700} .bl-pw{font-size:12.5px;color:var(--muted);margin-top:1px}
+  .bl-pp{margin:10px 0 6px;display:flex;align-items:baseline;gap:4px} .bl-pp b{font-size:30px;letter-spacing:-.02em} .bl-pp span{color:var(--muted);font-size:13px} .bl-pp s{color:var(--muted-2);font-size:13px;margin-left:6px}
+  .bl-plan ul{list-style:none;margin:0 0 14px;padding:0;font-size:12.8px;color:var(--ink-2);line-height:1.7;flex:1} .bl-plan li:before{content:"✓";color:var(--ok);font-weight:800;margin-right:7px}
+  .bl-fine{font-size:11.5px;color:var(--muted);margin:10px 0 0;line-height:1.5}
+  .bl-sum{display:flex;justify-content:space-between;align-items:flex-start;gap:12px;flex-wrap:wrap} .bl-big{font-size:18px;font-weight:700} .bl-sub{font-size:13px;color:var(--muted);margin-top:2px}
+  .bl-note{margin-top:12px;background:#f1faf5;border:1px solid #bfe3d0;border-radius:10px;padding:10px 12px;font-size:13px;color:var(--ink-2);line-height:1.5}
+  .bl-note.warn{background:#fff8eb;border-color:#f3d9a8}
+  .bl-meter{margin-top:14px} .bl-mh{display:flex;justify-content:space-between;font-size:13px;color:var(--ink-2);gap:8px;flex-wrap:wrap} .bl-mh span{color:var(--muted);font-size:12px} .bl-mh span.l{color:var(--ink-2);font-size:13px}
+  .bl-inv{width:100%;border-collapse:collapse;font-size:13px} .bl-inv th{text-align:left;font-size:11.5px;color:var(--muted);font-weight:600;padding:0 8px 8px 0;border-bottom:1px solid var(--line)} .bl-inv td{padding:9px 8px 9px 0;border-bottom:1px solid var(--line)} .bl-inv tr:last-child td{border-bottom:none}
+  .bl-bar{height:8px;border-radius:99px;background:#eef1f5;margin-top:7px;overflow:hidden} .bl-bar i{display:block;height:100%;background:var(--ok);border-radius:99px}
+  .bl-extra{font-size:12px;color:var(--muted);margin-top:6px}
   .card{background:var(--surface);border:1px solid var(--line);border-radius:var(--r);padding:22px 24px;margin-bottom:18px}
   .card-h{display:flex;align-items:baseline;justify-content:space-between;margin-bottom:18px}
   .card-h h2{font-size:16px;font-weight:600} .card-h .hint{font-size:12px;color:var(--muted-2)}
@@ -562,7 +583,7 @@ function renderApp(){
     if(re){ navConfig.splice(1,0,["listings",prop?"Listings (for sale & rent)":"Listings",I.home]); navActivity.splice(1,0,["leads","Leads & documents",I.sign]); }
     if(prop){ navConfig.splice(re?2:1,0,["properties",re?"Managed rentals":"Properties",I.building]); navConfig.splice(re?3:2,0,["contractors",re?"Vendors":"Contractors",I.wrench]); navActivity.splice(0,0,["requests",re?"Maintenance requests":"Service requests",I.wrench]); }
     if(prop||re) navActivity.splice(prop?1:2,0,["dues","Communities & dues",I.home]);
-    soon=[["billing","Billing",I.card]];
+    soon=[["billing","Billing",I.card]];  // rendered as a real nav item under "Running"
   } else {
     // Stylist: focused view — their own bookings, messages, clients, and their own availability.
     navConfig=[["today","Today",I.clock],["appointments","My appointments",I.appt],["messages","Phone messages",I.msg],["clients","Clients",I.users],["schedule","My availability",I.cal]];
@@ -591,13 +612,13 @@ function renderApp(){
       ${mgr?`<div class="nav-label">Activity</div>`:``}
       ${navActivity.map(navBtn).join("")}
       ${mgr?`<div class="nav-label" id="run-label">Running ${esc(aName())}</div>`:``}
-      ${soon.map(n=>`<button class="nav-item soon">${n[2]}<span>${n[1]}</span><span class="tag">soon</span></button>`).join("")}
+      ${soon.map(navBtn).join("")}
       <div class="side-foot"><b>${esc(state.owner.name)}</b>${esc(state.owner.title||"Owner")}<br><button class="out" id="signout">Sign out</button></div>
     </aside>
     <main class="main">
       <div class="topbar">
         <div class="tb-left"><button class="menu-btn" id="menu-btn" aria-label="Menu"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M4 7h16M4 12h16M4 17h16"/></svg></button>
-        <div class="crumbs">${['settings','notifications','account'].includes(state.view)?'Account':(['today','messages','appointments','waitlist','calls','contacts','clients','gaps','conversations','requests','leads','money','dues'].includes(state.view)?'Activity':'Configure')} · <b>${esc(({today:"Today",assistant:"Assistant",schedule:"Schedule",types:(pmMode()?"Visit types":(salonOn()?"Services":"Appointment types")),staff:"Team",messages:"Phone messages",appointments:(pmMode()?"Visits & appointments":"Appointments"),settings:"Settings",notifications:"Notifications",calls:"Calls",knowledge:"Knowledge",contacts:(salonOn()?"Clients":"Contacts"),clients:"Clients",gaps:"Open questions",conversations:"Inbox",waitlist:"Waitlist",promotions:"Promotions",booking:(pmMode()?"Self-scheduling":"Booking page"),mylink:"My booking link",intake:"Intake forms",properties:"Properties",dues:"Communities & dues",contractors:"Contractors",requests:"Service requests",listings:"Listings",leads:"Leads & documents",money:(isManager()?"Checkout & money":"My money"),account:"My account"})[state.view])}</b></div>
+        <div class="crumbs">${['settings','notifications','account','billing'].includes(state.view)?'Account':(['today','messages','appointments','waitlist','calls','contacts','clients','gaps','conversations','requests','leads','money','dues'].includes(state.view)?'Activity':'Configure')} · <b>${esc(({today:"Today",assistant:"Assistant",schedule:"Schedule",types:(pmMode()?"Visit types":(salonOn()?"Services":"Appointment types")),staff:"Team",messages:"Phone messages",appointments:(pmMode()?"Visits & appointments":"Appointments"),settings:"Settings",notifications:"Notifications",calls:"Calls",knowledge:"Knowledge",contacts:(salonOn()?"Clients":"Contacts"),clients:"Clients",gaps:"Open questions",conversations:"Inbox",waitlist:"Waitlist",promotions:"Promotions",booking:(pmMode()?"Self-scheduling":"Booking page"),mylink:"My booking link",intake:"Intake forms",properties:"Properties",dues:"Communities & dues",contractors:"Contractors",requests:"Service requests",listings:"Listings",leads:"Leads & documents",money:(isManager()?"Checkout & money":"My money"),account:"My account",billing:"Billing"})[state.view])}</b></div>
         </div><div class="acct-chip"><span class="av">${initials}</span><div class="who"><b>${esc(state.account.company)}</b><span>${esc((state.account.status||'trial'))} · ${esc(state.account.plan||'starter')}</span></div></div>
       </div>
       <div id="approve-banner"></div>
@@ -621,8 +642,8 @@ function renderPage(){
   teardownRealtime();
   document.querySelectorAll(".nav-item[data-v],.bbar button[data-v]").forEach(b=>b.classList.toggle("active",b.dataset.v===state.view));
   try{ window.scrollTo(0,0); const mn=document.querySelector('.main'); if(mn) mn.scrollTop=0; }catch(_e){}
-  $(".crumbs").innerHTML=`${['settings','notifications','account'].includes(state.view)?'Account':(['today','messages','appointments','waitlist','calls','contacts','clients','gaps','conversations','requests','leads','money','dues'].includes(state.view)?'Activity':'Configure')} · <b>${esc(({today:"Today",assistant:"Assistant",schedule:"Schedule",types:(pmMode()?"Visit types":(salonOn()?"Services":"Appointment types")),staff:"Team",messages:"Phone messages",appointments:(pmMode()?"Visits & appointments":"Appointments"),settings:"Settings",notifications:"Notifications",calls:"Calls",knowledge:"Knowledge",contacts:(salonOn()?"Clients":"Contacts"),clients:"Clients",gaps:"Open questions",conversations:"Email inbox",waitlist:"Waitlist",promotions:"Promotions",booking:(pmMode()?"Self-scheduling":"Booking page"),mylink:"My booking link",intake:"Intake forms",properties:"Properties",dues:"Communities & dues",contractors:"Contractors",requests:"Service requests",listings:"Listings",leads:"Leads & documents",money:(isManager()?"Checkout & money":"My money"),account:"My account"})[state.view])}</b>`;
-  const PAGES={today:pageToday, assistant:pageAssistant, schedule:pageSchedule, types:pageTypes, staff:pageStaff, messages:pageMessages, appointments:renderAppts, settings:pageSettings, notifications:pageNotifications, calls:pageCalls, knowledge:pageKnowledge, contacts:pageContacts, clients:pageClients, gaps:pageGaps, conversations:pageConversations, waitlist:pageWaitlist, promotions:pagePromotions, booking:pageBookingPage, mylink:pageMyLink, intake:pageIntakeForms, properties:pageProperties, dues:pageDues, contractors:pageContractors, requests:pageServiceRequests, jobs:pageJobs, money:pageSalonMoney, listings:pageListings, leads:pageLeads, account:pageMyAccount};
+  $(".crumbs").innerHTML=`${['settings','notifications','account','billing'].includes(state.view)?'Account':(['today','messages','appointments','waitlist','calls','contacts','clients','gaps','conversations','requests','leads','money','dues'].includes(state.view)?'Activity':'Configure')} · <b>${esc(({today:"Today",assistant:"Assistant",schedule:"Schedule",types:(pmMode()?"Visit types":(salonOn()?"Services":"Appointment types")),staff:"Team",messages:"Phone messages",appointments:(pmMode()?"Visits & appointments":"Appointments"),settings:"Settings",notifications:"Notifications",calls:"Calls",knowledge:"Knowledge",contacts:(salonOn()?"Clients":"Contacts"),clients:"Clients",gaps:"Open questions",conversations:"Email inbox",waitlist:"Waitlist",promotions:"Promotions",booking:(pmMode()?"Self-scheduling":"Booking page"),mylink:"My booking link",intake:"Intake forms",properties:"Properties",dues:"Communities & dues",contractors:"Contractors",requests:"Service requests",listings:"Listings",leads:"Leads & documents",money:(isManager()?"Checkout & money":"My money"),account:"My account",billing:"Billing"})[state.view])}</b>`;
+  const PAGES={today:pageToday, assistant:pageAssistant, schedule:pageSchedule, types:pageTypes, staff:pageStaff, messages:pageMessages, appointments:renderAppts, settings:pageSettings, notifications:pageNotifications, calls:pageCalls, knowledge:pageKnowledge, contacts:pageContacts, clients:pageClients, gaps:pageGaps, conversations:pageConversations, waitlist:pageWaitlist, promotions:pagePromotions, booking:pageBookingPage, mylink:pageMyLink, intake:pageIntakeForms, properties:pageProperties, dues:pageDues, contractors:pageContractors, requests:pageServiceRequests, jobs:pageJobs, money:pageSalonMoney, listings:pageListings, leads:pageLeads, account:pageMyAccount, billing:pageBilling};
   const LOADERS={today:loadAppointments, appointments:loadAppointments, messages:loadMessages, calls:loadCalls, contacts:loadContacts, clients:loadContacts, gaps:loadGaps, conversations:loadConversations, staff:loadStaff, waitlist:loadWaitlist};
   const v=state.view;
   (PAGES[v]||(()=>{}))();
@@ -634,6 +655,120 @@ function renderPage(){
     (PAGES[v]||(()=>{}))();
   }).catch(()=>{}); }
   if(typeof paintApproveBanner==='function') paintApproveBanner();
+}
+
+/* ===================== BILLING (Donna plan, card, usage, invoices) ===================== */
+async function billingApi(body){ const { data, error }=await db.functions.invoke("billing",{ body }); if(error){ let msg=error.message||'error'; try{ const j=await error.context.json(); msg=j.message||j.error||msg; }catch(_e){} return { ok:false, error:msg }; } return data||{ ok:false, error:'empty' }; }
+const BL_TERMS=[["mtm","Month to month","Cancel any time"],["1y","1 year","Save 10%"],["2y","2 years","Save 15%"]];
+const BL_TERM_LABEL={mtm:"month to month","1y":"1-year plan","2y":"2-year plan"};
+const blMoney=c=>'$'+(c/100).toFixed(c%100?2:0);
+const blDate=d=>d?new Date(d).toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'}):'';
+const BL_ERR={committed_downgrade:"Your plan has a commitment, so it can move down to Starter when the commitment ends on {d}.",committed_shorter:"Your commitment runs until {d}. You can switch to a shorter term after that.",owner_only:"Only the owner can change billing.",already_subscribed:"You already have a plan.",exempt:"This account isn't billed.",no_plan:"There's no plan on this account yet."};
+const blErr=r=>(BL_ERR[r&&r.error]||(r&&r.error)||'Something went wrong').replace('{d}',blDate(r&&r.until));
+// Plan picker shared by the Billing page and the setup wizard. opts.current = {tier, term} to mark the current plan.
+function planPickerHTML(prices, opts){
+  opts=opts||{}; const term=opts.term||'mtm'; const t=prices.tiers; const cur=opts.current||null;
+  const card=(tier)=>{ const p=t[tier]; const price=p.price[term], list=p.price.mtm; const isCur=cur&&cur.tier===tier&&cur.term===term;
+    return `<div class="bl-plan ${tier==='pro'?'pro':''} ${isCur?'cur':''}">
+      ${tier==='pro'?'<span class="bl-tag">Best for teams</span>':''}
+      <div class="bl-pn">${tier==='pro'?'Pro':'Starter'}</div>
+      <div class="bl-pw">${tier==='pro'?'Your whole team, each with their own login':'One person'}</div>
+      <div class="bl-pp"><b>${blMoney(price)}</b><span>/mo</span>${term!=='mtm'?`<s>${blMoney(list)}</s>`:''}</div>
+      <ul><li><b>${p.minutes.toLocaleString()}</b> call minutes a month</li><li>Extra minutes ${prices.overage[tier]}¢${tier==='starter'?', never more than the Pro price':''}</li><li>Every feature, texts and email included</li></ul>
+      <button class="btn ${tier==='pro'?'primary':''}" data-bl-pick="${tier}" ${isCur?'disabled':''}>${isCur?'Your plan':(opts.cta||'Choose')+' '+(tier==='pro'?'Pro':'Starter')}</button>
+    </div>`; };
+  return `<div class="bl-terms" role="tablist">${BL_TERMS.map(x=>`<button class="bl-term ${x[0]===term?'on':''}" data-bl-term="${x[0]}"><b>${x[1]}</b><span>${x[2]}</span></button>`).join('')}</div>
+    <div class="bl-plans">${card('starter')}${card('pro')}</div>
+    <p class="bl-fine">${esc(prices.label)} prices. ${term==='mtm'?'Billed monthly, cancel any time.':term==='1y'?'Billed monthly for 12 months at the lower price.':'Billed monthly for 24 months at the lowest price.'} Discounts apply to the plan price; extra minutes stay at ${prices.overage.starter}¢ and ${prices.overage.pro}¢.</p>`;
+}
+function bindPlanPicker(el, prices, opts, onPick){
+  const paint=()=>{ el.innerHTML=planPickerHTML(prices, opts);
+    el.querySelectorAll('[data-bl-term]').forEach(b=>b.onclick=()=>{ opts.term=b.dataset.blTerm; paint(); });
+    el.querySelectorAll('[data-bl-pick]').forEach(b=>b.onclick=async()=>{ const o=b.textContent; b.disabled=true; b.textContent='One moment…'; const ok=await onPick(b.dataset.blPick, opts.term||'mtm'); if(!ok){ b.disabled=false; b.textContent=o; } }); };
+  paint();
+}
+async function startCheckout(tier, term, msgEl){
+  const r=await billingApi({ action:'checkout', tier, term });
+  if(r.ok&&r.url){ location.href=r.url; return true; }
+  if(msgEl){ msgEl.style.color='var(--danger)'; msgEl.textContent=blErr(r); }
+  return false;
+}
+function blStatusPill(b){
+  if(!b) return '';
+  if(b.cancel_at) return `<span class="pill" style="color:var(--danger);border-color:#f0c4c4;background:#fdf3f3">Ends ${esc(blDate(b.cancel_at))}</span>`;
+  if(b.sub_status==='trialing') return `<span class="pill ok">Free trial</span>`;
+  if(b.sub_status==='active') return `<span class="pill ok">Active</span>`;
+  if(b.sub_status==='past_due') return `<span class="pill" style="color:#b45309;border-color:#f3d9a8;background:#fff8eb">Payment due</span>`;
+  return `<span class="pill">${esc(b.sub_status||'')}</span>`;
+}
+async function pageBilling(){
+  const host=$("#page"); host.innerHTML=`<div class="page"><div class="card"><div style="color:var(--muted);font-size:13.5px">Loading billing…</div></div></div>`;
+  const r=state._billingFresh||await billingApi({ action:'status' }); state._billingFresh=null;
+  if(state.view!=='billing') return;
+  if(!r.ok){ host.innerHTML=`<div class="page"><div class="card"><div class="card-h"><h2>Billing</h2></div><p style="color:var(--danger);font-size:13.5px">${esc(blErr(r))}</p></div></div>`; return; }
+  state.billing=r;
+  if(r.exempt){ host.innerHTML=`<div class="page"><div class="card"><div class="card-h"><h2>Billing</h2>${'<span class="pill ok">Complimentary</span>'}</div><p style="font-size:13.5px;color:var(--ink-2);margin:0">This account is on a complimentary plan from Sidekick Logistics. There's nothing to pay and no card on file.</p></div></div>`; return; }
+  const b=r.billing;
+  if(!b||b.sub_status==='canceled'){
+    host.innerHTML=`<div class="page"><div class="card"><div class="card-h"><h2>${b?'Restart your plan':'Choose your plan'}</h2><span class="hint">${b?'Your last plan ended':'14 days free, card required'}</span></div>
+      ${b?'':`<p style="font-size:13.5px;color:var(--ink-2);margin:0 0 14px">Your 14 free days start when ${esc(aName())} answers her first real call. Cancel any time before then and you won't be charged.</p>`}
+      ${r.can_manage?'<div id="bl-pick"></div><div class="wz-msg" id="bl-m"></div>':`<p style="font-size:13.5px;color:var(--muted)">Ask the account owner to choose a plan.</p>`}</div></div>`;
+    if(r.can_manage) bindPlanPicker($("#bl-pick"), r.prices, { term:'mtm', cta:b?'Restart with':'Start free with' }, (tier,term)=>startCheckout(tier,term,$("#bl-m")));
+    if(state._billingNote&&$("#bl-m")){ $("#bl-m").textContent=state._billingNote; state._billingNote=null; }
+    return;
+  }
+  const tierName=b.tier==='pro'?'Pro':'Starter'; const inc=r.prices.tiers[b.tier]?r.prices.tiers[b.tier].minutes:0;
+  const u=r.usage||{};
+  let trialLine='';
+  if(b.sub_status==='trialing') trialLine=b.trial_anchored?`Your free trial ends <b>${esc(blDate(b.trial_end))}</b>. The first charge is ${blMoney(b.price_cents||0)} on that day${b.cancel_at?', but your plan is set to end then, so you won\'t be charged':''}.`:`Your 14 free days start when ${esc(aName())} answers her first real call. Nothing is charged until then.`;
+  const meter=(()=>{ if(!inc) return ''; const used=Number(u.minutes||0); const pct=Math.min(100,Math.round(used/inc*100));
+    if(u.trial) return `<div class="bl-meter"><div class="bl-mh"><span class="l"><b>${used.toLocaleString()}</b> minutes used during your trial</span><span>Free</span></div></div>`;
+    return `<div class="bl-meter"><div class="bl-mh"><span class="l"><b>${used.toLocaleString()}</b> of ${inc.toLocaleString()} minutes this period</span><span>Renews ${esc(blDate(b.current_period_end))}</span></div><div class="bl-bar"><i style="width:${pct}%;${pct>=100?'background:#d97706':''}"></i></div>${u.extra?`<div class="bl-extra">${u.extra.toLocaleString()} extra minutes so far: about ${blMoney(u.cents)} on your next bill${u.capped?' (capped at the Pro price)':''}.</div>`:`<div class="bl-extra">${(inc-used).toLocaleString()} minutes left. ${esc(aName())} keeps answering if you go over.</div>`}</div>`; })();
+  const committed=b.commitment_ends_at&&new Date(b.commitment_ends_at)>new Date()&&b.term!=='mtm';
+  const inv=(r.invoices||[]);
+  host.innerHTML=`<div class="page">
+    <div class="card"><div class="card-h"><h2>Your plan</h2>${blStatusPill(b)}</div>
+      <div class="bl-sum"><div><div class="bl-big">Donna ${esc(r.prices.label)} ${tierName}</div><div class="bl-sub">${blMoney(b.price_cents||0)} a month · ${esc(BL_TERM_LABEL[b.term]||'')} · ${inc.toLocaleString()} minutes included</div></div>
+        ${r.can_manage?`<div class="bl-acts"><button class="btn sm" id="bl-change">Change plan</button></div>`:''}</div>
+      ${trialLine?`<div class="bl-note">${trialLine}</div>`:''}
+      ${b.sub_status==='past_due'?`<div class="bl-note warn">We couldn't charge your card. Stripe will retry, and ${esc(aName())} keeps answering in the meantime. Update your card below to fix it now.</div>`:''}
+      ${b.cancel_at&&b.sub_status!=='trialing'?`<div class="bl-note warn">Your plan is set to end on <b>${esc(blDate(b.cancel_at))}</b>. ${esc(aName())} keeps answering until then.</div>`:''}
+      ${meter}
+      <div class="set-rows" style="margin-top:14px">
+        <div class="set-row"><span class="k">Card</span><span class="v">${b.card_last4?`${esc((b.card_brand||'card').replace(/^./,c=>c.toUpperCase()))} ending ${esc(b.card_last4)}`:'On file'} ${r.can_manage?'<button class="btn sm" id="bl-card" style="margin-left:8px">Update card</button>':''}</span></div>
+        ${committed?`<div class="set-row"><span class="k">Commitment</span><span class="v">Until ${esc(blDate(b.commitment_ends_at))}, then renews for another ${b.term==='2y'?'2 years':'year'} unless you end it</span></div>`:''}
+        <div class="set-row"><span class="k">Extra minutes</span><span class="v">${r.prices.overage[b.tier]}¢ each${b.tier==='starter'?', and a Starter bill never goes above the Pro price':''}</span></div>
+      </div>
+      <div id="bl-pick" style="display:none;margin-top:16px"></div>
+      <div class="wz-msg" id="bl-m"></div>
+      ${r.can_manage?`<div style="margin-top:14px;display:flex;gap:10px;flex-wrap:wrap">${b.cancel_at?`<button class="btn sm primary" id="bl-resume">Keep my plan</button>`:`<button class="btn sm" id="bl-cancel" style="color:var(--danger)">${b.sub_status==='trialing'?'Cancel free trial':'End my plan'}</button>`}</div>`:''}
+    </div>
+    ${r.can_manage?`<div class="card"><div class="card-h"><h2>Invoices</h2><span class="hint">From Sidekick Logistics</span></div>
+      ${inv.length?`<table class="bl-inv"><thead><tr><th>Date</th><th>Invoice</th><th>Status</th><th style="text-align:right">Amount</th><th></th></tr></thead><tbody>${inv.map(i=>`<tr><td>${esc(blDate(i.created))}</td><td>${esc(i.number||'')}</td><td>${esc(i.status==='paid'?'Paid':i.status==='open'?'Due':i.status||'')}</td><td style="text-align:right;font-weight:600">${blMoney(i.total||0)}</td><td style="text-align:right">${i.url?`<a class="btn sm" href="${esc(i.url)}" target="_blank" rel="noopener">View</a>`:''}</td></tr>`).join('')}</tbody></table>`:`<p style="font-size:13px;color:var(--muted);margin:0">No invoices yet.${b.sub_status==='trialing'?' Your first one comes when the trial ends.':''}</p>`}
+    </div>`:''}
+  </div>`;
+  const m=$("#bl-m");
+  if(state._billingNote){ m.textContent=state._billingNote; state._billingNote=null; }
+  const done=res=>{ if(res.ok){ state._billingFresh=res; pageBilling(); } else { m.style.color='var(--danger)'; m.textContent=blErr(res); } return !!res.ok; };
+  const cg=$("#bl-change"); if(cg) cg.onclick=()=>{ const el=$("#bl-pick"); const open=el.style.display==='none'; el.style.display=open?'block':'none'; cg.textContent=open?'Close':'Change plan'; if(open) bindPlanPicker(el, r.prices, { term:b.term, current:{tier:b.tier,term:b.term}, cta:'Switch to' }, async(tier,term)=>{
+      const up=tier==='pro'&&b.tier==='starter'; const msg=b.sub_status==='trialing'?`Switch to ${tier==='pro'?'Pro':'Starter'}, ${BL_TERM_LABEL[term]}? Nothing is charged during your trial.`:(up?`Upgrade to Pro now? You'll pay the difference for the rest of this month on your next bill.`:`Switch to ${tier==='pro'?'Pro':'Starter'}, ${BL_TERM_LABEL[term]}? The price change is prorated on your next bill.`)+(term!=='mtm'&&term!==b.term?` This starts a ${term==='2y'?'2-year':'1-year'} commitment.`:'');
+      if(!(await uiConfirm(msg,{okText:'Switch plan',cancelText:'Not now'}))) return false;
+      return done(await billingApi({ action:'change', tier, term })); }); };
+  const cd=$("#bl-card"); if(cd) cd.onclick=async()=>{ cd.disabled=true; const res=await billingApi({ action:'card' }); if(res.ok&&res.url) location.href=res.url; else { cd.disabled=false; m.style.color='var(--danger)'; m.textContent=blErr(res); } };
+  const cn=$("#bl-cancel"); if(cn) cn.onclick=async()=>{
+    const msg=b.sub_status==='trialing'?`Cancel your free trial? ${aName()} keeps answering until ${b.trial_anchored?blDate(b.trial_end):'the trial ends'}, then stops, and you won't be charged.`:(committed?`Your ${b.term==='2y'?'2-year':'1-year'} plan runs until ${blDate(b.commitment_ends_at)}. Billing continues monthly until then, and the plan ends that day instead of renewing.`:`End your plan? ${aName()} keeps answering until ${blDate(b.current_period_end)}, then stops. You won't be charged again.`);
+    if(!(await uiConfirm(msg,{okText:b.sub_status==='trialing'?'Cancel trial':'End plan',cancelText:'Keep my plan'}))) return;
+    cn.disabled=true; done(await billingApi({ action:'cancel' })); };
+  const rs=$("#bl-resume"); if(rs) rs.onclick=async()=>{ rs.disabled=true; done(await billingApi({ action:'resume' })); };
+}
+// Coming back from Stripe Checkout: confirm right away (the webhook may still be on its way).
+async function billingReturn(){
+  const q=new URLSearchParams(location.search); const kind=q.get('billing'); if(!kind) return;
+  try{ history.replaceState(null,'',location.pathname); }catch(_e){}
+  if(kind==='cancelled'){ state._billingNote='Checkout was cancelled. Nothing was charged.'; return; }
+  const sid=q.get('session_id'); if(!sid) return;
+  const r=await billingApi({ action:'confirm', session_id:sid });
+  if(r.ok){ state._billingFresh=r; state.billingOk=true; }
 }
 
 /* ===================== ASSISTANT PAGE ===================== */
@@ -6336,6 +6471,7 @@ const WZ_RENDER={
   // 3 — the phone. The only step that truly needs the owner. Provision now; forward or take a new number; verify by calling.
   3:function(){
     const g=state.wz; const a=state.assistant||{}; const donna=a.number||'';
+    if(!donna && !state.billingOk){ wzPlanGate(); return; }
     const bizPhone=(state.account.settings&&state.account.settings.business&&state.account.settings.business.phone)||'';
     const area=(bizPhone.replace(/\D/g,'').slice(-10,-7))||(g.phone.replace(/\D/g,'').slice(-10,-7))||'817';
     document.getElementById("root").innerHTML=wzShell(`
@@ -6391,6 +6527,22 @@ const WZ_RENDER={
   }
 };
 // Finish: mark complete, create the email address, apply the preset, reload, tutorial. `partial` = "finish later" — still live, Donna chases the rest.
+// Setup step 3, before the number: choose a plan and add a card (Stripe Checkout). Exempt and already-subscribed accounts skip it.
+async function wzPlanGate(){
+  const root=document.getElementById("root");
+  root.innerHTML=wzShell(`<h1>${wt('Start your free trial.')}</h1><div class="wz-msg" style="color:var(--muted)">${wt('Loading plans…')}</div>`,{noFooter:true});
+  const r=await billingApi({ action:'status' });
+  if(r.ok&&(r.exempt||(r.billing&&['trialing','active','past_due'].includes(r.billing.sub_status)))){ state.billingOk=true; WZ_RENDER[3](); return; }
+  if(!r.ok){ root.innerHTML=wzShell(`<h1>${wt('Start your free trial.')}</h1><div class="wz-msg" style="color:var(--danger)">${esc(blErr(r))}</div>`,{nextLabel:wt('Continue'),altLabel:''}); wzBindNav(async()=>false,{}); return; }
+  root.innerHTML=wzShell(`
+    <h1>${wt('Start your free trial.')}</h1>
+    <p class="lede">${wt('Pick a plan and add a card. Your 14 free days start when {0} answers her first real call, and you can cancel any time before then without being charged.', esc(state.wz&&state.wz.aname||DEFAULT_NAME))}</p>
+    <div id="wz-plan"></div><div class="wz-msg" id="wz-m">${state._billingNote?esc(state._billingNote):''}</div>
+  `,{nextLabel:wt('Continue'), altLabel:''});
+  state._billingNote=null;
+  bindPlanPicker($("#wz-plan"), r.prices, { term:'mtm', cta:wt('Start free with') }, async(tier,term)=>{ await wzPersist({}); return startCheckout(tier,term,$("#wz-m")); });
+  wzBindNav(async()=>{ const m=$("#wz-m"); m.style.color='var(--danger)'; m.textContent=wt('Choose a plan to continue.'); return false; },{});
+}
 async function wzFinish(partial){
   await wzPersist({ completed:true, completed_at:new Date().toISOString(), tutorial_done:false, finished_partial:!!partial });
   let address='';
@@ -6497,7 +6649,8 @@ async function boot(){
   if(!session){ renderAuth(); return; }
   let ok = await loadData();
   if(!ok){ await new Promise(r=>setTimeout(r,1200)); ok = await loadData(); } // give the signup trigger a moment
-  if(ok){ const forceSetup=new URLSearchParams(location.search).has('setup')&&isManager(); if(forceSetup){ state.wizStep=0; state.wz=null; } if(needsOnboarding()||forceSetup){ renderWizard(); } else { renderApp(); } } else { renderAuth(); }
+  if(ok){ if(new URLSearchParams(location.search).get('billing')){ await billingReturn(); if(!needsOnboarding()&&isManager()) state.view='billing'; }
+    const forceSetup=new URLSearchParams(location.search).has('setup')&&isManager(); if(forceSetup){ state.wizStep=0; state.wz=null; } if(needsOnboarding()||forceSetup){ renderWizard(); } else { renderApp(); } } else { renderAuth(); }
 }
 db.auth.onAuthStateChange((event)=>{ if(event==='PASSWORD_RECOVERY'){ pendingRecovery=true; state.authMode='reset'; renderAuth(); } });
 if('speechSynthesis' in window){ window.speechSynthesis.getVoices(); window.speechSynthesis.onvoiceschanged=()=>{}; }
