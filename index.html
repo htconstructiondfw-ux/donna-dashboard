@@ -391,6 +391,7 @@ function renderAuth(){
       <div class="field"><label class="lab">Industry</label><select class="inp" id="f-industry"><option value="">Choose…</option>${WZ_INDUSTRIES.map(x=>`<option value="${x[0]}">${esc(x[1])}</option>`).join("")}</select></div>
       <div class="field"><label class="lab">Your title</label><input class="inp" id="f-title" placeholder="e.g. Owner"></div>
     </div>
+    <div id="f-jr-safe" style="display:none;border:1px solid var(--line);border-radius:12px;padding:14px;margin:0 0 14px;background:var(--surface,#fff)"><div style="font-size:13px;color:var(--muted);margin-bottom:8px">A parent or guardian creates this account. Your child gets their own sign-in after you give permission.</div>${jrSafetyHtml('')}</div>
     <div class="grid-2">
       <div class="field"><label class="lab">Your name</label><input class="inp" id="f-name" placeholder="Full name"></div>
       <div class="field"><label class="lab">Your mobile <span class="sub">assistant texts/forwards here</span></label><input class="inp" id="f-phone" type="tel" placeholder="(817) 555-0100"></div>
@@ -405,6 +406,7 @@ function renderAuth(){
   </div></div>`;
   $("#f-toggle").onclick=()=>{ state.authMode = signup?"login":"signup"; renderAuth(); };
   $("#f-go").onclick = signup?doSignup:doLogin;
+  if(signup){ const ind=$("#f-industry"), box=$("#f-jr-safe"); if(ind&&box){ const sync=()=>{ box.style.display=ind.value==='junior'?'block':'none'; }; ind.onchange=sync; sync(); } }
   if(!signup){ const fp=$("#f-forgot"); if(fp) fp.onclick=()=>{ state.authMode="forgot"; renderAuth(); }; }
   if(!signup){ const em=$("#f-email"), pw=$("#f-pass"); if(em&&em.value&&pw) pw.focus(); else if(em) em.focus(); }
 }
@@ -679,7 +681,7 @@ const blErr=r=>(BL_ERR[r&&r.error]||(r&&r.error)||'Something went wrong').replac
 function planPickerHTML(prices, opts){
   opts=opts||{}; const term=opts.term||'mtm'; const t=prices.tiers; const cur=opts.current||null;
   if(prices.family==='junior'){ const j=prices.junior||{texts:50,text_cents:3,minute_cents:25,addon_cents:500,addon_setup_cents:2000}; const p=t.starter;
-    return `<div class="bl-plans"><div class="bl-plan pro ${cur?'cur':''}"><span class="bl-tag">For ages 8 to 17</span><div class="bl-pn">Donna for Junior Entrepreneurs</div><div class="bl-pw">One young business owner, plus a parent login</div>
+    return `<div class="bl-plans"><div class="bl-plan pro ${cur?'cur':''}"><span class="bl-tag">For ages 8 to 17</span><div class="bl-pn">Donna for Junior Entrepreneurs</div><div class="bl-pw">One young business owner, plus a parent login. <a href="#" onclick="return jrSafetyOpen()">How Donna keeps your child safe</a></div>
       <div class="bl-pp"><b>${blMoney(p.price.mtm)}</b><span>/mo</span></div>
       <ul><li><b>${p.minutes}</b> call minutes and <b>${j.texts}</b> texts a month</li><li>After that, ${j.minute_cents}¢ a minute and ${j.text_cents}¢ a text. You only pay more when the business gets busier.</li><li>Their own phone number, business plan, money tracker, supplies, posts and flyers</li><li>Texts go out from Donna. Two-way texting is an add-on: ${blMoney(j.addon_cents)} a month plus ${blMoney(j.addon_setup_cents)} to set up.</li></ul>
       <button class="btn primary" data-bl-pick="starter" ${cur?'disabled':''}>${cur?'Your plan':(opts.cta||'Choose')+' Junior'}</button></div></div>
@@ -5203,6 +5205,32 @@ const JR_IDEAS=[
   ['crafts','Crafts or baked goods',{ what:'I make and sell things like cookies, bracelets, or cards.', who:'Neighbors, family friends, people at markets.', prices:'$2 each or 3 for $5', supplies:'Ingredients or craft supplies, bags, labels', when:'I make them on Friday and sell on Saturday', items:[['Bags','bags',30,10],['Labels','labels',30,10]], job:'Sale day' }],
   ['other','Something else',{ what:'', who:'', prices:'', supplies:'', when:'', items:[], job:'Job' }]
 ];
+// "How Donna keeps your child safe". One wording, shown on the sign-up screen when Junior is picked, in parent setup before
+// permission is given, always in the Parent corner, and on the Junior plan card. Every line is a rule the code enforces:
+// the phone rules are callRules() in the junior function and the v53 block in retell-inbound; the app rules are in the junior function.
+function jrSafetyHtml(kidName){ const k=kidName?esc(kidName):'your child'; const K=kidName?esc(kidName):'Your child';
+  const ul=a=>`<ul style="margin:4px 0 12px;padding-left:20px">${a.map(x=>`<li style="margin:0 0 5px">${x}</li>`).join('')}</ul>`;
+  return `<div class="jr-safe" style="font-size:13.5px;line-height:1.55;text-align:left">
+    <div style="font-weight:700;font-size:15.5px;margin-bottom:4px">How Donna keeps your child safe</div>
+    <div style="color:var(--muted);margin-bottom:10px">Donna is made by Sidekick Logistics. These rules are built in. A child cannot turn them off.</div>
+    <b>On the phone</b>${ul([
+      `Donna answers the business number, so customers never get ${k}'s own number. Donna never gives out a personal phone number.`,
+      `Donna never says or confirms ${k}'s age, grade, school, last name, home address, or where they are right now. This holds even when a caller says they are a friend or a relative.`,
+      `Donna never agrees to anyone meeting ${k} alone, coming to your home, or ${k} going inside a customer's home. Jobs are done outdoors or with a parent present.`,
+      `If a caller says anything inappropriate or threatening, or asks personal questions about ${k}, Donna stops answering, says a parent will follow up, leaves you an urgent message, and ends the call.`,
+      `When a new customer calls, Donna takes their name, phone number, street and what they need. She tells them the job is not booked until it is confirmed with a parent.`,
+      `Donna only quotes the prices written in the business plan.`])}
+    <b>In the app</b>${ul([
+      `You are the account owner. You see everything: customers, jobs, money, posts, calls and messages.`,
+      `Through age 13, every new customer, every customer address change and every social media post waits for your OK. A job cannot be booked for a customer you have not approved. From age 14 you can keep these approvals on.`,
+      `Donna asks only for a first name, a birth month and year, and a sign-in email you choose. She never asks for a last name, a school or your home address.`,
+      `${K}'s sign-in cannot change billing, the phone number or the parent controls.`,
+      `Donna never posts to social media. She helps write the post and reminds ${k} when it is time to post it.`,
+      `Flyers show a first name and the business name only.`,
+      `Online payments go to a Stripe account in your name. Donna never holds the money.`,
+      `To delete everything, email accounts@sidekicklogistics.com from your sign-in email.`])}
+    <div style="color:var(--muted)"><b style="color:var(--ink)">What Donna cannot do.</b> Donna is software. She can make mistakes, and she cannot watch ${k} in person. Please read the safety rules in the business plan together, and look at the calls and messages often.</div></div>`; }
+function jrSafetyOpen(kidName){ const o=ctOverlay(jrSafetyHtml(kidName)+`<div style="display:flex;justify-content:flex-end;margin-top:14px"><button class="btn sm primary" id="jr-safe-x">Close</button></div>`); o.querySelector('#jr-safe-x').onclick=()=>o.remove(); return false; }
 async function jrApi(body){ const { data, error }=await db.functions.invoke('junior',{ body }); if(error){ try{ return await error.context.json(); }catch(_e){ return { ok:false, error:error.message||'error' }; } } return data||{ ok:false, error:'empty' }; }
 const jrDay=d=>{ if(!d) return ''; const x=new Date(String(d).slice(0,10)+'T12:00:00'); return x.toLocaleDateString('en-US',{ weekday:'short', month:'short', day:'numeric' }); };
 const jrTime=t=>{ if(!t) return ''; const [h,m]=String(t).split(':').map(Number); return `${((h+11)%12)+1}:${String(m).padStart(2,'0')} ${h<12?'am':'pm'}`; };
@@ -5434,7 +5462,8 @@ async function pageJunior(){
           ${o.profile.kid_login?`<div class="jr-acts" style="margin-top:10px"><button class="btn sm" data-go="staff">Manage sign-in</button></div>`:`<div class="field" style="margin-top:10px"><label class="lab">Email ${esc(kid)} will sign in with</label><input class="inp" id="jr-u-email" inputmode="email" placeholder="An email you can check"></div><div class="field"><label class="lab">Starting password (8 or more characters)</label><input class="inp" id="jr-u-pass" type="password" autocomplete="new-password"></div><div class="jr-acts"><button class="btn sm primary" id="jr-u-make">Make the sign-in</button></div><div class="jr-err" id="jr-u-err"></div>`}
           <h2 style="margin-top:16px">Getting paid online</h2><div class="jr-sub">Cash works from day one. To take cards or Cash App, connect Stripe in your own name (you must be 18 or older). Money goes to your bank, and Donna never holds it.</div><div class="jr-acts" style="margin-top:10px"><button class="btn sm" data-go="settings">Open payment settings</button><button class="btn sm" data-go="billing">Plan and billing</button></div></div>
         <div class="jr-card"><h2>Your permission</h2><div class="jr-sub">You gave permission as ${esc(kid)}'s parent or guardian${o.profile.consent_at?' on '+esc(dDate(o.profile.consent_at)):''}. Donna keeps only what is needed to run the business: first name, birth month and year, and what ${esc(kid)} enters. To delete everything, email <b>accounts@sidekicklogistics.com</b> from your sign-in email and it is removed.</div><div class="jr-acts" style="margin-top:10px"><button class="btn sm" id="jr-k-edit">Change name or birth month</button></div></div>
-      </div>`;
+      </div>
+      <div class="jr-card" style="margin-top:14px" id="jr-safe-card">${jrSafetyHtml(o.profile.kid_first_name||'')}</div>`;
     root.querySelectorAll('[data-go]').forEach(b=>b.onclick=e=>{ e.preventDefault(); go(b.dataset.go); });
     const decide=async(key,approve)=>{ const [kind,id]=key.split(':'); let note=''; if(!approve){ note=await uiPrompt(kind==='post'?'What should change? (they will see this note)':'Add a note (optional)',''); if(note===null||note===undefined) return; } const x=await jrApi({ action:'decide', kind, id, approve, note }); if(!x.ok){ uiAlert(x.message||'Could not save.'); return; } pageJunior(); };
     root.querySelectorAll('[data-ok]').forEach(b=>b.onclick=()=>decide(b.dataset.ok,true));
@@ -5458,7 +5487,7 @@ function jrSetup(root,o){
       <div class="field"><label class="lab">Birth month</label><select class="inp" id="js-m"><option value="">Month</option>${MON.map((m,i)=>`<option value="${String(i+1).padStart(2,'0')}" ${bm.slice(5,7)===String(i+1).padStart(2,'0')?'selected':''}>${m}</option>`).join('')}</select></div>
       <div class="field"><label class="lab">Birth year</label><select class="inp" id="js-y"><option value="">Year</option>${Array.from({length:11},(_,i)=>yr-18+i).map(y=>`<option ${bm.slice(0,4)===String(y)?'selected':''}>${y}</option>`).join('')}</select></div></div>
       <div class="jr-sub" style="margin:6px 0 12px">Donna for Junior Entrepreneurs is for ages 8 to 17. Through age 13, you approve each new customer and each social media post. From 14, your child can run it and you still see everything.</div>
-      ${p.consent_at?`<div class="jr-sub">Permission given on ${esc(dDate(p.consent_at))}.</div>`:`<label style="display:flex;gap:8px;align-items:flex-start;font-size:13.5px;line-height:1.5"><input type="checkbox" id="js-consent" style="margin-top:3px"><span>I am this child's parent or legal guardian. I give permission for my child to use Donna, and for Donna to collect and use the information my child enters to run their business. I can see everything and can ask for it to be deleted at any time.</span></label>`}
+      ${p.consent_at?`<div class="jr-sub">Permission given on ${esc(dDate(p.consent_at))}. <a href="#" onclick="return jrSafetyOpen()">How Donna keeps your child safe</a></div>`:`<div style="border:1px solid var(--line);border-radius:12px;padding:14px;margin:0 0 14px">${jrSafetyHtml(p.kid_first_name||'')}</div><div class="jr-sub" style="margin-bottom:8px">Please read the rules above before you give permission.</div><label style="display:flex;gap:8px;align-items:flex-start;font-size:13.5px;line-height:1.5"><input type="checkbox" id="js-consent" style="margin-top:3px"><span>I am this child's parent or legal guardian. I give permission for my child to use Donna, and for Donna to collect and use the information my child enters to run their business. I can see everything and can ask for it to be deleted at any time.</span></label>`}
       <div class="jr-acts" style="margin-top:14px"><button class="btn primary" id="js-save">${p.consent_at?'Save':'Give permission and continue'}</button></div><div class="jr-err" id="js-err"></div></div>`;
   $("#js-save").onclick=async()=>{ const m=$("#js-m").value, y=$("#js-y").value; const c=$("#js-consent"); const x=await jrApi({ action:'setup_save', kid_first_name:$("#js-name").value, birth_month:(m&&y)?`${y}-${m}`:'', consent:c?c.checked:true }); if(!x.ok){ $("#js-err").textContent=x.message||'Could not save.'; return; } state.view='jr_parent'; renderPage(); };
 }
