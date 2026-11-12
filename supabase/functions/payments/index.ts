@@ -276,7 +276,15 @@ Deno.serve(async (req: Request) => {
     const sig = req.headers.get("stripe-signature") || ""; const raw = await req.text();
     let ev: any;
     try { ev = await stripe.webhooks.constructEventAsync(raw, sig, WEBHOOK_SECRET, undefined, Stripe.createSubtleCryptoProvider()); }
-    catch (e) { return json({ ok: false, error: "bad_signature", detail: String(e) }, 400); }
+    catch (e) {
+      // The signing secret may have been replaced since this instance loaded it (new endpoint, rolled secret): read the table again and try each one once.
+      let ok = false;
+      try {
+        const { data } = await supabase.from("app_secrets").select("key, value").in("key", ["stripe_webhook_secret_test", "stripe_webhook_secret"]);
+        for (const r of data || []) { const v = String((r as any).value || "").trim(); if (!v || v === WEBHOOK_SECRET) continue; try { ev = await stripe.webhooks.constructEventAsync(raw, sig, v, undefined, Stripe.createSubtleCryptoProvider()); WEBHOOK_SECRET = v; ok = true; break; } catch { /* next */ } }
+      } catch { /* fall through */ }
+      if (!ok) return json({ ok: false, error: "bad_signature", detail: String(e) }, 400);
+    }
     try {
       if (ev.type === "checkout.session.completed" && ev.data.object?.mode === "setup") {
         // Card on file: the customer saved a card for a booked job. Keep the ids on the job; the tech can charge it at Done.
