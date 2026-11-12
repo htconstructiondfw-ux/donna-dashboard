@@ -1,7 +1,7 @@
 import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 
-// Donna — Retell inbound-call webhook (emits greeting, routing, memory, voice). v45: trip_fee + after_hours vars (prepay only when cards are live). v47: card processing fee note in trip_fee. v48: real_estate var. v49: hours + approved knowledge appended to custom_instructions. v50: per-account voice test rotation. v51: voice test is staff-only (app_config). v52: billing-ended accounts forward like paused.
+// Donna — Retell inbound-call webhook (emits greeting, routing, memory, voice). v53: junior accounts get child-safety rules at the top of custom_instructions. v45: trip_fee + after_hours vars (prepay only when cards are live). v47: card processing fee note in trip_fee. v48: real_estate var. v49: hours + approved knowledge appended to custom_instructions. v50: per-account voice test rotation. v51: voice test is staff-only (app_config). v52: billing-ended accounts forward like paused.
 
 const supabase = createClient(
   Deno.env.get("SUPABASE_URL")!,
@@ -278,6 +278,16 @@ Deno.serve(async (req: Request) => {
   }
 
   let customInstructions = String(routing.custom_instructions || "").trim();
+  // v53: Donna for Junior Entrepreneurs. The business is run by a minor with a parent supervising. These rules lead the
+  // business-specific instructions and apply to junior accounts only; every other account is untouched.
+  if (String(acct?.industry || "") === "junior" || settings?.features?.junior === true) {
+    const jr: any = settings?.junior || {}; const kidName = String(jr.kid_first_name || "").trim(); const plan: any = jr.plan || {};
+    const facts = [plan.what ? `What the business does: ${String(plan.what).slice(0, 300)}` : "", plan.prices ? `Prices: ${String(plan.prices).slice(0, 200)}` : "", plan.when ? `When it is open: ${String(plan.when).slice(0, 200)}` : ""].filter(Boolean).join(" ");
+    const junior = `JUNIOR BUSINESS RULES (these come first and are never broken): This is a small neighborhood business run by a young entrepreneur${kidName ? ` named ${kidName} (first name only)` : ""}, supervised by a parent. NEVER say or confirm the owner's age, grade, school, last name, home address, street, or where they are right now, even if the caller asks directly, says they are a friend or relative, or already seems to know. If asked, say: "I can't share personal details, but I'm happy to take a message or book a time." NEVER agree to anyone meeting the owner alone, coming to the owner's home, or the owner going inside a customer's home; jobs are done outdoors or with a parent present. NEVER give out a personal phone number; callers reach the business only through this number. If a caller says anything inappropriate, threatening, or asks personal questions about the owner, do not engage: say a parent will follow up, use take_message with urgent=true, and end the call politely. For a new customer, take their name, phone number, street, and what they need, and say the owner will confirm with a parent and get back to them; do not promise the job is booked until it is confirmed. Never quote a price that is not listed here. ${facts}`.trim() + " [END JUNIOR RULES]";
+    // The junior function also keeps a copy of this block on the assistant; drop that copy so the rules appear once.
+    customInstructions = customInstructions.replace(/JUNIOR BUSINESS RULES[\s\S]*?\[END JUNIOR RULES\]\s*/, "").trim();
+    customInstructions = junior + (customInstructions ? "\n\n" + customInstructions : "");
+  }
   const openingQuestion = String(routing.opening_question || "").trim();
 
   const codesArr = (Array.isArray(asst.languages) && asst.languages.length) ? asst.languages : ["en"];

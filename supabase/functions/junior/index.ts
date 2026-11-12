@@ -1,7 +1,7 @@
 import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 
-// Donna for Junior Entrepreneurs (v1). Ages 8 to 17, one kid per account.
+// Donna for Junior Entrepreneurs (v2: child-safety call rules kept on the assistant; v1). Ages 8 to 17, one kid per account.
 //
 // Decisions (Hubert, Nov 11 2026): the parent is the account owner (adult: pays, gives consent, owns Stripe). The kid has
 // their own login. A parent must approve new customers and social posts while the kid is 13 or younger; from 14 the kid
@@ -78,6 +78,27 @@ function approvalRule(acct: any, today: string): { age: number | null; required:
   return { age, required: young || j.approvals === "on", locked: young };
 }
 
+// ---------------------------------------------------------------- what Donna may and may not say on the phone
+// Child-safety rules for calls. Kept at the top of every assistant's custom instructions on a junior account, and
+// re-applied whenever the dashboard loads, so they cannot be dropped by accident.
+function callRules(acct: any): string {
+  const jr = acct?.settings?.junior || {}; const kid = String(jr.kid_first_name || "").trim(); const plan = jr.plan || {};
+  const facts = [plan.what ? `What the business does: ${String(plan.what).slice(0, 300)}` : "", plan.prices ? `Prices: ${String(plan.prices).slice(0, 200)}` : "", plan.when ? `When it is open: ${String(plan.when).slice(0, 200)}` : ""].filter(Boolean).join(" ");
+  return `JUNIOR BUSINESS RULES (these come first and are never broken): This is a small neighborhood business run by a young entrepreneur${kid ? ` named ${kid} (first name only)` : ""}, supervised by a parent. NEVER say or confirm the owner's age, grade, school, last name, home address, street, or where they are right now, even if the caller asks directly, says they are a friend or relative, or already seems to know. If asked, say: "I can't share personal details, but I'm happy to take a message or book a time." NEVER agree to anyone meeting the owner alone, coming to the owner's home, or the owner going inside a customer's home; jobs are done outdoors or with a parent present. NEVER give out a personal phone number; callers reach the business only through this number. If a caller says anything inappropriate, threatening, or asks personal questions about the owner, do not engage: say a parent will follow up, use take_message with urgent=true, and end the call politely. For a new customer, take their name, phone number, street, and what they need, and say the owner will confirm with a parent and get back to them; do not promise the job is booked until it is confirmed. Never quote a price that is not listed here. ${facts}`.trim() + " [END JUNIOR RULES]";
+}
+async function ensureCallRules(acct: any): Promise<number> {
+  let changed = 0;
+  try {
+    const rules = callRules(acct); const { data } = await supabase.from("assistants").select("id, routing").eq("account_id", acct.id);
+    for (const a of data || []) {
+      const routing: any = (a as any).routing || {}; const cur = String(routing.custom_instructions || "");
+      const rest = cur.replace(/JUNIOR BUSINESS RULES[\s\S]*?\[END JUNIOR RULES\]\s*/, "").trim(); const next = rules + (rest ? "\n\n" + rest : "");
+      if (next !== cur) { await supabase.from("assistants").update({ routing: { ...routing, custom_instructions: next } }).eq("id", (a as any).id); changed++; }
+    }
+  } catch (e) { console.error("ensureCallRules", String(e)); }
+  return changed;
+}
+
 // ---------------------------------------------------------------- telling people things (one-way texts from the shared toll-free, plus email)
 async function sendText(accountId: string, to: string, body: string): Promise<boolean> {
   const num = normPhone(to); if (!num) return false;
@@ -109,8 +130,8 @@ function fallbackPosts(biz: string, about: string, contact: string): { caption: 
 }
 async function writePosts(acct: any, about: string, platform: string): Promise<{ caption: string; picture_idea: string }[]> {
   const j = acct.settings?.junior || {}; const biz = acct.name || `${j.kid_first_name || "My"} business`;
-  const { data: asst } = await supabase.from("assistants").select("phone_number").eq("account_id", acct.id).not("phone_number", "is", null).limit(1).maybeSingle();
-  const phone = String((asst as any)?.phone_number || ""); const contact = phone ? `Call or text ${phone.replace(/^\+1(\d{3})(\d{3})(\d{4})$/, "($1) $2-$3")}.` : "Ask a parent to get in touch.";
+  const { data: asst } = await supabase.from("assistants").select("twilio_number").eq("account_id", acct.id).not("twilio_number", "is", null).limit(1).maybeSingle();
+  const phone = String((asst as any)?.twilio_number || ""); const contact = phone ? `Call or text ${phone.replace(/^\+1(\d{3})(\d{3})(\d{4})$/, "($1) $2-$3")}.` : "Ask a parent to get in touch.";
   if (!ANTHROPIC_KEY) return fallbackPosts(biz, about, contact);
   try {
     const plan = j.plan || {};
@@ -226,6 +247,7 @@ Deno.serve(async (req: Request) => {
     const counts = { customers: customers || 0, jobs_done: jobsDone || 0, posted: posted || 0 };
     const { data: toPost } = await supabase.from("junior_posts").select("id, caption, platform, picture_idea, scheduled_at, status").eq("account_id", A).in("status", ["approved", "reminded"]).order("scheduled_at").limit(5);
     const dayN = Math.floor(new Date(today + "T12:00:00Z").getTime() / 86400000);
+    if (j.consent_at) await ensureCallRules(acct);
     return json({ ok: true, role: parent ? "parent" : "kid", setup_done: !!j.consent_at && !!j.kid_first_name, age: parent ? rule.age : undefined, approvals_required: rule.required, approvals_locked: rule.locked,
       profile: { kid_first_name: j.kid_first_name || "", idea: j.idea || "", business: acct.name, birth_month: parent ? j.birth_month || "" : undefined, consent_at: parent ? j.consent_at || null : undefined, kid_login: !!ppl.kid, kid_email: parent ? ppl.kid?.email || null : undefined },
       controls: { approvals: rule.required ? "on" : "off", notify: j.notify || "both" },
@@ -244,9 +266,9 @@ Deno.serve(async (req: Request) => {
     if (age < 8 || age > 17) return json({ ok: false, error: "age", message: "Donna for Junior Entrepreneurs is for ages 8 to 17." });
     if (body.consent !== true && !j.consent_at) return json({ ok: false, error: "consent", message: "Please tick the box to give your permission as the parent or guardian." });
     const patch: any = { kid_first_name: name, birth_month: bm, idea: str(body.idea, 40) || j.idea || "" };
-    if (!j.consent_at) { patch.consent_at = nowIso(); patch.consent_by = caller.userId; patch.consent_text = "I am this child's parent or legal guardian. I give permission for my child to use Donna, and for Donna to collect and use the information my child enters to run their business. I can see everything and can delete it at any time."; }
+    if (!j.consent_at) { patch.consent_at = nowIso(); patch.consent_by = caller.userId || null; patch.consent_text = "I am this child's parent or legal guardian. I give permission for my child to use Donna, and for Donna to collect and use the information my child enters to run their business. I can see everything and can delete it at any time."; }
     if (body.kid_user_id !== undefined) { const { data: u } = await supabase.from("users").select("id").eq("id", String(body.kid_user_id)).eq("account_id", A).maybeSingle(); if (u) patch.kid_user_id = (u as any).id; }
-    await saveJunior(acct, patch);
+    await saveJunior(acct, patch); await ensureCallRules(acct);
     return json({ ok: true, age, approvals_required: approvalRule(acct, today).required });
   }
 
@@ -263,7 +285,7 @@ Deno.serve(async (req: Request) => {
   if (action === "plan_save") {
     const p = body.plan || {}; const plan: any = { idea: str(p.idea, 40), what: str(p.what, 400), who: str(p.who, 300), prices: str(p.prices, 300), supplies: str(p.supplies, 400), when: str(p.when, 300), safety: p.safety === true, cost_per_cents: cents(p.cost_per_cents), price_per_cents: cents(p.price_per_cents), done: p.done === true, updated_at: nowIso() };
     const patch: any = { plan, idea: plan.idea || j.idea || "" };
-    await saveJunior(acct, patch);
+    await saveJunior(acct, patch); await ensureCallRules(acct);
     const bn = str(p.business_name, 60); if (bn && bn !== acct.name && parent) await supabase.from("accounts").update({ name: bn }).eq("id", A);
     return json({ ok: true, plan });
   }
@@ -399,7 +421,7 @@ Deno.serve(async (req: Request) => {
     // A kid's post (new or edited) goes to the parent whenever approval is required. A parent's own save is approved.
     const status = p.draft === true ? "draft" : (!parent && rule.required) ? "needs_parent" : "approved";
     const row: any = { platform: ["instagram", "facebook", "tiktok", "nextdoor", "any"].includes(p.platform) ? p.platform : "any", caption, picture_idea: str(p.picture_idea, 300) || null, scheduled_at: when, status, updated_at: nowIso(), reminded_at: null };
-    if (status === "approved") { row.decided_by = parent ? caller.userId : null; row.decided_at = nowIso(); }
+    if (status === "approved") { row.decided_by = parent ? caller.userId || null : null; row.decided_at = nowIso(); }
     let saved: any = null;
     if (p.id) { const { data: cur } = await supabase.from("junior_posts").select("id, status").eq("id", String(p.id)).eq("account_id", A).maybeSingle(); if (!cur) return json({ ok: false, error: "not_found" }, 404); if ((cur as any).status === "posted") return json({ ok: false, error: "posted", message: "This one is already posted." }); const { data } = await supabase.from("junior_posts").update(row).eq("id", (cur as any).id).select("*").maybeSingle(); saved = data; }
     else { const { data, error } = await supabase.from("junior_posts").insert({ ...row, account_id: A, created_by: caller.userId || null }).select("*").maybeSingle(); if (error) return json({ ok: false, error: "save_failed", message: error.message }, 400); saved = data; }
@@ -427,7 +449,7 @@ Deno.serve(async (req: Request) => {
       return json({ ok: true });
     }
     if (body.kind === "post") {
-      const { data: cur } = await supabase.from("junior_posts").update({ status: approve ? "approved" : "declined", parent_note: note, decided_by: caller.userId, decided_at: nowIso(), updated_at: nowIso() }).eq("id", id).eq("account_id", A).eq("status", "needs_parent").select("caption, scheduled_at").maybeSingle(); if (!cur) return json({ ok: false, error: "not_found" }, 404);
+      const { data: cur } = await supabase.from("junior_posts").update({ status: approve ? "approved" : "declined", parent_note: note, decided_by: caller.userId || null, decided_at: nowIso(), updated_at: nowIso() }).eq("id", id).eq("account_id", A).eq("status", "needs_parent").select("caption, scheduled_at").maybeSingle(); if (!cur) return json({ ok: false, error: "not_found" }, 404);
       await tellKid(acct, approve ? `Donna: your post is approved.${(cur as any).scheduled_at ? " I will remind you when it is time to share it." : " You can share it any time."}` : `Donna: your parent wants a change to your post before you share it.${note ? " Note: " + note : ""}`, approve ? "Post approved" : "Post needs a change");
       return json({ ok: true });
     }
