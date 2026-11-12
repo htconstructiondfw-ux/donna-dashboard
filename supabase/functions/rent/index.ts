@@ -1,7 +1,7 @@
 import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 
-// Donna: rent collection (v1). PM Donna and Real Estate Donna.
+// Donna: rent collection (v2: autopay; v1). PM Donna and Real Estate Donna.
 //
 // Decisions (Hubert, Nov 11 2026): one Stripe account per management company (payment_accounts, the company is the
 // merchant of record; Donna never holds money). Tenants pay by bank (ACH, no fee), card or Cash App (card fee).
@@ -23,7 +23,13 @@ import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 // Public (pay page):
 //   checkout {token, method: bank|card, amount_cents?} -> Stripe Checkout URL on the company's account
 //   confirm {token}                  -> after returning from Checkout: settle what Stripe says is settled
-// Internal: sweep                    -> bill upcoming rent, remind, late fees, settle checkouts in flight
+//   autopay_off {token}              -> tenant turns autopay off from the pay page
+// Internal: sweep                    -> bill upcoming rent, remind, late fees, settle checkouts in flight, draw autopay on the due date
+//
+// Autopay (v2): a tenant ticks "pay my rent automatically" while paying the full balance. Stripe keeps the bank account or
+// card (setup_future_usage) and it is stored on the lease. On each due date the sweep draws the rent with an off-session
+// PaymentIntent carrying metadata.invoice_id + autopay=1, which the payments webhook already closes (or reports as failed).
+// The tenant or the manager can turn it off at any time. Two failed draws on one bill stop autopay for that bill.
 //
 // A checkout for the whole balance carries metadata.invoice_id, so the existing `payments` webhook marks it paid
 // (including bank debits that clear days later). A partial payment carries metadata.rent_invoice_id and is settled here.
@@ -163,7 +169,8 @@ async function paidSoFar(invoiceId: string): Promise<number> { const { data } = 
 async function processingCents(invoiceId: string): Promise<{ cents: number; full: boolean }> { const { data } = await supabase.from("rent_sessions").select("amount_cents, partial").eq("invoice_id", invoiceId).eq("status", "processing"); return { cents: (data || []).reduce((s: number, r: any) => s + r.amount_cents, 0), full: (data || []).some((r: any) => !r.partial) }; }
 function sendWords(acct: any, s: RentSettings, inv: any, l: any, online: boolean, bank: boolean): string {
   const link = payUrl(inv.pay_token); const how = online ? (bank ? `Pay by bank (no fee)${s.card_fee_pct ? `, or card / Cash App (+${s.card_fee_pct}%)` : ", card or Cash App"}: ${link}` : `Pay by card${s.card_fee_pct ? ` (+${s.card_fee_pct}%)` : ""}: ${link}`) : `Details: ${link}`;
-  return `${acct.name}: rent of ${money(inv.total_cents)} for ${l.label} is due ${sayDate(inv.due_at)}. ${how}`;
+  if (l.autopay?.payment_method && online) return `${acct.name}: rent of ${money(inv.total_cents)} for ${l.label} is due ${sayDate(inv.due_at)}.${autoWords(l)} Details: ${link}`;
+  return `${acct.name}: rent of ${money(inv.total_cents)} for ${l.label} is due ${sayDate(inv.due_at)}. ${how}${online ? " You can turn on autopay on the same page." : ""}`;
 }
 // Create (if missing) the invoice for one lease + period, and send it. Idempotent: unique (lease_id, period_key).
 async function billPeriod(acct: any, l: any, per: Period, actor: string | null, send = true): Promise<{ created: boolean; sent: boolean; invoice?: any; error?: string }> {
@@ -184,6 +191,7 @@ async function billPeriod(acct: any, l: any, per: Period, actor: string | null, 
   let sent = false; if (send && !l.block_payments) sent = await sendInvoice(acct, inv, l);
   return { created: true, sent, invoice: inv };
 }
+function autoWords(l: any): string { return l.autopay?.payment_method ? ` Autopay will draw it from your ${l.autopay.method === "bank" ? "bank account" : "card"}${l.autopay.last4 ? " ending " + l.autopay.last4 : ""} on that date, so there is nothing to do.` : ""; }
 async function sendInvoice(acct: any, inv: any, l: any): Promise<boolean> {
   const s = rentSettings(acct); const pa = await loadPA(acct.id); const online = s.enabled && !!pa?.charges_enabled && !l.block_payments;
   const r = await tell(acct, inv, sendWords(acct, s, inv, l, online, s.bank_status === "active"), `Rent due ${sayDate(inv.due_at)}: ${money(inv.total_cents)}`);
@@ -205,14 +213,31 @@ async function applyPayment(acct: any, inv: any, amountCents: number, method: st
   return { paid: false, balance };
 }
 // Ask Stripe where one checkout stands and settle it. Safe to call any number of times.
+// Keep the bank account or card a tenant chose for autopay on their lease. Once per checkout.
+async function captureAutopay(rs: any, acct: any, inv: any, pi: any, customer: string | null): Promise<void> {
+  const pm = pi?.payment_method && typeof pi.payment_method === "object" ? pi.payment_method : null; if (!pm?.id || !rs.lease_id) return;
+  const { data: won } = await supabase.from("rent_sessions").update({ autopay: "saved", updated_at: nowIso() }).eq("id", rs.id).eq("autopay", "want").select("id").maybeSingle(); if (!won) return;
+  const bank = pm.type === "us_bank_account"; const last4 = bank ? pm.us_bank_account?.last4 : pm.card?.last4; const brand = bank ? (pm.us_bank_account?.bank_name || "bank account") : (pm.card?.brand || "card");
+  await supabase.from("leases").update({ autopay: { customer: customer || pi.customer || null, payment_method: pm.id, method: bank ? "bank" : "card", last4: last4 || null, brand, enrolled_at: nowIso() }, updated_at: nowIso() }).eq("id", rs.lease_id);
+  await tell(acct, inv, `${acct.name}: autopay is on for ${inv.service_address || "your home"} using your ${bank ? "bank account" : "card"}${last4 ? " ending " + last4 : ""}. Rent is drawn on each due date and you get a receipt every time. Turn it off any time from your rent link.`, "Autopay is on");
+}
 async function settleSession(rs: any, acct?: any, pa?: any): Promise<string> {
-  if (!["open", "processing"].includes(rs.status)) return rs.status;
+  const wantsAuto = rs.autopay === "want";
+  if (!["open", "processing"].includes(rs.status) && !wantsAuto) return rs.status;
   acct = acct || await loadAccount(rs.account_id); pa = pa || await loadPA(rs.account_id); if (!pa?.stripe_account_id) return rs.status;
   const { data: inv } = await supabase.from("invoices").select("*").eq("id", rs.invoice_id).maybeSingle(); if (!inv) return rs.status;
-  // Whole-balance checkouts are closed by the payments webhook; here we only mirror that.
-  if (!rs.partial && inv.paid_at) { await supabase.from("rent_sessions").update({ status: "paid", updated_at: nowIso() }).eq("id", rs.id); return "paid"; }
-  let cs: any; try { cs = await stripeV1("GET", `/v1/checkout/sessions/${rs.id}?expand[]=payment_intent`, null, pa.stripe_account_id); } catch (e) { console.error("settle", String(e)); return rs.status; }
+  // Whole-balance payments are closed by the payments webhook; here we only mirror that.
+  if (!rs.partial && inv.paid_at && !wantsAuto) { await supabase.from("rent_sessions").update({ status: "paid", updated_at: nowIso() }).eq("id", rs.id); return "paid"; }
+  const isDraw = String(rs.id).startsWith("pi_");   // an autopay draw (no Checkout session)
+  let cs: any;
+  try {
+    if (isDraw) { const p: any = await stripeV1("GET", `/v1/payment_intents/${rs.id}`, null, pa.stripe_account_id); cs = { payment_intent: p, payment_status: p.status === "succeeded" ? "paid" : "unpaid", status: ["succeeded", "processing", "requires_payment_method", "canceled"].includes(p.status) ? "complete" : "open" }; }
+    else cs = await stripeV1("GET", `/v1/checkout/sessions/${rs.id}?expand[]=payment_intent.payment_method`, null, pa.stripe_account_id);
+  } catch (e) { console.error("settle", String(e)); return rs.status; }
   const pi: any = cs.payment_intent && typeof cs.payment_intent === "object" ? cs.payment_intent : null; const piId = pi?.id || (typeof cs.payment_intent === "string" ? cs.payment_intent : null);
+  if (wantsAuto && cs.status === "complete" && pi && !["requires_payment_method", "canceled"].includes(pi.status)) await captureAutopay(rs, acct, inv, pi, typeof cs.customer === "string" ? cs.customer : cs.customer?.id || null);
+  if (!["open", "processing"].includes(rs.status)) return rs.status;
+  if (!rs.partial && inv.paid_at) { await supabase.from("rent_sessions").update({ status: "paid", updated_at: nowIso() }).eq("id", rs.id); return "paid"; }
   let next = rs.status;
   if (cs.payment_status === "paid") next = "paid";
   else if (cs.status === "expired") next = "expired";
@@ -231,8 +256,34 @@ async function settleSession(rs: any, acct?: any, pa?: any): Promise<string> {
     const { data: fresh } = await supabase.from("invoices").select("*").eq("id", inv.id).maybeSingle();
     if (fresh && !fresh.paid_at) await applyPayment(acct, fresh, rs.amount_cents, rs.method, "stripe", piId || rs.id, null, rs.fee_cents);
   }
-  if (next === "failed") await tell(acct, inv, `${acct.name}: your ${HOW[rs.method] || "bank"} payment of ${money(rs.amount_cents)} for rent at ${inv.service_address || "your home"} did not go through. You can try again here: ${payUrl(inv.pay_token)}`, "Your rent payment did not go through");
+  if (next === "failed" && isDraw) await supabase.from("invoices").update({ paid_note: "autopay failed", updated_at: nowIso() }).eq("id", inv.id);
+  if (next === "failed") await tell(acct, inv, `${acct.name}: your ${isDraw ? "autopay " : ""}${HOW[rs.method] || "bank"} payment of ${money(rs.amount_cents)} for rent at ${inv.service_address || "your home"} did not go through. You can try again here: ${payUrl(inv.pay_token)}`, "Your rent payment did not go through");
   return next;
+}
+
+// Draw one rent bill from the tenant's saved bank account or card. The payments webhook closes the bill when the money lands.
+async function drawAutopay(acct: any, pa: any, l: any, inv: any, s: RentSettings): Promise<string> {
+  const ap = l.autopay; if (!ap?.payment_method || !pa?.stripe_account_id || !pa?.charges_enabled) return "skipped";
+  const paid = await paidSoFar(inv.id); const amount = inv.total_cents - paid; if (amount <= 0) return "skipped";
+  const bank = ap.method === "bank"; const fee = bank || s.card_fee_pct <= 0 ? 0 : Math.round(amount * s.card_fee_pct / 100);
+  await supabase.from("invoices").update({ autopay_attempts: (inv.autopay_attempts || 0) + 1, updated_at: nowIso() }).eq("id", inv.id);
+  const f: Record<string, string> = { amount: String(amount + fee), currency: inv.currency || "usd", payment_method: ap.payment_method, "payment_method_types[0]": bank ? "us_bank_account" : "card", off_session: "true", confirm: "true",
+    description: `${acct.name} · Rent: ${l.label}${inv.period_key ? ` (${inv.period_key})` : ""} (autopay)`.slice(0, 200), "metadata[invoice_id]": inv.id, "metadata[autopay]": "1", "metadata[lease_id]": l.id, "metadata[account_id]": inv.account_id, "metadata[card_fee_cents]": String(fee) };
+  if (ap.customer) f.customer = ap.customer;
+  try {
+    const key = await stripeKey(); const r = await fetch("https://api.stripe.com/v1/payment_intents", { method: "POST", headers: { Authorization: `Bearer ${key}`, "Stripe-Version": "2024-06-20", "Stripe-Account": pa.stripe_account_id, "Content-Type": "application/x-www-form-urlencoded", "Idempotency-Key": `rent-auto-${inv.id}-${(inv.autopay_attempts || 0) + 1}` }, body: new URLSearchParams(f).toString() });
+    const pi: any = await r.json().catch(() => ({}));
+    if (!r.ok || !pi?.id) throw new Error(pi?.error?.message || `stripe ${r.status}`);
+    const st = pi.status === "succeeded" || pi.status === "processing" ? "processing" : "failed";
+    await supabase.from("rent_sessions").insert({ id: pi.id, account_id: inv.account_id, invoice_id: inv.id, lease_id: l.id, amount_cents: amount, fee_cents: fee, method: bank ? "bank" : "card", partial: false, status: st, payment_intent: pi.id });
+    if (st === "failed") throw new Error(pi.last_payment_error?.message || "declined");
+    return pi.status;
+  } catch (e) {
+    const msg = String((e as any)?.message || e).slice(0, 140);
+    await supabase.from("invoices").update({ paid_note: `autopay failed: ${msg}`, updated_at: nowIso() }).eq("id", inv.id);
+    await tell(acct, inv, `${acct.name}: we could not draw your rent for ${l.label} by autopay (${msg}). Please pay here: ${payUrl(inv.pay_token)}`, "Autopay did not go through");
+    return "failed";
+  }
 }
 
 // ---------------------------------------------------------------- sweep (bill -> remind -> late fee), per account
@@ -240,7 +291,7 @@ async function sweepAccount(acct: any): Promise<any> {
   const s = rentSettings(acct); const today = todayStr(tzOf(acct)); const actor = await ownerUserId(acct.id);
   const res: any = { account: acct.name, billed: 0, sent: 0, reminded: 0, late_fees: 0, ended: 0, errors: [] as string[] };
   const { data: leases } = await supabase.from("leases").select("*").eq("account_id", acct.id).eq("status", "active");
-  const byId: Record<string, any> = {};
+  const byId: Record<string, any> = {}; let pa: any = null;
   for (const l of leases || []) {
     byId[l.id] = l;
     for (const key of [monthKey(today), monthKey(today, 1)]) {
@@ -263,6 +314,12 @@ async function sweepAccount(acct: any): Promise<any> {
     const proc = await processingCents(inv.id); if (proc.cents > 0) continue;   // money in flight: no nagging
     const dLeft = daysBetween(today, inv.due_at); const lastRem = inv.last_reminder_at ? daysBetween(String(inv.last_reminder_at).slice(0, 10), today) : 99;
     const paid = await paidSoFar(inv.id); let total = inv.total_cents; const link = payUrl(inv.pay_token);
+    // Autopay: draw on the due date (and once more the next day if the first try failed). Two failures leave the bill to the tenant.
+    if (l.autopay?.payment_method && dLeft <= 0 && (inv.autopay_attempts || 0) < 2 && s.enabled) {
+      if (!pa) pa = await loadPA(acct.id);
+      const r = await drawAutopay(acct, pa, l, inv, s); if (r !== "skipped") { res.autopay = (res.autopay || 0) + 1; continue; }
+    }
+    if (l.autopay?.payment_method && dLeft > 0) { if (dLeft === 3 && lastRem >= 2) { const r = await tell(acct, inv, `${acct.name}: heads up, ${money(total - paid)} in rent for ${l.label} will be drawn by autopay on ${sayDate(inv.due_at)}. To pay another way or turn autopay off: ${link}`, "Autopay reminder"); if (r.sms || r.email) await supabase.from("invoices").update({ last_reminder_at: nowIso(), updated_at: nowIso() }).eq("id", inv.id); } continue; }
     // Late fee once, after the grace days (flat amount, or a percent of the rent still owed).
     const feeCents = s.late_fee_cents > 0 ? s.late_fee_cents : s.late_fee_pct > 0 ? Math.round((inv.total_cents - paid) * s.late_fee_pct / 100) : 0;
     if (feeCents > 0 && !inv.late_fee_applied_at && -dLeft > s.grace_days) {
@@ -298,7 +355,7 @@ async function leaseRows(acct: any) {
     const mine = (invs || []).filter((i: any) => i.lease_id === l.id); const open = mine.filter((i: any) => !i.paid_at);
     const balance = open.reduce((t: number, i: any) => t + i.total_cents - (paidBy[i.id] || 0), 0);
     const late = open.filter((i: any) => i.due_at && i.due_at < today); const lastPaid = mine.find((i: any) => i.paid_at);
-    return { ...l, balance_cents: balance, processing_cents: open.reduce((t: number, i: any) => t + (procBy[i.id] || 0), 0), late_count: late.length, days_late: late.length ? Math.max(...late.map((i: any) => daysBetween(i.due_at, today))) : 0,
+    return { ...l, autopay: l.autopay ? { method: l.autopay.method, last4: l.autopay.last4, brand: l.autopay.brand, enrolled_at: l.autopay.enrolled_at } : null, balance_cents: balance, processing_cents: open.reduce((t: number, i: any) => t + (procBy[i.id] || 0), 0), late_count: late.length, days_late: late.length ? Math.max(...late.map((i: any) => daysBetween(i.due_at, today))) : 0,
       open: open.map((i: any) => ({ id: i.id, number: i.number, due_at: i.due_at, period_key: i.period_key, total_cents: i.total_cents, paid_cents: paidBy[i.id] || 0, processing_cents: procBy[i.id] || 0, pay_url: payUrl(i.pay_token), late_fee: !!i.late_fee_applied_at })),
       last_paid_at: lastPaid?.paid_at || null };
   });
@@ -311,13 +368,18 @@ Deno.serve(async (req: Request) => {
   const action = String(body.action || "overview");
 
   // ================================================================ public: the pay page
-  if (action === "checkout" || action === "confirm") {
+  if (action === "checkout" || action === "confirm" || action === "autopay_off") {
     const token = String(body.token || "").trim(); if (!token) return json({ ok: false, error: "no_token" }, 400);
     const { data: inv } = await supabase.from("invoices").select("*").eq("pay_token", token).maybeSingle();
     if (!inv || !inv.lease_id) return json({ ok: false, error: "not_found" }, 404);
     const acct = await loadAccount(inv.account_id); const pa = await loadPA(inv.account_id);
+    if (action === "autopay_off") {
+      const { data: l0 } = await supabase.from("leases").select("id, label, autopay").eq("id", inv.lease_id).maybeSingle();
+      if ((l0 as any)?.autopay) { await supabase.from("leases").update({ autopay: null, updated_at: nowIso() }).eq("id", (l0 as any).id); await tell(acct, inv, `${acct.name}: autopay is now off for ${(l0 as any).label}. You will get a pay link each month instead.`, "Autopay turned off"); }
+      return json({ ok: true });
+    }
     if (action === "confirm") {
-      const { data: live } = await supabase.from("rent_sessions").select("*").eq("invoice_id", inv.id).in("status", ["open", "processing"]).order("created_at", { ascending: false }).limit(5);
+      const { data: live } = await supabase.from("rent_sessions").select("*").eq("invoice_id", inv.id).or("status.in.(open,processing),autopay.eq.want").order("created_at", { ascending: false }).limit(5);
       const states: string[] = []; for (const rs of live || []) states.push(await settleSession(rs, acct, pa));
       const { data: fresh } = await supabase.from("invoices").select("paid_at").eq("id", inv.id).maybeSingle();
       return json({ ok: true, paid: !!(fresh as any)?.paid_at || states.includes("paid"), processing: states.includes("processing"), states });
@@ -358,9 +420,12 @@ Deno.serve(async (req: Request) => {
     if (byBank) { f["payment_method_types[0]"] = "us_bank_account"; f["payment_method_options[us_bank_account][verification_method]"] = "instant"; f["payment_method_options[us_bank_account][financial_connections][permissions][0]"] = "payment_method"; }
     else { f["payment_method_types[0]"] = "card"; if (cashOk) f["payment_method_types[1]"] = "cashapp"; }
     if (inv.customer_email) f.customer_email = inv.customer_email;
+    // Autopay enrollment rides on a full payment: Stripe keeps the bank account or card for the monthly draw.
+    const wantAuto = body.autopay === true && !partial;
+    if (wantAuto) { f["payment_intent_data[setup_future_usage]"] = "off_session"; f.customer_creation = "always"; f["metadata[rent_autopay]"] = "1"; f["payment_method_types[0]"] = byBank ? "us_bank_account" : "card"; delete f["payment_method_types[1]"]; }
     try {
       const session: any = await stripeV1("POST", "/v1/checkout/sessions", f, pa.stripe_account_id);
-      await supabase.from("rent_sessions").insert({ id: session.id, account_id: inv.account_id, invoice_id: inv.id, lease_id: l.id, amount_cents: amount, fee_cents: fee, method: byBank ? "bank" : "card", partial });
+      await supabase.from("rent_sessions").insert({ id: session.id, account_id: inv.account_id, invoice_id: inv.id, lease_id: l.id, amount_cents: amount, fee_cents: fee, method: byBank ? "bank" : "card", partial, autopay: wantAuto ? "want" : null });
       if (!partial) await supabase.from("invoices").update({ stripe_checkout_session_id: session.id, updated_at: nowIso() }).eq("id", inv.id);
       return json({ ok: true, url: session.url });
     } catch (e) { console.error("rent checkout", e); return json({ ok: false, error: "stripe_error", message: "We could not start the payment just now. Please try again in a minute.", detail: String((e as any)?.message || e) }, 502); }
@@ -373,7 +438,7 @@ Deno.serve(async (req: Request) => {
     if (!caller.internal) return json({ ok: false, error: "internal_only" }, 403);
     const out: any = { ok: true, accounts: [], settled: 0 };
     // 1. Settle checkouts still in flight (returns nobody came back from, bank debits clearing).
-    const { data: live } = await supabase.from("rent_sessions").select("*").in("status", ["open", "processing"]).order("created_at").limit(200);
+    const { data: live } = await supabase.from("rent_sessions").select("*").or("status.in.(open,processing),autopay.eq.want").gte("created_at", new Date(Date.now() - 15 * 86400000).toISOString()).order("created_at").limit(200);
     for (const rs of live || []) { if (body.account_id && rs.account_id !== body.account_id) continue; const before = rs.status; const after = await settleSession(rs); if (after !== before) out.settled++; }
     // 2. Billing, reminders and late fees: once a day per account (or on demand with force).
     const { data: accts } = body.account_id ? await supabase.from("accounts").select("id, name, industry, settings").eq("id", body.account_id) : await supabase.from("accounts").select("id, name, industry, settings").not("settings->rent", "is", null);
@@ -466,6 +531,13 @@ Deno.serve(async (req: Request) => {
     return json({ ok: true, lease: data });
   }
 
+  if (action === "lease_autopay_off") {
+    if (!admin) return adminOnly(); const l = await loadLease(String(body.id || "")); if (!l) return json({ ok: false, error: "not_found" }, 404);
+    await supabase.from("leases").update({ autopay: null, updated_at: nowIso() }).eq("id", l.id);
+    await logActivity(acct.id, caller.userId, "rent.autopay_off", null, l.label, { tenant: l.tenant_name });
+    return json({ ok: true });
+  }
+
   if (action === "bill") {
     if (!admin) return adminOnly(); const l = await loadLease(String(body.lease_id || "")); if (!l) return json({ ok: false, error: "not_found" }, 404);
     if (l.status !== "active") return json({ ok: false, error: "ended", message: "This lease has ended." });
@@ -529,7 +601,7 @@ Deno.serve(async (req: Request) => {
     const ids = (invs || []).map((i: any) => i.id);
     const { data: pays } = ids.length ? await supabase.from("payments").select("invoice_id, amount_cents, method, provider, note, received_at").in("invoice_id", ids).order("received_at", { ascending: false }) : { data: [] as any[] };
     const { data: rs } = ids.length ? await supabase.from("rent_sessions").select("invoice_id, amount_cents, method, status, created_at").in("invoice_id", ids).eq("status", "processing") : { data: [] as any[] };
-    return json({ ok: true, lease: l, invoices: (invs || []).map((i: any) => ({ ...i, pay_url: payUrl(i.pay_token), pay_token: undefined, paid_cents: (pays || []).filter((p: any) => p.invoice_id === i.id).reduce((t: number, p: any) => t + p.amount_cents, 0) })), payments: pays || [], processing: rs || [] });
+    return json({ ok: true, lease: { ...l, autopay: l.autopay ? { method: l.autopay.method, last4: l.autopay.last4, brand: l.autopay.brand, enrolled_at: l.autopay.enrolled_at } : null }, invoices: (invs || []).map((i: any) => ({ ...i, pay_url: payUrl(i.pay_token), pay_token: undefined, paid_cents: (pays || []).filter((p: any) => p.invoice_id === i.id).reduce((t: number, p: any) => t + p.amount_cents, 0) })), payments: pays || [], processing: rs || [] });
   }
 
   if (action === "report") {

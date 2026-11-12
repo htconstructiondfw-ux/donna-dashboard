@@ -5547,7 +5547,7 @@ async function pageRent(){
         <tr><td><b>${esc(l.tenant_name)}</b><div class="rn-sub">${esc([l.tenant_phone,l.tenant_email].filter(Boolean).join(' · ')||'No phone or email')}</div></td>
           <td>${esc(l.label)}${l.owner_name?`<div class="rn-sub">Owner: ${esc(l.owner_name)}</div>`:''}</td>
           <td class="r">${dMoney(l.rent_cents)}<div class="rn-sub">due the ${dOrd(l.due_day)}</div></td>
-          <td>${pill(l)}${l.end_date?`<div class="rn-sub">Lease ends ${esc(dDate(l.end_date))}</div>`:''}</td>
+          <td>${pill(l)}${l.autopay?`<div class="rn-sub">Autopay on (${esc(l.autopay.method==='bank'?'bank':'card')}${l.autopay.last4?' ••'+esc(l.autopay.last4):''})</div>`:''}${l.end_date?`<div class="rn-sub">Lease ends ${esc(dDate(l.end_date))}</div>`:''}</td>
           <td class="r">${l.balance_cents>0?`<b>${dMoney(l.balance_cents)}</b>`:dMoney(0)}${l.processing_cents?`<div class="rn-sub">${dMoney(l.processing_cents)} clearing</div>`:''}</td>
           <td><div class="rn-acts"><button class="btn sm ${S.open===l.id?'primary':''}" data-open="${l.id}">${S.open===l.id?'Close':'Open'}</button></div></td></tr>
         ${S.open===l.id?`<tr><td colspan="6" style="padding:0 8px 10px"><div class="rn-panel" id="rn-ledger"><div class="rn-msg">Loading…</div></div></td></tr>`:''}`).join('')}</tbody></table></div>`
@@ -5602,8 +5602,9 @@ async function pageRent(){
     const today=new Date().toLocaleDateString('en-CA');
     host.innerHTML=`<div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:10px">
         <button class="btn sm primary" data-a="bill">Bill rent now</button><button class="btn sm" data-a="charge">Add a one-time charge</button><button class="btn sm" data-a="edit">Edit lease</button>
-        <button class="btn sm" data-a="block">${l.block_payments?'Accept payments again':'Stop accepting payments'}</button>${l.status==='active'?`<button class="btn sm" data-a="end">End lease</button>`:''}
+        <button class="btn sm" data-a="block">${l.block_payments?'Accept payments again':'Stop accepting payments'}</button>${l.autopay?`<button class="btn sm" data-a="autooff">Turn off autopay</button>`:''}${l.status==='active'?`<button class="btn sm" data-a="end">End lease</button>`:''}
         <span class="rn-msg" id="rn-l-msg" style="margin-left:auto"></span></div>
+      ${l.autopay?`<div class="rn-msg" style="margin-bottom:10px"><b>Autopay is on</b> (${esc(l.autopay.brand||l.autopay.method)}${l.autopay.last4?' ending '+esc(l.autopay.last4):''}). Rent is drawn on each due date, with a heads-up to the tenant 3 days before.</div>`:''}
       ${l.block_payments?`<div class="rn-msg" style="margin-bottom:10px;color:#8a5a00"><b>Payments are stopped for this tenant.</b> The pay page tells them to call your office, and ${esc(aName())} sends no pay links, reminders or late fees. ${l.block_reason?'Note: '+esc(l.block_reason):''}</div>`:''}
       <div id="rn-l-form"></div>
       ${invs.length?`<div class="rn-wrap"><table class="rn-t"><thead><tr><th>Bill</th><th>Due</th><th>Status</th><th class="r">Amount</th><th class="r">Paid</th><th></th></tr></thead><tbody>${invs.map(i=>{ const open=!i.paid_at&&i.status!=='void'; const late=open&&i.due_at&&i.due_at<today; const proc=(r.processing||[]).filter(p=>p.invoice_id===i.id).reduce((t,p)=>t+p.amount_cents,0);
@@ -5626,6 +5627,7 @@ async function pageRent(){
       const why=await uiPrompt(`Stop accepting payments from ${l.tenant_name}? Their pay page will say to call your office, and no pay links, reminders or late fees go out. Add a note for your records (for example: eviction filed Nov 12):`,''); if(why===null||why===undefined) return;
       await rentApi({ action:'lease_block', id, block:true, reason:why }); await load();
     };
+    const ao=act('autooff'); if(ao) ao.onclick=async()=>{ if(!(await uiConfirm(`Turn off autopay for ${l.tenant_name}? They will get a pay link each month instead.`))) return; await rentApi({ action:'lease_autopay_off', id }); await load(); };
     const eb=act('end'); if(eb) eb.onclick=async()=>{ if(!(await uiConfirm(`End the lease for ${l.tenant_name}? No new rent will be billed. Anything still open stays open until it is paid or canceled.`))) return; await rentApi({ action:'lease_end', id }); await load(); };
     act('charge').onclick=()=>{ const f=$("#rn-l-form"); f.innerHTML=`<div style="display:flex;gap:8px;flex-wrap:wrap;align-items:flex-end;margin-bottom:12px">
         <div class="field" style="margin:0;flex:1;min-width:180px"><label class="lab">What is it for</label><input class="inp" id="rn-c-desc" placeholder="Lockout fee"></div>

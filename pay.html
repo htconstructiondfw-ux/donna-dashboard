@@ -76,6 +76,7 @@ const MONTHS=["January","February","March","April","May","June","July","August",
 const longDate = d => d ? `${MONTHS[Number(d.slice(5,7))-1]} ${Number(d.slice(8,10))}, ${d.slice(0,4)}` : "";
 const lsGet = k => { try{ return localStorage.getItem(k); }catch(_e){ return null; } };
 const lsSet = (k,v) => { try{ localStorage.setItem(k,v); }catch(_e){} };
+let rentAuto = false; // rent: tenant ticked "pay my rent automatically"
 let rentAmt = null;  // rent: cents the tenant chose to pay (partial payments on), null = the full balance
 let tipPick = null; // cents chosen on this page (tickets only); null = use the invoice's saved tip
 // ---- Rent: bank (no fee), card or Cash App (card fee); part payments only when the manager allows them.
@@ -101,6 +102,8 @@ function rentBox(inv, due){
       <label class="method ${n.method==="card"?"on":""}"><input type="radio" name="rpm" value="card" ${n.method==="card"?"checked":""}><div><b>${cardName}</b><span>${inv.card_fee_pct>0?`Includes a ${inv.card_fee_pct}% fee of ${money(Math.round(n.amt*inv.card_fee_pct/100))}`:"Debit or credit"}</span></div><div class="amt">${money(n.amt+(inv.card_fee_pct>0?Math.round(n.amt*inv.card_fee_pct/100):0))}</div></label>
     </div>
     ${r.cashapp?`<div class="alt" style="text-align:left;margin-top:10px"><b>Paying with Cash App?</b> Some Cash App accounts have lower sending limits. If yours is below your rent, Cash App will not work for this payment. Use your bank account or a card instead.</div>`:""}
+    ${r.autopay?`<div class="done" style="background:#eef7f1;text-align:left;margin-top:10px"><b>Autopay is on.</b> Rent is drawn from your ${r.autopay.method==="bank"?"bank account":"card"}${r.autopay.last4?" ending "+esc(r.autopay.last4):""} on each due date. <a href="#" id="rentAutoOff">Turn autopay off</a></div>`
+      :(n.amt>=n.balance&&!(r.paid_cents>0)?`<label class="autopay" style="display:flex;gap:10px;align-items:flex-start;margin-top:12px;text-align:left;font-size:14px;line-height:1.45"><input type="checkbox" id="rentAuto" ${rentAuto?"checked":""} style="margin-top:3px"><span><b>Pay my rent automatically each month.</b> I authorize ${esc(b.name||"my property manager")} to draw my rent${n.method==="bank"?" from this bank account (no fee)":` from this card${inv.card_fee_pct>0?` (plus the ${inv.card_fee_pct}% card fee)`:""}`} on each due date. I get a reminder 3 days before and a receipt every time, and I can turn it off any time from my rent link.</span></label>`:"")}
     <button class="pay" id="rentBtn">Pay ${money(n.amt+n.fee)} by ${n.method==="bank"?"bank":(r.cashapp?"card or Cash App":"card")}</button>
     <div class="alt">Secure payment through Stripe. Your payment goes directly to ${esc(b.name||"your property manager")}. ${r.allow_partial?"You can pay part now and the rest later.":"Full amount only."}</div><div id="payErr"></div>`;
 }
@@ -108,11 +111,14 @@ function rentBind(inv, due){
   document.querySelectorAll('input[name="rpm"]').forEach(x=>x.onchange=()=>{ payMethod=x.value; render(inv); });
   const a=document.getElementById("rentAmt"); if(a) a.onchange=()=>{ const v=Math.round(Number(String(a.value).replace(/[^0-9.]/g,""))*100); rentAmt = (isFinite(v)&&v>0) ? v : null; render(inv); };
   const f=document.getElementById("rentFull"); if(f) f.onclick=()=>{ rentAmt=null; render(inv); };
+  const au=document.getElementById("rentAuto"); if(au) au.onchange=()=>{ rentAuto=au.checked; };
+  const off=document.getElementById("rentAutoOff"); if(off) off.onclick=async(e)=>{ e.preventDefault(); off.textContent="Turning off…"; try{ await fetch(`${SB}/functions/v1/rent`,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({action:"autopay_off",token})}); }catch(_e){} load(); };
   const btn=document.getElementById("rentBtn"); if(!btn) return;
   btn.onclick=async()=>{
     const n=rentNums(inv, due); const label=btn.textContent; btn.disabled=true; btn.textContent="Opening secure checkout…";
     try{
       const body={action:"checkout",token,method:n.method}; if(inv.rent.allow_partial && n.amt<n.balance) body.amount_cents=n.amt;
+      if(rentAuto && !inv.rent.autopay && n.amt>=n.balance) body.autopay=true;
       const r=await fetch(`${SB}/functions/v1/rent`,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(body)}); const j=await r.json();
       if(j.ok&&j.url){ location.href=j.url; return; }
       document.getElementById("payErr").innerHTML=`<div class="err">${esc(j.message||"Online payment isn't available right now. Please contact the office.")}</div>`;

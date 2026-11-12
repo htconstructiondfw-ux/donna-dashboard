@@ -104,3 +104,17 @@ select cron.schedule('donna-rent-sweep', '7,22,37,52 * * * *', $c$
     headers := jsonb_build_object('Content-Type','application/json','x-cron-secret',(select value from app_secrets where key='cron_secret')),
     body := '{"action":"sweep"}'::jsonb, timeout_milliseconds := 60000);
 $c$);
+
+-- Nov 12 (later): rent autopay and Donna's phone check for tenants calling from another number.
+alter table public.leases add column if not exists autopay jsonb;             -- { customer, payment_method, method, last4, brand, enrolled_at }
+alter table public.rent_sessions add column if not exists autopay text;        -- 'want' when the tenant ticked autopay at checkout, 'saved' once stored
+create table if not exists public.rent_phone_codes (
+  id uuid primary key default gen_random_uuid(),
+  account_id uuid not null references public.accounts(id) on delete cascade,
+  lease_id uuid not null references public.leases(id) on delete cascade,
+  caller text not null, code_hash text not null, attempts integer not null default 0,
+  expires_at timestamptz not null, used_at timestamptz, created_at timestamptz not null default now()
+);
+create index if not exists rent_phone_codes_caller_idx on public.rent_phone_codes(account_id, caller, created_at);
+alter table public.rent_phone_codes enable row level security;
+-- invoice_public: the rent block also carries 'autopay' { method, last4 } (see the function in the database).
