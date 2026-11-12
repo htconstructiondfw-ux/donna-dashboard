@@ -62,6 +62,8 @@ async function load(attempt=0){
     inv = await r.json();
   }catch(e){}
   if(!inv || !inv.id){ app.innerHTML = '<div class="card err">We couldn\'t find this invoice. It may have been replaced; please check with the business.</div>'; return; }
+  // Rent: ask Donna to settle with Stripe right away (partial payments and bank debits are not closed by the webhook).
+  if(inv.rent && justPaid && !inv.paid_at && attempt===0){ try{ await fetch(`${SB}/functions/v1/rent`,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({action:"confirm",token})}); const r2 = await fetch(`${SB}/rest/v1/rpc/invoice_public`,{method:"POST",headers:{"Content-Type":"application/json",apikey:ANON,Authorization:"Bearer "+ANON},body:JSON.stringify({p_token:token})}); const j2 = await r2.json(); if(j2&&j2.id) inv=j2; }catch(e){} }
   // After Stripe redirects back, the webhook may land a second later: poll briefly until it shows paid.
   if(justPaid && !inv.paid_at && attempt < 6){ setTimeout(()=>load(attempt+1), 1500); }
   render(inv);
@@ -74,11 +76,55 @@ const MONTHS=["January","February","March","April","May","June","July","August",
 const longDate = d => d ? `${MONTHS[Number(d.slice(5,7))-1]} ${Number(d.slice(8,10))}, ${d.slice(0,4)}` : "";
 const lsGet = k => { try{ return localStorage.getItem(k); }catch(_e){ return null; } };
 const lsSet = (k,v) => { try{ localStorage.setItem(k,v); }catch(_e){} };
+let rentAmt = null;  // rent: cents the tenant chose to pay (partial payments on), null = the full balance
 let tipPick = null; // cents chosen on this page (tickets only); null = use the invoice's saved tip
+// ---- Rent: bank (no fee), card or Cash App (card fee); part payments only when the manager allows them.
+function rentNums(inv, due){
+  const r = inv.rent; const balance = Math.max(0, due - (r.paid_cents||0) - (r.processing_cents||0));
+  const amt = (r.allow_partial && rentAmt != null) ? Math.min(balance, Math.max(0, rentAmt)) : balance;
+  const method = (payMethod==="bank" && !r.bank) ? "card" : payMethod;
+  const fee = method==="bank" ? 0 : (inv.card_fee_pct>0 ? Math.round(amt * inv.card_fee_pct / 100) : 0);
+  return { balance, amt, method, fee };
+}
+function rentBox(inv, due){
+  const r = inv.rent; const b = inv.business || {}; const n = rentNums(inv, due);
+  const call = b.phone ? ` Please call ${esc(b.phone)}.` : " Please call the office.";
+  if(r.blocked) return `<div class="err">${esc(b.name||"The office")} is not accepting online payments for this home right now.${call}</div>`;
+  const clearing = r.processing_cents>0 ? `<div class="done" style="background:#eef7f1">A bank payment of ${money(r.processing_cents)} is on its way. It takes 3 to 5 business days to clear, and you'll get a receipt when it does.</div>` : "";
+  if(n.balance<=0) return clearing || `<div class="alt">Confirming your payment…</div>`;
+  if(!inv.can_pay_online) return `${clearing}<div class="alt">Pay ${esc(b.name||"the office")} directly${b.phone?` · ${esc(b.phone)}`:""}.</div>`;
+  const cardName = r.cashapp ? "Card or Cash App" : "Card";
+  return `${clearing}
+    ${r.allow_partial?`<div class="tips"><div class="k">How much are you paying today?</div><div class="tipcustom"><input id="rentAmt" inputmode="decimal" value="${(n.amt/100).toFixed(2)}" aria-label="Amount to pay"><button type="button" id="rentFull" style="padding:10px 14px;border:1.5px solid var(--line);border-radius:12px;background:#fff;font:inherit;font-weight:600;color:var(--muted);cursor:pointer">Full ${money(n.balance)}</button></div></div>`:""}
+    <div class="methods">
+      ${r.bank?`<label class="method ${n.method==="bank"?"on":""}"><input type="radio" name="rpm" value="bank" ${n.method==="bank"?"checked":""}><div><b>Bank account</b><span>No fee · sign in to your bank or enter your account</span></div><div class="amt">${money(n.amt)}</div></label>`:""}
+      <label class="method ${n.method==="card"?"on":""}"><input type="radio" name="rpm" value="card" ${n.method==="card"?"checked":""}><div><b>${cardName}</b><span>${inv.card_fee_pct>0?`Includes a ${inv.card_fee_pct}% fee of ${money(Math.round(n.amt*inv.card_fee_pct/100))}`:"Debit or credit"}</span></div><div class="amt">${money(n.amt+(inv.card_fee_pct>0?Math.round(n.amt*inv.card_fee_pct/100):0))}</div></label>
+    </div>
+    ${r.cashapp?`<div class="alt" style="text-align:left;margin-top:10px"><b>Paying with Cash App?</b> Some Cash App accounts have lower sending limits. If yours is below your rent, Cash App will not work for this payment. Use your bank account or a card instead.</div>`:""}
+    <button class="pay" id="rentBtn">Pay ${money(n.amt+n.fee)} by ${n.method==="bank"?"bank":(r.cashapp?"card or Cash App":"card")}</button>
+    <div class="alt">Secure payment through Stripe. Your payment goes directly to ${esc(b.name||"your property manager")}. ${r.allow_partial?"You can pay part now and the rest later.":"Full amount only."}</div><div id="payErr"></div>`;
+}
+function rentBind(inv, due){
+  document.querySelectorAll('input[name="rpm"]').forEach(x=>x.onchange=()=>{ payMethod=x.value; render(inv); });
+  const a=document.getElementById("rentAmt"); if(a) a.onchange=()=>{ const v=Math.round(Number(String(a.value).replace(/[^0-9.]/g,""))*100); rentAmt = (isFinite(v)&&v>0) ? v : null; render(inv); };
+  const f=document.getElementById("rentFull"); if(f) f.onclick=()=>{ rentAmt=null; render(inv); };
+  const btn=document.getElementById("rentBtn"); if(!btn) return;
+  btn.onclick=async()=>{
+    const n=rentNums(inv, due); const label=btn.textContent; btn.disabled=true; btn.textContent="Opening secure checkout…";
+    try{
+      const body={action:"checkout",token,method:n.method}; if(inv.rent.allow_partial && n.amt<n.balance) body.amount_cents=n.amt;
+      const r=await fetch(`${SB}/functions/v1/rent`,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(body)}); const j=await r.json();
+      if(j.ok&&j.url){ location.href=j.url; return; }
+      document.getElementById("payErr").innerHTML=`<div class="err">${esc(j.message||"Online payment isn't available right now. Please contact the office.")}</div>`;
+    }catch(e){ document.getElementById("payErr").innerHTML='<div class="err">Couldn\'t open checkout. Please try again.</div>'; }
+    btn.disabled=false; btn.textContent=label;
+  };
+}
 function render(inv){
   const b = inv.business || {}; const paid = !!inv.paid_at; const isVoid = inv.status === "void";
   const isTicket = inv.kind === "ticket";
   const isDues = !!inv.bank_pay;
+  const rent = inv.rent || null; const isRent = !!rent;
   const apOn = !!(inv.unit && inv.unit.autopay);
   const bankInFlight = !inv.paid_at && ((inv.paid_note && /processing/i.test(inv.paid_note)) || (justPaid && lsGet("paymethod_"+token)==="bank"));
   const base = (inv.total_cents||0) - (inv.tip_cents||0);            // services + products + tax
@@ -88,12 +134,12 @@ function render(inv){
   const feeNow = (isDues && payMethod==="bank") ? 0 : feeCard;
   const initials = (b.name||"?").split(/\s+/).slice(0,2).map(w=>w[0]).join("").toUpperCase();
   const lines = (inv.lines||[]).filter(l => l.kind !== "tax");
-  document.title = `${isTicket?"Receipt":isDues?"Dues":"Invoice"} ${inv.number} · ${b.name||""}`;
+  document.title = `${isTicket?"Receipt":isDues?"Dues":isRent?"Rent":"Invoice"} ${inv.number} · ${b.name||""}`;
   app.innerHTML = `
     <div class="biz"><div class="logo">${esc(initials)}</div><div><h1>${esc(b.name||"Invoice")}</h1><p>${[b.phone,b.email].filter(Boolean).map(esc).join(" · ")}</p></div></div>
     <div class="card">
       <div class="top">
-        <div><div class="num">${isTicket?(paid?"Receipt":"Your visit"):isDues?"Dues":"Invoice"} ${esc(inv.number)}</div>${isDues&&inv.due_at&&!paid?`<div class="addr">Due ${esc(longDate(inv.due_at))}</div>`:""}${isTicket&&inv.served_by_name?`<div class="addr">with ${esc(inv.served_by_name)}</div>`:""}${inv.customer_name?`<div class="to">${esc(inv.customer_name)}</div>`:""}${inv.service_address?`<div class="addr">${esc(inv.service_address)}</div>`:""}</div>
+        <div><div class="num">${isTicket?(paid?"Receipt":"Your visit"):isDues?"Dues":isRent?"Rent":"Invoice"} ${esc(inv.number)}</div>${(isDues||isRent)&&inv.due_at&&!paid?`<div class="addr">Due ${esc(longDate(inv.due_at))}</div>`:""}${isTicket&&inv.served_by_name?`<div class="addr">with ${esc(inv.served_by_name)}</div>`:""}${inv.customer_name?`<div class="to">${esc(inv.customer_name)}</div>`:""}${inv.service_address?`<div class="addr">${esc(inv.service_address)}</div>`:""}</div>
         <span class="badge ${paid?"paid":isVoid?"void":""}">${paid?"Paid":isVoid?"Cancelled":"Due"}</span>
       </div>
       <table>
@@ -101,6 +147,9 @@ function render(inv){
         ${inv.tax_cents?`<tr><td>Sales tax</td><td class="amt">${money(inv.tax_cents)}</td></tr>`:""}
         ${tipNow?`<tr><td>Tip${inv.served_by_name?` <span class="k">for ${esc(inv.served_by_name)}</span>`:""}</td><td class="amt">${money(tipNow)}</td></tr>`:""}
         <tr class="total"><td>Total</td><td class="amt">${money(due)}</td></tr>
+        ${isRent&&!paid&&rent.paid_cents>0?`<tr><td>Paid so far</td><td class="amt">-${money(rent.paid_cents)}</td></tr>`:""}
+        ${isRent&&!paid&&rent.processing_cents>0?`<tr><td>Bank payment clearing</td><td class="amt">-${money(rent.processing_cents)}</td></tr>`:""}
+        ${isRent&&!paid&&(rent.paid_cents>0||rent.processing_cents>0)?`<tr class="total"><td>Still due</td><td class="amt">${money(Math.max(0,due-rent.paid_cents-rent.processing_cents))}</td></tr>`:""}
       </table>
       ${(!paid && !isVoid && isTicket && inv.tips_enabled) ? `<div class="tips"><div class="k">Add a tip${inv.served_by_name?` for ${esc(inv.served_by_name)}`:""}?</div>
         <div class="tipgrid">${[15,18,20,25].map(p=>{ const c=Math.round(base*p/100); return `<button type="button" data-tip="${c}" class="${tipNow===c?'on':''}">${p}%<small>${money(c)}</small></button>`; }).join("")}</div>
@@ -108,6 +157,7 @@ function render(inv){
       ${inv.notes?`<div class="notes">${esc(inv.notes)}</div>`:""}
       ${paid ? `<div class="done">Paid${inv.paid_method&&inv.paid_method!=="card"?" ("+esc(inv.paid_method)+")":""}${inv.paid_note&&/card processing fee/.test(inv.paid_note)?` · ${esc(inv.paid_note.replace(/^.*incl\. /,"incl. "))}`:""} on ${new Date(inv.paid_at).toLocaleDateString("en-US",{month:"long",day:"numeric",year:"numeric"})}. Thank you!</div>`
         : isVoid ? `<div class="err">This invoice was cancelled by ${esc(b.name||"the business")}.</div>`
+        : isRent ? rentBox(inv, due)
         : bankInFlight ? `<div class="done" style="background:#eef7f1">Bank payment started. It takes 2–4 business days to clear; you\'ll get a receipt by text when it does. Nothing else to do.</div>`
         : (inv.can_pay_online && isDues) ? `<div class="methods">
             <label class="method ${payMethod==="bank"?"on":""}"><input type="radio" name="pm" value="bank" ${payMethod==="bank"?"checked":""}><div><b>Bank account</b><span>No fee · sign in to your bank or enter your account</span></div><div class="amt">${money(due)}</div></label>
@@ -121,6 +171,7 @@ function render(inv){
         : (justPaid ? `<div class="alt">Confirming your payment…</div>` : `<div class="alt">Pay ${esc(b.name||"the business")} directly${b.phone?` · ${esc(b.phone)}`:""}.</div>`)}
     </div>
     <div class="foot">Sent by ${esc(b.name||"the business")}${b.managed_by?` (managed by ${esc(b.managed_by)})`:""} with Donna.<br>Payments are processed by ${esc(b.name||"the business")}'s own Stripe account; Donna never holds your money.</div>`;
+  if(isRent && !paid && !isVoid) rentBind(inv, due);
   document.querySelectorAll("[data-tip]").forEach(b=>b.onclick=()=>{ tipPick=Number(b.dataset.tip); render(inv); });
   const scb=document.getElementById("saveCard"); if(scb) scb.onchange=()=>{ saveCard=scb.checked; };
   const tn=document.getElementById("tipNone"); if(tn) tn.onclick=()=>{ tipPick=0; render(inv); };

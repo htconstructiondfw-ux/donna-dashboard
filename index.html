@@ -582,7 +582,7 @@ function renderApp(){
     const re=realEstateOn(), prop=propertyOn();
     if(re){ navConfig.splice(1,0,["listings",prop?"Listings (for sale & rent)":"Listings",I.home]); navActivity.splice(1,0,["leads","Leads & documents",I.sign]); }
     if(prop){ navConfig.splice(re?2:1,0,["properties",re?"Managed rentals":"Properties",I.building]); navConfig.splice(re?3:2,0,["contractors",re?"Vendors":"Contractors",I.wrench]); navActivity.splice(0,0,["requests",re?"Maintenance requests":"Service requests",I.wrench]); }
-    if(prop||re) navActivity.splice(prop?1:2,0,["dues","Communities & dues",I.home]);
+    if(prop||re){ navActivity.splice(prop?1:2,0,["dues","Communities & dues",I.home]); navActivity.splice(prop?2:3,0,["rent","Rent",I.card]); }
     soon=[["billing","Billing",I.card]];  // rendered as a real nav item under "Running"
   } else {
     // Stylist: focused view — their own bookings, messages, clients, and their own availability.
@@ -618,7 +618,7 @@ function renderApp(){
     <main class="main">
       <div class="topbar">
         <div class="tb-left"><button class="menu-btn" id="menu-btn" aria-label="Menu"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M4 7h16M4 12h16M4 17h16"/></svg></button>
-        <div class="crumbs">${['settings','notifications','account','billing'].includes(state.view)?'Account':(['today','messages','appointments','waitlist','calls','contacts','clients','gaps','conversations','requests','leads','money','dues'].includes(state.view)?'Activity':'Configure')} · <b>${esc(({today:"Today",assistant:"Assistant",schedule:"Schedule",types:(pmMode()?"Visit types":(salonOn()?"Services":"Appointment types")),staff:"Team",messages:"Phone messages",appointments:(pmMode()?"Visits & appointments":"Appointments"),settings:"Settings",notifications:"Notifications",calls:"Calls",knowledge:"Knowledge",contacts:(salonOn()?"Clients":"Contacts"),clients:"Clients",gaps:"Open questions",conversations:"Inbox",waitlist:"Waitlist",promotions:"Promotions",booking:(pmMode()?"Self-scheduling":"Booking page"),mylink:"My booking link",intake:"Intake forms",properties:"Properties",dues:"Communities & dues",contractors:"Contractors",requests:"Service requests",listings:"Listings",leads:"Leads & documents",money:(isManager()?"Checkout & money":"My money"),account:"My account",billing:"Billing"})[state.view])}</b></div>
+        <div class="crumbs">${['settings','notifications','account','billing'].includes(state.view)?'Account':(['today','messages','appointments','waitlist','calls','contacts','clients','gaps','conversations','requests','leads','money','dues','rent'].includes(state.view)?'Activity':'Configure')} · <b>${esc(({today:"Today",assistant:"Assistant",schedule:"Schedule",types:(pmMode()?"Visit types":(salonOn()?"Services":"Appointment types")),staff:"Team",messages:"Phone messages",appointments:(pmMode()?"Visits & appointments":"Appointments"),settings:"Settings",notifications:"Notifications",calls:"Calls",knowledge:"Knowledge",contacts:(salonOn()?"Clients":"Contacts"),clients:"Clients",gaps:"Open questions",conversations:"Inbox",waitlist:"Waitlist",promotions:"Promotions",booking:(pmMode()?"Self-scheduling":"Booking page"),mylink:"My booking link",intake:"Intake forms",properties:"Properties",dues:"Communities & dues",rent:"Rent",contractors:"Contractors",requests:"Service requests",listings:"Listings",leads:"Leads & documents",money:(isManager()?"Checkout & money":"My money"),account:"My account",billing:"Billing"})[state.view])}</b></div>
         </div><div class="acct-chip"><span class="av">${initials}</span><div class="who"><b>${esc(state.account.company)}</b><span>${esc((state.account.status||'trial'))} · ${esc(state.account.plan||'starter')}</span></div></div>
       </div>
       <div id="approve-banner"></div>
@@ -642,8 +642,8 @@ function renderPage(){
   teardownRealtime();
   document.querySelectorAll(".nav-item[data-v],.bbar button[data-v]").forEach(b=>b.classList.toggle("active",b.dataset.v===state.view));
   try{ window.scrollTo(0,0); const mn=document.querySelector('.main'); if(mn) mn.scrollTop=0; }catch(_e){}
-  $(".crumbs").innerHTML=`${['settings','notifications','account','billing'].includes(state.view)?'Account':(['today','messages','appointments','waitlist','calls','contacts','clients','gaps','conversations','requests','leads','money','dues'].includes(state.view)?'Activity':'Configure')} · <b>${esc(({today:"Today",assistant:"Assistant",schedule:"Schedule",types:(pmMode()?"Visit types":(salonOn()?"Services":"Appointment types")),staff:"Team",messages:"Phone messages",appointments:(pmMode()?"Visits & appointments":"Appointments"),settings:"Settings",notifications:"Notifications",calls:"Calls",knowledge:"Knowledge",contacts:(salonOn()?"Clients":"Contacts"),clients:"Clients",gaps:"Open questions",conversations:"Email inbox",waitlist:"Waitlist",promotions:"Promotions",booking:(pmMode()?"Self-scheduling":"Booking page"),mylink:"My booking link",intake:"Intake forms",properties:"Properties",dues:"Communities & dues",contractors:"Contractors",requests:"Service requests",listings:"Listings",leads:"Leads & documents",money:(isManager()?"Checkout & money":"My money"),account:"My account",billing:"Billing"})[state.view])}</b>`;
-  const PAGES={today:pageToday, assistant:pageAssistant, schedule:pageSchedule, types:pageTypes, staff:pageStaff, messages:pageMessages, appointments:renderAppts, settings:pageSettings, notifications:pageNotifications, calls:pageCalls, knowledge:pageKnowledge, contacts:pageContacts, clients:pageClients, gaps:pageGaps, conversations:pageConversations, waitlist:pageWaitlist, promotions:pagePromotions, booking:pageBookingPage, mylink:pageMyLink, intake:pageIntakeForms, properties:pageProperties, dues:pageDues, contractors:pageContractors, requests:pageServiceRequests, jobs:pageJobs, money:pageSalonMoney, listings:pageListings, leads:pageLeads, account:pageMyAccount, billing:pageBilling};
+  $(".crumbs").innerHTML=`${['settings','notifications','account','billing'].includes(state.view)?'Account':(['today','messages','appointments','waitlist','calls','contacts','clients','gaps','conversations','requests','leads','money','dues','rent'].includes(state.view)?'Activity':'Configure')} · <b>${esc(({today:"Today",assistant:"Assistant",schedule:"Schedule",types:(pmMode()?"Visit types":(salonOn()?"Services":"Appointment types")),staff:"Team",messages:"Phone messages",appointments:(pmMode()?"Visits & appointments":"Appointments"),settings:"Settings",notifications:"Notifications",calls:"Calls",knowledge:"Knowledge",contacts:(salonOn()?"Clients":"Contacts"),clients:"Clients",gaps:"Open questions",conversations:"Email inbox",waitlist:"Waitlist",promotions:"Promotions",booking:(pmMode()?"Self-scheduling":"Booking page"),mylink:"My booking link",intake:"Intake forms",properties:"Properties",dues:"Communities & dues",rent:"Rent",contractors:"Contractors",requests:"Service requests",listings:"Listings",leads:"Leads & documents",money:(isManager()?"Checkout & money":"My money"),account:"My account",billing:"Billing"})[state.view])}</b>`;
+  const PAGES={today:pageToday, assistant:pageAssistant, schedule:pageSchedule, types:pageTypes, staff:pageStaff, messages:pageMessages, appointments:renderAppts, settings:pageSettings, notifications:pageNotifications, calls:pageCalls, knowledge:pageKnowledge, contacts:pageContacts, clients:pageClients, gaps:pageGaps, conversations:pageConversations, waitlist:pageWaitlist, promotions:pagePromotions, booking:pageBookingPage, mylink:pageMyLink, intake:pageIntakeForms, properties:pageProperties, dues:pageDues, rent:pageRent, contractors:pageContractors, requests:pageServiceRequests, jobs:pageJobs, money:pageSalonMoney, listings:pageListings, leads:pageLeads, account:pageMyAccount, billing:pageBilling};
   const LOADERS={today:loadAppointments, appointments:loadAppointments, messages:loadMessages, calls:loadCalls, contacts:loadContacts, clients:loadContacts, gaps:loadGaps, conversations:loadConversations, staff:loadStaff, waitlist:loadWaitlist};
   const v=state.view;
   (PAGES[v]||(()=>{}))();
@@ -5166,6 +5166,210 @@ const dDate=d=>{ if(!d) return ''; const s=String(d).slice(0,10); return `${D_MO
 const dOrd=n=>{ const t=['th','st','nd','rd'], v=n%100; return n+(t[(v-20)%10]||t[v]||t[0]); };
 const dCents=v=>{ const n=Number(String(v||'').replace(/[^0-9.]/g,'')); return isFinite(n)?Math.round(n*100):0; };
 const dCsv=(name,rows)=>{ const esc2=v=>{ const s=v==null?'':String(v); return /[",\n]/.test(s)?'"'+s.replace(/"/g,'""')+'"':s; }; const blob=new Blob([rows.map(r=>r.map(esc2).join(',')).join('\n')],{type:'text/csv'}); const a=document.createElement('a'); a.href=URL.createObjectURL(blob); a.download=name; document.body.appendChild(a); a.click(); setTimeout(()=>{ URL.revokeObjectURL(a.href); a.remove(); },500); };
+
+// ================= Rent collection (PM Donna + Real Estate Donna; managers) =================
+async function rentApi(body){ const { data, error }=await db.functions.invoke('rent',{ body }); if(error){ try{ return await error.context.json(); }catch(_e){ return { ok:false, error:error.message||'error' }; } } return data||{ ok:false, error:'empty' }; }
+async function pageRent(){
+  state.rent=state.rent||{ tab:'tenants', open:null, form:null, data:null };
+  const S=state.rent; const HOWN={ bank:'Bank', card:'Card', cash:'Cash', check:'Check', zelle:'Zelle', venmo:'Venmo', other:'Other' };
+  $("#page").innerHTML=`
+  <style>
+    .rn-kpis{display:grid;grid-template-columns:repeat(auto-fit,minmax(130px,1fr));gap:10px;margin:4px 0 14px}
+    .rn-kpi{border:1px solid var(--line);border-radius:10px;padding:10px 12px} .rn-kpi b{display:block;font-size:19px;font-variant-numeric:tabular-nums} .rn-kpi span{font-size:12px;color:var(--muted)}
+    .rn-tabs{display:flex;gap:4px;flex-wrap:wrap;border-bottom:1px solid var(--line);margin-bottom:14px}
+    .rn-tab{border:0;background:none;padding:9px 12px;font:inherit;font-weight:600;font-size:13.5px;color:var(--muted);cursor:pointer;border-bottom:2px solid transparent}
+    .rn-tab.on{color:var(--ink);border-bottom-color:var(--accent)}
+    .rn-t{width:100%;border-collapse:collapse;font-size:13.5px} .rn-t th{text-align:left;font-size:11.5px;text-transform:uppercase;letter-spacing:.04em;color:var(--muted);font-weight:600;padding:6px 8px;border-bottom:1px solid var(--line)}
+    .rn-t td{padding:9px 8px;border-bottom:1px solid var(--line-2,#eef0f2);vertical-align:top} .rn-t td.r,.rn-t th.r{text-align:right;font-variant-numeric:tabular-nums}
+    .rn-wrap{overflow-x:auto} .rn-sub{font-size:12.5px;color:var(--muted);line-height:1.5}
+    .rn-st{font-size:11.5px;font-weight:700;border-radius:20px;padding:2px 8px;white-space:nowrap;display:inline-block}
+    .rn-st.paid{background:#eef7f1;color:var(--ok)} .rn-st.open{background:#f3f5f8;color:var(--ink-2)} .rn-st.late{background:#fdf0ee;color:var(--danger)} .rn-st.hold{background:#fff6e0;color:#8a5a00} .rn-st.none{background:#fff;color:var(--muted);border:1px solid var(--line)}
+    .rn-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:12px} @media(max-width:780px){.rn-grid{grid-template-columns:1fr}}
+    .rn-acts{display:flex;gap:6px;flex-wrap:wrap;justify-content:flex-end}
+    .rn-banner{border:1px solid var(--line);border-radius:12px;padding:14px 16px;margin-bottom:14px;display:flex;gap:14px;align-items:center;flex-wrap:wrap;background:var(--surface)} .rn-banner p{margin:0;flex:1;min-width:240px;font-size:13.5px;line-height:1.5}
+    .rn-panel{background:var(--bg-2,#f7f8fa);border:1px solid var(--line);border-radius:10px;padding:14px;margin:4px 0 6px}
+    .rn-msg{font-size:12.5px;color:var(--muted)} .rn-err{color:var(--danger);font-size:13px;margin-top:8px}
+  </style>
+  <div class="page">
+    <div class="page-head"><h1>Rent</h1><p>Bill rent on each lease, let tenants pay by bank (no fee), card or Cash App, and have ${esc(aName())} send the reminders and add late fees on schedule. Rent goes straight to your company's own Stripe account. ${esc(aName())} never holds it.</p></div>
+    <div id="rn-banner"></div>
+    <div id="rn-kpis"></div>
+    <div class="card"><div class="rn-tabs" id="rn-tabs"></div><div id="rn-body"><div class="empty">Loading…</div></div></div>
+  </div>`;
+  const load=async(refresh)=>{ const r=await rentApi({ action:'overview', refresh:!!refresh }); if(!$("#rn-body")) return; if(!r||!r.ok){ $("#rn-body").innerHTML=`<div class="empty">Rent could not load just now. ${esc((r&&r.message)||'Try again in a minute.')}</div>`; return; } S.data=r; paint(); };
+  const flash=(msg,bad)=>{ const el=$("#rn-flash"); if(el){ el.textContent=msg||''; el.style.color=bad?'var(--danger)':'var(--ok)'; } };
+  function paint(){
+    const d=S.data; if(!d) return; const st=d.stripe||{}, set=d.settings||{}, t=d.totals||{};
+    // ---- banner: what is standing between this company and getting paid
+    const bn=$("#rn-banner");
+    if(!st.connected||!st.charges) bn.innerHTML=`<div class="rn-banner"><p><b>${st.connected?'Finish setting up Stripe':'Connect Stripe to take rent online'}.</b> Your company gets its own Stripe account, so rent lands in your own bank. You can still add leases and record cash or checks without it.</p><button class="btn primary" id="rn-connect">${st.connected?'Finish Stripe setup':'Connect Stripe'}</button></div>`;
+    else if(!set.enabled) bn.innerHTML=`<div class="rn-banner"><p><b>Stripe is connected.</b> Turn on rent collection and ${esc(aName())} will start billing leases, sending pay links and reminders.</p><button class="btn primary" id="rn-on">Turn on rent collection</button></div>`;
+    else if(st.bank!=='active') bn.innerHTML=`<div class="rn-banner"><p><b>Bank payments are ${st.bank==='pending'?'being reviewed by Stripe':'not on yet'}.</b> Until they are, tenants can pay by card${st.cashapp==='active'?' or Cash App':''} (${set.card_fee_pct?set.card_fee_pct+'% fee added':'no fee added'}). Bank payments carry no fee for the tenant.</p><button class="btn" id="rn-bank">${st.bank==='pending'?'Check again':'Turn on bank payments'}</button></div>`;
+    else bn.innerHTML='';
+    const cb=$("#rn-connect"); if(cb) cb.onclick=async()=>{ cb.disabled=true; cb.textContent='Opening Stripe…'; const r=await paymentsApi({ action:'connect' }); if(r&&r.ok&&r.url){ location.href=r.url; return; } cb.disabled=false; cb.textContent='Connect Stripe'; uiAlert((r&&r.message)||'Stripe did not open just now. Try again in a minute.'); };
+    const ob=$("#rn-on"); if(ob) ob.onclick=async()=>{ ob.disabled=true; const r=await rentApi({ action:'settings_save', settings:{ enabled:true } }); if(!r.ok){ ob.disabled=false; uiAlert(r.message||'Could not turn it on.'); return; } load(true); };
+    const bb=$("#rn-bank"); if(bb) bb.onclick=async()=>{ bb.disabled=true; bb.textContent='Asking Stripe…'; const r=await rentApi({ action:'bank_enable' }); if(!r.ok) uiAlert(r.message||'Stripe did not answer.'); load(); };
+    $("#rn-kpis").innerHTML=`<div class="rn-kpis">
+      <div class="rn-kpi"><b>${t.leases||0}</b><span>Active leases</span></div>
+      <div class="rn-kpi"><b>${dMoney(t.monthly_rent_cents)}</b><span>Rent per month</span></div>
+      <div class="rn-kpi"><b>${dMoney(t.collected_month_cents)}</b><span>Collected this month</span></div>
+      <div class="rn-kpi"><b>${dMoney(t.open_cents)}</b><span>Open</span></div>
+      <div class="rn-kpi"><b style="${t.late?'color:var(--danger)':''}">${t.late||0}</b><span>Late</span></div>
+      ${t.processing_cents?`<div class="rn-kpi"><b>${dMoney(t.processing_cents)}</b><span>Bank payments clearing</span></div>`:''}</div>`;
+    $("#rn-tabs").innerHTML=[['tenants','Tenants'],['late',`Late${t.late?' ('+t.late+')':''}`],['report','Owner report'],['settings','Settings']].map(x=>`<button class="rn-tab ${S.tab===x[0]?'on':''}" data-t="${x[0]}">${x[1]}</button>`).join('');
+    $("#rn-tabs").querySelectorAll('[data-t]').forEach(x=>x.onclick=()=>{ S.tab=x.dataset.t; S.form=null; paint(); });
+    ({ tenants:tabTenants, late:tabTenants, report:tabReport, settings:tabSettings })[S.tab]();
+  }
+  const pill=l=>l.block_payments?`<span class="rn-st hold">Payments stopped</span>`:l.status==='ended'?`<span class="rn-st none">Ended</span>`:l.late_count?`<span class="rn-st late">${l.days_late} day${l.days_late===1?'':'s'} late</span>`:l.processing_cents&&l.processing_cents>=l.balance_cents?`<span class="rn-st open">Bank clearing</span>`:l.balance_cents>0?`<span class="rn-st open">Due</span>`:`<span class="rn-st paid">Paid up</span>`;
+
+  // ---- tenants (and the Late filter)
+  function tabTenants(){
+    const d=S.data; const b=$("#rn-body"); const lateOnly=S.tab==='late';
+    let rows=(d.leases||[]).filter(l=>lateOnly?l.late_count>0:(S.showEnded||l.status==='active'));
+    const ended=(d.leases||[]).filter(l=>l.status==='ended').length;
+    b.innerHTML=`<div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:12px">
+        ${lateOnly?`<span class="rn-msg">Tenants with rent past its due date. ${esc(aName())} reminds them the day after it is due, then weekly.</span>`:`<button class="btn sm primary" id="rn-add">Add a lease</button>${ended?`<label class="rn-msg" style="display:flex;gap:6px;align-items:center"><input type="checkbox" id="rn-ended" ${S.showEnded?'checked':''}> Show ended leases (${ended})</label>`:''}`}
+        <span id="rn-flash" class="rn-msg" style="margin-left:auto"></span></div>
+      <div id="rn-form"></div>
+      ${rows.length?`<div class="rn-wrap"><table class="rn-t"><thead><tr><th>Tenant</th><th>Home</th><th class="r">Rent</th><th>Status</th><th class="r">Owes</th><th></th></tr></thead><tbody>${rows.map(l=>`
+        <tr><td><b>${esc(l.tenant_name)}</b><div class="rn-sub">${esc([l.tenant_phone,l.tenant_email].filter(Boolean).join(' · ')||'No phone or email')}</div></td>
+          <td>${esc(l.label)}${l.owner_name?`<div class="rn-sub">Owner: ${esc(l.owner_name)}</div>`:''}</td>
+          <td class="r">${dMoney(l.rent_cents)}<div class="rn-sub">due the ${dOrd(l.due_day)}</div></td>
+          <td>${pill(l)}${l.end_date?`<div class="rn-sub">Lease ends ${esc(dDate(l.end_date))}</div>`:''}</td>
+          <td class="r">${l.balance_cents>0?`<b>${dMoney(l.balance_cents)}</b>`:dMoney(0)}${l.processing_cents?`<div class="rn-sub">${dMoney(l.processing_cents)} clearing</div>`:''}</td>
+          <td><div class="rn-acts"><button class="btn sm ${S.open===l.id?'primary':''}" data-open="${l.id}">${S.open===l.id?'Close':'Open'}</button></div></td></tr>
+        ${S.open===l.id?`<tr><td colspan="6" style="padding:0 8px 10px"><div class="rn-panel" id="rn-ledger"><div class="rn-msg">Loading…</div></div></td></tr>`:''}`).join('')}</tbody></table></div>`
+      :`<div class="empty">${lateOnly?'Nobody is late. Nice.':`No leases yet. Add one and ${esc(aName())} will bill it ${d.settings.notify_days_before} days before each due date.`}</div>`}`;
+    const add=$("#rn-add"); if(add) add.onclick=()=>{ S.form={}; paintForm(); };
+    const en=$("#rn-ended"); if(en) en.onchange=()=>{ S.showEnded=en.checked; paint(); };
+    b.querySelectorAll('[data-open]').forEach(x=>x.onclick=()=>{ S.open=S.open===x.dataset.open?null:x.dataset.open; S.rec=null; paint(); });
+    if(S.form) paintForm();
+    if(S.open&&$("#rn-ledger")) paintLedger(S.open);
+  }
+
+  // ---- add / edit a lease
+  async function paintForm(){
+    const host=$("#rn-form"); if(!host) return; const v=S.form||{}; const isNew=!v.id;
+    if(isNew&&!S.tenants){ const r=await rentApi({ action:'tenants' }); S.tenants=(r&&r.tenants)||[]; if(!$("#rn-form")||!S.form) return; }
+    const pick=(S.tenants||[]).filter(t=>!t.has_lease); const ex=(v.extras||[]);
+    host.innerHTML=`<div class="rn-panel" style="margin-bottom:14px"><h3 style="margin:0 0 10px;font-size:15px">${isNew?'Add a lease':'Edit lease'}</h3>
+      ${isNew&&pick.length?`<div class="field" style="margin-bottom:10px"><label class="lab">Start from a tenant you already have</label><select class="inp" id="rn-f-pick"><option value="">Type it in instead</option>${pick.map(t=>`<option value="${t.id}">${esc(t.name||'Tenant')}${t.property?' · '+esc(t.property):''}${t.unit?' #'+esc(t.unit):''}</option>`).join('')}</select></div>`:''}
+      <div class="rn-grid">
+        <div class="field"><label class="lab">Tenant name</label><input class="inp" id="rn-f-name" value="${esc(v.tenant_name||'')}"></div>
+        <div class="field"><label class="lab">Mobile number</label><input class="inp" id="rn-f-phone" inputmode="tel" value="${esc(v.tenant_phone||'')}"></div>
+        <div class="field"><label class="lab">Email</label><input class="inp" id="rn-f-email" inputmode="email" value="${esc(v.tenant_email||'')}"></div>
+        <div class="field" style="grid-column:1/-1"><label class="lab">Address or unit they rent</label><input class="inp" id="rn-f-label" value="${esc(v.label||'')}" placeholder="412 Oak St, Unit B"></div>
+        <div class="field"><label class="lab">Monthly rent</label><input class="inp" id="rn-f-rent" inputmode="decimal" value="${v.rent_cents?(v.rent_cents/100).toFixed(2):''}" placeholder="1,450.00"></div>
+        <div class="field"><label class="lab">Due day of the month</label><select class="inp" id="rn-f-day">${Array.from({length:28},(_,i)=>`<option value="${i+1}" ${Number(v.due_day||1)===i+1?'selected':''}>${dOrd(i+1)}</option>`).join('')}</select></div>
+        <div class="field"><label class="lab">Property owner (for reports)</label><input class="inp" id="rn-f-owner" value="${esc(v.owner_name||'')}"></div>
+        <div class="field"><label class="lab">Lease starts</label><input class="inp" type="date" id="rn-f-start" value="${esc(v.start_date||'')}"></div>
+        <div class="field"><label class="lab">Lease ends (optional)</label><input class="inp" type="date" id="rn-f-end" value="${esc(v.end_date||'')}"></div>
+        <div class="field"><label class="lab">If they move in after the due day</label><select class="inp" id="rn-f-first">${[['prorate','Prorate the first month'],['full','Bill the full month at move-in'],['skip','Do not bill the first month']].map(o=>`<option value="${o[0]}" ${(v.first_month||'prorate')===o[0]?'selected':''}>${o[1]}</option>`).join('')}</select></div>
+        <div class="field"><label class="lab">Extra monthly charge (optional)</label><input class="inp" id="rn-f-xd" value="${esc((ex[0]&&ex[0].desc)||'')}" placeholder="Pet rent"></div>
+        <div class="field"><label class="lab">Extra charge amount</label><input class="inp" id="rn-f-xc" inputmode="decimal" value="${ex[0]&&ex[0].cents?(ex[0].cents/100).toFixed(2):''}" placeholder="35.00"></div>
+        <div class="field"><label class="lab">Part payments for this tenant</label><select class="inp" id="rn-f-part">${[['','Follow my setting ('+(S.data.settings.allow_partial?'allowed':'full amount only')+')'],['yes','Allowed'],['no','Full amount only']].map(o=>`<option value="${o[0]}" ${(v.allow_partial===true?'yes':v.allow_partial===false?'no':'')===o[0]?'selected':''}>${o[1]}</option>`).join('')}</select></div>
+      </div>
+      <div style="display:flex;gap:8px;margin-top:12px;align-items:center;flex-wrap:wrap"><button class="btn primary" id="rn-f-save">${isNew?'Add lease':'Save'}</button><button class="btn" id="rn-f-cancel">Cancel</button><span class="rn-msg">${isNew?`${esc(aName())} bills each month ${S.data.settings.notify_days_before} days before it is due.`:''}</span></div>
+      <div class="rn-err" id="rn-f-err"></div></div>`;
+    const pk=$("#rn-f-pick"); if(pk) pk.onchange=()=>{ const t=(S.tenants||[]).find(x=>x.id===pk.value); if(!t) return; S.form={ ...S.form, property_contact_id:t.id, property_id:t.property_id, contact_id:t.contact_id, tenant_name:t.name||'', tenant_phone:t.phone||'', tenant_email:t.email||'', label:[t.address||t.property,t.unit?'Unit '+t.unit:''].filter(Boolean).join(', '), start_date:t.lease_start||'', end_date:t.lease_end||'', due_day:t.rent_due_day||1 }; paintForm().then(()=>{ const p=$("#rn-f-pick"); if(p) p.value=t.id; }); };
+    $("#rn-f-cancel").onclick=()=>{ S.form=null; host.innerHTML=''; };
+    $("#rn-f-save").onclick=async()=>{
+      const btn=$("#rn-f-save"); const xd=$("#rn-f-xd").value.trim(), xc=dCents($("#rn-f-xc").value); const part=$("#rn-f-part").value;
+      const lease={ ...(S.form||{}), tenant_name:$("#rn-f-name").value, tenant_phone:$("#rn-f-phone").value.trim(), tenant_email:$("#rn-f-email").value.trim(), label:$("#rn-f-label").value, rent_cents:dCents($("#rn-f-rent").value), due_day:Number($("#rn-f-day").value), owner_name:$("#rn-f-owner").value, start_date:$("#rn-f-start").value, end_date:$("#rn-f-end").value||null, first_month:$("#rn-f-first").value, extras:(xd&&xc>0)?[{ desc:xd, cents:xc }]:[], allow_partial:part==='yes'?true:part==='no'?false:null };
+      btn.disabled=true; const r=await rentApi({ action:'lease_save', lease }); btn.disabled=false;
+      if(!r.ok){ $("#rn-f-err").textContent=r.message||'Could not save the lease.'; return; }
+      S.form=null; S.tenants=null; S.open=r.lease&&r.lease.id||S.open; await load();
+    };
+  }
+
+  // ---- one lease: charges, payments, actions
+  async function paintLedger(id){
+    const host=$("#rn-ledger"); if(!host) return; const r=await rentApi({ action:'ledger', lease_id:id }); if(!$("#rn-ledger")||S.open!==id) return;
+    if(!r.ok){ host.innerHTML=`<div class="rn-msg">Could not load this lease.</div>`; return; }
+    const l=r.lease, invs=r.invoices||[], pays=r.payments||[]; const byInv={}; invs.forEach(i=>byInv[i.id]=i);
+    const today=new Date().toLocaleDateString('en-CA');
+    host.innerHTML=`<div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:10px">
+        <button class="btn sm primary" data-a="bill">Bill rent now</button><button class="btn sm" data-a="charge">Add a one-time charge</button><button class="btn sm" data-a="edit">Edit lease</button>
+        <button class="btn sm" data-a="block">${l.block_payments?'Accept payments again':'Stop accepting payments'}</button>${l.status==='active'?`<button class="btn sm" data-a="end">End lease</button>`:''}
+        <span class="rn-msg" id="rn-l-msg" style="margin-left:auto"></span></div>
+      ${l.block_payments?`<div class="rn-msg" style="margin-bottom:10px;color:#8a5a00"><b>Payments are stopped for this tenant.</b> The pay page tells them to call your office, and ${esc(aName())} sends no pay links, reminders or late fees. ${l.block_reason?'Note: '+esc(l.block_reason):''}</div>`:''}
+      <div id="rn-l-form"></div>
+      ${invs.length?`<div class="rn-wrap"><table class="rn-t"><thead><tr><th>Bill</th><th>Due</th><th>Status</th><th class="r">Amount</th><th class="r">Paid</th><th></th></tr></thead><tbody>${invs.map(i=>{ const open=!i.paid_at&&i.status!=='void'; const late=open&&i.due_at&&i.due_at<today; const proc=(r.processing||[]).filter(p=>p.invoice_id===i.id).reduce((t,p)=>t+p.amount_cents,0);
+        return `<tr><td>${esc(((i.lines||[])[0]||{}).desc||i.number)}<div class="rn-sub">${esc(i.number)}${i.late_fee_applied_at?' · late fee added':''}</div></td><td>${esc(dDate(i.due_at))}</td>
+          <td>${i.status==='void'?'<span class="rn-st none">Canceled</span>':i.paid_at?`<span class="rn-st paid">Paid ${esc(dDate(i.paid_at))}</span>`:proc?`<span class="rn-st open">Bank clearing</span>`:late?'<span class="rn-st late">Late</span>':i.status==='draft'?'<span class="rn-st none">Not sent</span>':'<span class="rn-st open">Sent</span>'}</td>
+          <td class="r">${dMoney(i.total_cents)}</td><td class="r">${i.paid_at?dMoney(i.total_cents):dMoney(i.paid_cents)}</td>
+          <td>${open?`<div class="rn-acts"><button class="btn sm" data-rec="${i.id}">Record payment</button><button class="btn sm" data-rem="${i.id}">Send reminder</button><button class="btn sm" data-copy="${esc(i.pay_url)}">Copy pay link</button>${i.paid_cents||proc?'':`<button class="btn sm" data-void="${i.id}">Cancel bill</button>`}</div>`:''}</td></tr>
+          ${S.rec===i.id?`<tr><td colspan="6"><div style="display:flex;gap:8px;flex-wrap:wrap;align-items:flex-end">
+            <div class="field" style="margin:0"><label class="lab">Amount received</label><input class="inp" id="rn-r-amt" inputmode="decimal" value="${((i.total_cents-i.paid_cents)/100).toFixed(2)}" style="width:130px"></div>
+            <div class="field" style="margin:0"><label class="lab">How</label><select class="inp" id="rn-r-how">${['check','cash','zelle','venmo','bank','other'].map(m=>`<option value="${m}">${HOWN[m]}</option>`).join('')}</select></div>
+            <div class="field" style="margin:0;flex:1;min-width:160px"><label class="lab">Note (check number, etc.)</label><input class="inp" id="rn-r-note"></div>
+            <button class="btn primary" id="rn-r-save">Save payment</button><button class="btn" id="rn-r-x">Cancel</button></div><div class="rn-err" id="rn-r-err"></div></td></tr>`:''}`; }).join('')}</tbody></table></div>`:`<div class="rn-msg">Nothing billed yet. ${esc(aName())} sends the first bill ${S.data.settings.notify_days_before} days before it is due, or tap Bill rent now.</div>`}
+      ${pays.length?`<h4 style="margin:14px 0 6px;font-size:13px">Payments received</h4><div class="rn-wrap"><table class="rn-t"><tbody>${pays.map(p=>`<tr><td>${esc(dDate(p.received_at))}</td><td>${esc(HOWN[p.method]||p.method)}${p.provider==='stripe'?' (online)':''}</td><td>${esc((byInv[p.invoice_id]||{}).number||'')}</td><td class="rn-sub">${esc(p.note||'')}</td><td class="r">${dMoney(p.amount_cents)}</td></tr>`).join('')}</tbody></table></div>`:''}`;
+    const msg=(m,bad)=>{ const e=$("#rn-l-msg"); if(e){ e.textContent=m; e.style.color=bad?'var(--danger)':'var(--ok)'; } };
+    const act=a=>host.querySelector(`[data-a="${a}"]`);
+    act('bill').onclick=async()=>{ act('bill').disabled=true; const x=await rentApi({ action:'bill', lease_id:id }); if(!x.ok){ act('bill').disabled=false; msg(x.message||'Could not bill.',true); return; } await load(); flash(x.message||'Billed.'); };
+    act('edit').onclick=()=>{ S.form={ ...l }; paintForm(); $("#rn-form").scrollIntoView({ block:'nearest' }); };
+    act('block').onclick=async()=>{
+      if(l.block_payments){ if(!(await uiConfirm(`Start accepting payments from ${l.tenant_name} again?`))) return; await rentApi({ action:'lease_block', id, block:false }); await load(); return; }
+      const why=await uiPrompt(`Stop accepting payments from ${l.tenant_name}? Their pay page will say to call your office, and no pay links, reminders or late fees go out. Add a note for your records (for example: eviction filed Nov 12):`,''); if(why===null||why===undefined) return;
+      await rentApi({ action:'lease_block', id, block:true, reason:why }); await load();
+    };
+    const eb=act('end'); if(eb) eb.onclick=async()=>{ if(!(await uiConfirm(`End the lease for ${l.tenant_name}? No new rent will be billed. Anything still open stays open until it is paid or canceled.`))) return; await rentApi({ action:'lease_end', id }); await load(); };
+    act('charge').onclick=()=>{ const f=$("#rn-l-form"); f.innerHTML=`<div style="display:flex;gap:8px;flex-wrap:wrap;align-items:flex-end;margin-bottom:12px">
+        <div class="field" style="margin:0;flex:1;min-width:180px"><label class="lab">What is it for</label><input class="inp" id="rn-c-desc" placeholder="Lockout fee"></div>
+        <div class="field" style="margin:0"><label class="lab">Amount</label><input class="inp" id="rn-c-amt" inputmode="decimal" style="width:120px"></div>
+        <div class="field" style="margin:0"><label class="lab">Due</label><input class="inp" type="date" id="rn-c-due" value="${today}"></div>
+        <button class="btn primary" id="rn-c-save">Send charge</button><button class="btn" id="rn-c-x">Cancel</button></div><div class="rn-err" id="rn-c-err"></div>`;
+      $("#rn-c-x").onclick=()=>{ f.innerHTML=''; };
+      $("#rn-c-save").onclick=async()=>{ const x=await rentApi({ action:'charge', lease_id:id, desc:$("#rn-c-desc").value, amount_cents:dCents($("#rn-c-amt").value), due_at:$("#rn-c-due").value }); if(!x.ok){ $("#rn-c-err").textContent=x.message||'Could not save.'; return; } await load(); flash(x.sent?'Charge sent.':'Charge saved (not sent).'); }; };
+    host.querySelectorAll('[data-rec]').forEach(x=>x.onclick=()=>{ S.rec=x.dataset.rec; paintLedger(id); });
+    host.querySelectorAll('[data-rem]').forEach(x=>x.onclick=async()=>{ x.disabled=true; const y=await rentApi({ action:'remind', invoice_id:x.dataset.rem }); x.disabled=false; msg(y.ok?'Reminder sent.':(y.message||'Not sent.'),!y.ok); });
+    host.querySelectorAll('[data-copy]').forEach(x=>x.onclick=async()=>{ try{ await navigator.clipboard.writeText(x.dataset.copy); msg('Pay link copied.'); }catch(_e){ uiAlert(x.dataset.copy); } });
+    host.querySelectorAll('[data-void]').forEach(x=>x.onclick=async()=>{ if(!(await uiConfirm('Cancel this bill? The tenant will no longer be able to pay it.'))) return; const y=await rentApi({ action:'void', invoice_id:x.dataset.void }); if(!y.ok){ msg(y.message||'Could not cancel.',true); return; } await load(); });
+    const rs=$("#rn-r-save"); if(rs){ $("#rn-r-x").onclick=()=>{ S.rec=null; paintLedger(id); };
+      rs.onclick=async()=>{ rs.disabled=true; const y=await rentApi({ action:'record', invoice_id:S.rec, amount_cents:dCents($("#rn-r-amt").value), method:$("#rn-r-how").value, note:$("#rn-r-note").value }); rs.disabled=false; if(!y.ok){ $("#rn-r-err").textContent=y.message||'Could not save.'; return; } S.rec=null; await load(); flash(y.paid?'Payment recorded. Paid in full.':`Payment recorded. ${dMoney(y.balance_cents)} still due.`); }; }
+  }
+
+  // ---- owner report
+  async function tabReport(){
+    const b=$("#rn-body"); const now=new Date(); const iso=d=>d.toLocaleDateString('en-CA'); S.rg=S.rg||'month';
+    const ranges={ month:[new Date(now.getFullYear(),now.getMonth(),1),now], last:[new Date(now.getFullYear(),now.getMonth()-1,1),new Date(now.getFullYear(),now.getMonth(),0)], year:[new Date(now.getFullYear(),0,1),now] };
+    const [from,to]=ranges[S.rg]; b.innerHTML=`<div class="empty">Loading…</div>`;
+    const r=await rentApi({ action:'report', from:iso(from), to:iso(to) }); if(S.tab!=='report'||!$("#rn-body")) return;
+    const owners=(r&&r.owners)||[], rows=(r&&r.rows)||[];
+    b.innerHTML=`<div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:12px">${[['month','This month'],['last','Last month'],['year','This year']].map(x=>`<button class="btn sm ${S.rg===x[0]?'primary':''}" data-rg="${x[0]}">${x[1]}</button>`).join('')}<button class="btn sm" id="rn-csv" style="margin-left:auto">Export CSV</button></div>
+      ${owners.length?`<div class="rn-wrap"><table class="rn-t"><thead><tr><th>Owner</th><th class="r">Homes</th><th class="r">Billed</th><th class="r">Collected</th><th class="r">Still open</th></tr></thead><tbody>${owners.map(o=>`<tr><td><b>${esc(o.owner)}</b></td><td class="r">${o.homes}</td><td class="r">${dMoney(o.billed_cents)}</td><td class="r">${dMoney(o.collected_cents)}</td><td class="r">${dMoney(o.open_cents)}</td></tr>`).join('')}</tbody></table></div>
+      <h4 style="margin:16px 0 6px;font-size:13px">By home</h4><div class="rn-wrap"><table class="rn-t"><thead><tr><th>Owner</th><th>Home</th><th>Tenant</th><th class="r">Billed</th><th class="r">Collected</th><th class="r">Still open</th></tr></thead><tbody>${rows.map(x=>`<tr><td>${esc(x.owner)}</td><td>${esc(x.label)}</td><td>${esc(x.tenant)}</td><td class="r">${dMoney(x.billed_cents)}</td><td class="r">${dMoney(x.collected_cents)}</td><td class="r">${dMoney(x.open_cents)}</td></tr>`).join('')}</tbody></table></div>
+      <div class="rn-msg" style="margin-top:10px">Collected counts money received in this range, online or recorded by hand. Card fees paid by tenants are included in online card amounts. Payout timing and Stripe's own fees are in your Stripe dashboard.</div>`:`<div class="empty">Nothing to report in this range yet.</div>`}`;
+    b.querySelectorAll('[data-rg]').forEach(x=>x.onclick=()=>{ S.rg=x.dataset.rg; tabReport(); });
+    $("#rn-csv").onclick=()=>dCsv(`Rent by owner ${iso(from)} to ${iso(to)}.csv`,[["Owner","Home","Tenant","Billed","Collected","Still open"],...rows.map(x=>[x.owner,x.label,x.tenant,(x.billed_cents/100).toFixed(2),(x.collected_cents/100).toFixed(2),(x.open_cents/100).toFixed(2)])]);
+  }
+
+  // ---- settings
+  function tabSettings(){
+    const b=$("#rn-body"); const v=S.data.settings, st=S.data.stripe; const word=x=>x==='active'?'On':x==='pending'?'Being reviewed by Stripe':x==='unavailable'?'Not available for this account':'Off';
+    b.innerHTML=`<div class="rn-grid">
+        <div class="field"><label class="lab">Bill tenants this many days before rent is due</label><input class="inp" id="rn-s-notify" inputmode="numeric" value="${v.notify_days_before}"></div>
+        <div class="field"><label class="lab">Grace days before a late fee</label><input class="inp" id="rn-s-grace" inputmode="numeric" value="${v.grace_days}"></div>
+        <div class="field"><label class="lab">Late fee</label><div style="display:flex;gap:6px"><input class="inp" id="rn-s-fee" inputmode="decimal" value="${v.late_fee_pct>0?v.late_fee_pct:(v.late_fee_cents/100).toFixed(2)}"><select class="inp" id="rn-s-feek" style="max-width:150px"><option value="flat" ${v.late_fee_pct>0?'':'selected'}>dollars</option><option value="pct" ${v.late_fee_pct>0?'selected':''}>% of rent owed</option></select></div></div>
+        <div class="field"><label class="lab">Fee added when a tenant pays by card or Cash App (%)</label><input class="inp" id="rn-s-card" inputmode="decimal" value="${v.card_fee_pct}"></div>
+      </div>
+      <label style="display:flex;gap:8px;align-items:flex-start;margin:12px 0;font-size:13.5px"><input type="checkbox" id="rn-s-part" ${v.allow_partial?'checked':''} style="margin-top:3px"> <span><b>Let tenants pay part of the rent online.</b><br><span class="rn-msg">Off means the pay page only takes the full amount. You can still record a part payment by hand, and you can set this per tenant on the lease.</span></span></label>
+      <label style="display:flex;gap:8px;align-items:flex-start;margin:12px 0;font-size:13.5px"><input type="checkbox" id="rn-s-on" ${v.enabled?'checked':''} ${st.charges?'':'disabled'} style="margin-top:3px"> <span><b>Rent collection is on.</b><br><span class="rn-msg">${st.charges?`${esc(aName())} bills active leases, sends pay links and reminders after 9am, and adds late fees.`:'Connect Stripe first.'}</span></span></label>
+      <div class="rn-panel"><b style="font-size:13.5px">How tenants can pay</b>
+        <div class="rn-sub" style="margin-top:6px">Bank account (no fee to the tenant): <b>${word(st.bank)}</b>${st.connected&&st.bank!=='active'?` <button class="btn sm" id="rn-s-bank" style="margin-left:6px">${st.bank==='pending'?'Check again':'Turn on'}</button>`:''}<br>Card: <b>${st.charges?'On':'Off'}</b><br>Cash App: <b>${word(st.cashapp)}</b>. Tenants are told that some Cash App accounts have lower limits and may not cover a full rent payment.</div></div>
+      <div class="rn-msg" style="margin:10px 0">Late fees, grace periods and card surcharges are limited by law in some states and cities, and some states require rent and deposits to sit in a trust account. Check your local rules before you set these. Late fees are added once per bill.</div>
+      <div style="display:flex;gap:10px;align-items:center"><button class="btn primary" id="rn-s-save">Save settings</button><span id="rn-s-msg" class="rn-msg"></span></div>`;
+    const sb=$("#rn-s-bank"); if(sb) sb.onclick=async()=>{ sb.disabled=true; const r=await rentApi({ action:'bank_enable' }); if(!r.ok) uiAlert(r.message||'Stripe did not answer.'); load(); };
+    $("#rn-s-save").onclick=async()=>{
+      const pct=$("#rn-s-feek").value==='pct'; const fee=Number(String($("#rn-s-fee").value).replace(/[^0-9.]/g,''))||0;
+      const settings={ notify_days_before:Number($("#rn-s-notify").value)||0, grace_days:Number($("#rn-s-grace").value)||0, late_fee_pct:pct?fee:0, late_fee_cents:pct?0:Math.round(fee*100), card_fee_pct:Number($("#rn-s-card").value)||0, allow_partial:$("#rn-s-part").checked };
+      if(st.charges) settings.enabled=$("#rn-s-on").checked;
+      const r=await rentApi({ action:'settings_save', settings }); const m=$("#rn-s-msg"); if(!r.ok){ m.textContent=r.message||'Could not save.'; m.style.color='var(--danger)'; return; } await load(); const m2=$("#rn-s-msg"); if(m2){ m2.textContent='Saved.'; m2.style.color='var(--ok)'; }
+    };
+  }
+  load(true);
+}
 
 async function pageDues(){
   state.dues=state.dues||{ sel:null, tab:'period', comms:[] };
