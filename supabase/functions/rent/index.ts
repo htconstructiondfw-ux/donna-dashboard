@@ -263,7 +263,10 @@ async function settleSession(rs: any, acct?: any, pa?: any): Promise<string> {
     if (fresh && !fresh.paid_at) await applyPayment(acct, fresh, rs.amount_cents, rs.method, "stripe", piId || rs.id, null, rs.fee_cents);
   }
   if (next === "failed" && isDraw) await supabase.from("invoices").update({ paid_note: "autopay failed", updated_at: nowIso() }).eq("id", inv.id);
-  if (next === "failed") await tell(acct, inv, `${acct.name}: your ${isDraw ? "autopay " : ""}${HOW[rs.method] || "bank"} payment of ${money(rs.amount_cents)} for rent at ${inv.service_address || "your home"} did not go through. You can try again here: ${payUrl(inv.pay_token)}`, "Your rent payment did not go through");
+  // The payment that signed a tenant up for autopay bounced: do not keep drawing from that account.
+  let autoDropped = false;
+  if (next === "failed" && rs.autopay === "saved" && rs.lease_id) { await supabase.from("leases").update({ autopay: null, updated_at: nowIso() }).eq("id", rs.lease_id); autoDropped = true; }
+  if (next === "failed") await tell(acct, inv, `${acct.name}: your ${isDraw ? "autopay " : ""}${HOW[rs.method] || "bank"} payment of ${money(rs.amount_cents)} for rent at ${inv.service_address || "your home"} did not go through.${autoDropped ? " Autopay was not turned on." : ""} You can try again here: ${payUrl(inv.pay_token)}`, "Your rent payment did not go through");
   return next;
 }
 
