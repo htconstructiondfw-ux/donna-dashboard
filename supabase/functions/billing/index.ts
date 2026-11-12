@@ -1,7 +1,7 @@
 import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 
-// Donna — platform billing v1. Sidekick Logistics bills each business for Donna through Stripe Billing
+// Donna — platform billing v4 (Junior plan: one $10 plan, texts metered, two-way texting add-on). Sidekick Logistics bills each business for Donna through Stripe Billing
 // (our own Stripe account, not Connect). Prices live in code below and are created in Stripe on first use
 // by lookup key (donna_<family>_<tier>_<term>), so the same code sets up sandbox and live.
 //
@@ -27,6 +27,7 @@ import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 //   cancel / resume                schedule the end / undo it
 //   extend {term: 1y|2y}           add another commitment after the current one (price for that term from now)
 //   card                          Stripe Checkout in setup mode to replace the card -> {url}
+//   texting_addon {on}            Junior only: add / remove the two-way texting add-on ($5 a month + $20 setup once)
 // Internal (x-cron-secret or service role):
 //   sweep                         trial anchoring, commitment renewals, 80% / 100% usage emails, status sync
 // Stripe webhook (any request with a stripe-signature header): the event is re-fetched from the Stripe API
@@ -43,15 +44,19 @@ const CORS = { "Access-Control-Allow-Origin": "*", "Access-Control-Allow-Headers
 const json = (o: unknown, s = 200) => new Response(JSON.stringify(o), { status: s, headers: { ...CORS, "Content-Type": "application/json" } });
 
 // ---------------------------------------------------------------- price book (cents per month)
-type Family = "general" | "salon" | "industry"; type Tier = "starter" | "pro"; type Term = "mtm" | "1y" | "2y";
+type Family = "general" | "salon" | "industry" | "junior"; type Tier = "starter" | "pro"; type Term = "mtm" | "1y" | "2y";
 const BOOK: Record<Family, Record<Tier, { minutes: number; price: Record<Term, number> }>> = {
   general:  { starter: { minutes: 300, price: { mtm: 5500,  "1y": 4900,  "2y": 4700 } },  pro: { minutes: 1200, price: { mtm: 16500, "1y": 14900, "2y": 14000 } } },
   salon:    { starter: { minutes: 400, price: { mtm: 8900,  "1y": 7900,  "2y": 7600 } },  pro: { minutes: 1200, price: { mtm: 21900, "1y": 19900, "2y": 18600 } } },
   industry: { starter: { minutes: 500, price: { mtm: 16500, "1y": 14900, "2y": 14000 } }, pro: { minutes: 1500, price: { mtm: 38500, "1y": 34900, "2y": 32700 } } },
+  // Donna for Junior Entrepreneurs: ONE plan, month to month only. $10 with 20 call minutes and 50 texts, then 25 cents a
+  // minute and 3 cents a text (no cap). Both tiers hold the same numbers so the shared code never reads an empty slot.
+  junior:   { starter: { minutes: 20, price: { mtm: 1000, "1y": 1000, "2y": 1000 } }, pro: { minutes: 20, price: { mtm: 1000, "1y": 1000, "2y": 1000 } } },
 };
+const JUNIOR = { texts: 50, text_cents: 3, minute_cents: 25, addon_cents: 500, addon_setup_cents: 2000 };
 const OVERAGE_CENTS: Record<Tier, number> = { starter: 25, pro: 20 };
 const TERM_MONTHS: Record<Term, number> = { mtm: 0, "1y": 12, "2y": 24 };
-const FAMILY_LABEL: Record<Family, string> = { general: "Everyday", salon: "Salon", industry: "Industry" };
+const FAMILY_LABEL: Record<Family, string> = { general: "Everyday", salon: "Salon", industry: "Industry", junior: "Junior" };
 const TERM_LABEL: Record<Term, string> = { mtm: "month to month", "1y": "1-year plan", "2y": "2-year plan" };
 const TRIAL_DAYS = 14, TRIAL_PLACEHOLDER_DAYS = 30;
 const isTier = (t: any): t is Tier => t === "starter" || t === "pro";
@@ -65,6 +70,7 @@ const PRO_INDUSTRIES = new Set(["contractor", "property_management", "real_estat
 function familyFor(acct: any): Family {
   const f = acct?.settings?.features || {};
   const ind = String(acct?.industry || acct?.settings?.industry || "").toLowerCase();
+  if (f.junior || ind === "junior") return "junior";
   if (f.salon || SALON_INDUSTRIES.has(ind)) return "salon";
   if (f.real_estate || f.property_management || PRO_INDUSTRIES.has(ind)) return "industry";
   return "general";
@@ -156,7 +162,7 @@ function mapStatus(s: string): string {
 async function syncSub(accountId: string, subId: string) {
   const sub = await sp("GET", `/subscriptions/${subId}`, { "expand[0]": "default_payment_method" });
   const md = sub.metadata || {};
-  const item = sub.items?.data?.[0];
+  const item = (sub.items?.data || []).find((i: any) => i?.price?.metadata?.family) || sub.items?.data?.[0];   // the plan item, not an add-on
   const pm = sub.default_payment_method?.card;
   const patch: any = {
     stripe_subscription_id: sub.id, stripe_customer_id: typeof sub.customer === "string" ? sub.customer : sub.customer?.id,
@@ -185,6 +191,13 @@ async function syncSub(accountId: string, subId: string) {
   await supabase.from("accounts").update(acctPatch).eq("id", accountId);
   return { sub, patch };
 }
+// Junior plan: texts Donna sent in the period, and what the ones past the included 50 cost.
+async function textUsage(accountId: string, from: string | null, to?: string | null) {
+  if (!from) return { texts: 0, included: JUNIOR.texts, extra: 0, cents: 0 };
+  const { data } = await supabase.rpc("billable_texts", { p_account: accountId, p_from: from, p_to: to || new Date().toISOString() });
+  const texts = Number(data || 0); const extra = Math.max(0, texts - JUNIOR.texts);
+  return { texts, included: JUNIOR.texts, extra, cents: extra * JUNIOR.text_cents };
+}
 async function usage(accountId: string, from: string | null, to?: string | null) {
   if (!from) return 0;
   const { data } = await supabase.rpc("billable_minutes", { p_account: accountId, p_from: from, p_to: to || new Date().toISOString() });
@@ -193,6 +206,7 @@ async function usage(accountId: string, from: string | null, to?: string | null)
 // Overage for a period, with the Starter cap at the Pro price of the same price list and term.
 function overage(f: Family, t: Tier, term: Term, minutes: number) {
   const inc = BOOK[f][t].minutes; const extra = Math.max(0, minutes - inc);
+  if (f === "junior") return { included: inc, extra, cents: extra * JUNIOR.minute_cents, capped: false };
   let cents = extra * OVERAGE_CENTS[t]; let capped = false;
   if (t === "starter") { const room = BOOK[f].pro.price[term] - BOOK[f].starter.price[term]; if (cents > room) { cents = room; capped = true; } }
   return { included: inc, extra, cents, capped };
@@ -214,13 +228,15 @@ const canManage = (u: any) => u && (u.role === "owner" || u.role === "admin");
 async function status(u: any) {
   const acct = await loadAccount(u.account_id); const b = await loadBilling(u.account_id);
   const family: Family = (b?.family as Family) || familyFor(acct);
-  const prices = { family, label: FAMILY_LABEL[family], overage: OVERAGE_CENTS, tiers: BOOK[family] };
+  const prices: any = { family, label: FAMILY_LABEL[family], overage: OVERAGE_CENTS, tiers: BOOK[family] };
+  if (family === "junior") { prices.overage = { starter: JUNIOR.minute_cents, pro: JUNIOR.minute_cents }; prices.junior = JUNIOR; }
   const out: any = { ok: true, exempt: !!b?.exempt, can_manage: canManage(u), prices, billing: null, usage: null, invoices: [] };
   if (!b || !b.stripe_subscription_id) return out;
-  out.billing = { tier: b.tier, term: b.term, family: b.family, sub_status: b.sub_status, trial_end: b.trial_end, trial_anchored: !!b.trial_anchored_at, current_period_start: b.current_period_start, current_period_end: b.current_period_end, commitment_ends_at: b.commitment_ends_at, cancel_at: b.cancel_at, card_brand: b.card_brand, card_last4: b.card_last4, price_cents: b.family && b.tier && b.term ? BOOK[b.family as Family][b.tier as Tier].price[b.term as Term] : null };
+  out.billing = { tier: b.tier, term: b.term, family: b.family, sub_status: b.sub_status, trial_end: b.trial_end, trial_anchored: !!b.trial_anchored_at, current_period_start: b.current_period_start, current_period_end: b.current_period_end, commitment_ends_at: b.commitment_ends_at, cancel_at: b.cancel_at, card_brand: b.card_brand, card_last4: b.card_last4, texting_addon: !!b.texting_addon, price_cents: b.family && b.tier && b.term ? BOOK[b.family as Family][b.tier as Tier].price[b.term as Term] + (b.texting_addon ? JUNIOR.addon_cents : 0) : null };
   if (b.sub_status !== "trialing" && b.family && b.tier && b.term) {
     const used = await usage(u.account_id, b.current_period_start);
-    out.usage = { minutes: used, ...overage(b.family, b.tier, b.term, used), rate: OVERAGE_CENTS[b.tier as Tier] };
+    out.usage = { minutes: used, ...overage(b.family, b.tier, b.term, used), rate: b.family === "junior" ? JUNIOR.minute_cents : OVERAGE_CENTS[b.tier as Tier] };
+    if (b.family === "junior") out.usage.texts = await textUsage(u.account_id, b.current_period_start);
   } else if (b.sub_status === "trialing") {
     out.usage = { minutes: await usage(u.account_id, b.created_at), trial: true, included: b.tier && b.family ? BOOK[b.family as Family][b.tier as Tier].minutes : null };
   }
@@ -235,8 +251,9 @@ async function status(u: any) {
 
 async function checkout(u: any, body: any) {
   if (!canManage(u)) return { ok: false, error: "owner_only" };
-  const tier = body.tier, term = body.term; if (!isTier(tier) || !isTerm(term)) return { ok: false, error: "bad_plan" };
   const acct = await loadAccount(u.account_id); const b = await loadBilling(u.account_id);
+  const jr = familyFor(acct) === "junior";
+  const tier = jr ? "starter" : body.tier, term = jr ? "mtm" : body.term; if (!isTier(tier) || !isTerm(term)) return { ok: false, error: "bad_plan" };
   if (b?.exempt) return { ok: false, error: "exempt" };
   if (b?.stripe_subscription_id && !["canceled", "incomplete_expired"].includes(String(b.sub_status))) return { ok: false, error: "already_subscribed" };
   const family = familyFor(acct);
@@ -253,7 +270,7 @@ async function checkout(u: any, body: any) {
     payment_method_collection: "always",
     subscription_data: { ...(hadTrial ? {} : { trial_period_days: TRIAL_PLACEHOLDER_DAYS, trial_settings: { end_behavior: { missing_payment_method: "cancel" } } }), metadata: { account_id: u.account_id, family, tier, term } },
     metadata: { account_id: u.account_id, family, tier, term, kind: "subscribe" },
-    custom_text: { submit: { message: hadTrial ? `Donna ${tier === "pro" ? "Pro" : "Starter"}, ${TERM_LABEL[term]}.` : `No charge today. Your 14 free days start when Donna answers her first real call. Cancel any time before then and you won't be charged.` } },
+    custom_text: { submit: { message: hadTrial ? `Donna ${jr ? "Junior" : tier === "pro" ? "Pro" : "Starter"}, ${TERM_LABEL[term]}.` : `No charge today. Your 14 free days start when Donna answers her first real call. Cancel any time before then and you won't be charged.` } },
     success_url: `${APP}/?billing=success&session_id={CHECKOUT_SESSION_ID}`, cancel_url: `${APP}/?billing=cancelled`,
   });
   return { ok: true, url: sess.url };
@@ -287,6 +304,7 @@ async function change(u: any, body: any) {
   if (!canManage(u)) return { ok: false, error: "owner_only" };
   const b = await loadBilling(u.account_id);
   if (!b?.stripe_subscription_id || ["canceled", "incomplete_expired"].includes(String(b.sub_status))) return { ok: false, error: "no_plan" };
+  if (b.family === "junior") return { ok: false, error: "one_plan" };
   const tier: Tier = isTier(body.tier) ? body.tier : b.tier; const term: Term = isTerm(body.term) ? body.term : b.term;
   if (tier === b.tier && term === b.term) return { ok: true, unchanged: true };
   const committed = b.commitment_ends_at && new Date(b.commitment_ends_at) > new Date() && b.term !== "mtm";
@@ -359,10 +377,36 @@ async function onInvoiceCreated(inv: any) {
   const o = overage(bill.family, bill.tier, bill.term, minutes);
   let itemId: string | null = null;
   if (o.cents > 0) {
-    const ii = await sp("POST", "/invoiceitems", { customer: inv.customer, invoice: inv.id, amount: o.cents, currency: "usd", description: `Extra minutes: ${o.extra.toLocaleString()} over ${o.included.toLocaleString()} included at ${OVERAGE_CENTS[bill.tier as Tier]} cents each${o.capped ? " (capped at the Pro price)" : ""}`, metadata: { account_id: bill.account_id, minutes: String(minutes) } }, `ovg-${inv.id}`);
+    const ii = await sp("POST", "/invoiceitems", { customer: inv.customer, invoice: inv.id, amount: o.cents, currency: "usd", description: `Extra minutes: ${o.extra.toLocaleString()} over ${o.included.toLocaleString()} included at ${bill.family === "junior" ? JUNIOR.minute_cents : OVERAGE_CENTS[bill.tier as Tier]} cents each${o.capped ? " (capped at the Pro price)" : ""}`, metadata: { account_id: bill.account_id, minutes: String(minutes) } }, `ovg-${inv.id}`);
     itemId = ii.id;
   }
-  await supabase.from("billing_overages").insert({ invoice_id: inv.id, account_id: bill.account_id, period_start: from, period_end: to, minutes, included: o.included, extra_minutes: o.extra, cents: o.cents, capped: o.capped, invoice_item_id: itemId });
+  let tx: any = null;
+  if (bill.family === "junior") {
+    tx = await textUsage(bill.account_id, from, to);
+    if (tx.cents > 0) await sp("POST", "/invoiceitems", { customer: inv.customer, invoice: inv.id, amount: tx.cents, currency: "usd", description: `Extra texts: ${tx.extra.toLocaleString()} over ${tx.included} included at ${JUNIOR.text_cents} cents each`, metadata: { account_id: bill.account_id, texts: String(tx.texts) } }, `txt-${inv.id}`);
+  }
+  await supabase.from("billing_overages").insert({ invoice_id: inv.id, account_id: bill.account_id, period_start: from, period_end: to, minutes, included: o.included, extra_minutes: o.extra, cents: o.cents, capped: o.capped, invoice_item_id: itemId, ...(tx ? { texts: tx.texts, extra_texts: tx.extra, text_cents: tx.cents } : {}) });
+}
+// Junior two-way texting add-on: $5 a month on the subscription plus a one-time $20 setup on the next invoice.
+// Buying it only bills and records the request; Sidekick switches two-way texting on once the number is registered.
+async function textingAddon(u: any, body: any) {
+  if (!canManage(u)) return { ok: false, error: "owner_only" };
+  const b = await loadBilling(u.account_id);
+  if (!b?.stripe_subscription_id || !["trialing", "active", "past_due"].includes(String(b.sub_status))) return { ok: false, error: "no_plan" };
+  if (b.family !== "junior") return { ok: false, error: "junior_only" };
+  const on = body.on !== false;
+  if (on === !!b.texting_addon) return { ok: true, unchanged: true, texting_addon: on };
+  if (on) {
+    let price: string | undefined; const found = await sp("GET", "/prices", { "lookup_keys[0]": "donna_junior_texting_addon", active: "true", limit: 1 }); price = found.data?.[0]?.id;
+    if (!price) { const prod = await sp("POST", "/products", { name: "Donna Junior two-way texting", description: "Customers can text the business number and get replies" }); price = (await sp("POST", "/prices", { product: prod.id, currency: "usd", unit_amount: JUNIOR.addon_cents, recurring: { interval: "month" }, lookup_key: "donna_junior_texting_addon", transfer_lookup_key: "true" })).id; }
+    const item = await sp("POST", "/subscription_items", { subscription: b.stripe_subscription_id, price, quantity: 1, proration_behavior: "none" }, `txa-${u.account_id}-${b.stripe_subscription_id}`);
+    await sp("POST", "/invoiceitems", { customer: b.stripe_customer_id, amount: JUNIOR.addon_setup_cents, currency: "usd", description: "Two-way texting setup (one time)", metadata: { account_id: u.account_id } }, `txs-${u.account_id}-${b.stripe_subscription_id}`);
+    await saveBilling(u.account_id, { texting_addon: true, texting_addon_item: item.id });
+    return { ok: true, texting_addon: true };
+  }
+  if (b.texting_addon_item) { try { await sp("DELETE", `/subscription_items/${b.texting_addon_item}`, { proration_behavior: "none" }); } catch (e) { console.error("addon off", String(e)); } }
+  await saveBilling(u.account_id, { texting_addon: false, texting_addon_item: null });
+  return { ok: true, texting_addon: false };
 }
 async function onWebhook(req: Request) {
   let raw: any = {}; try { raw = await req.json(); } catch { return json({ ok: false }, 400); }
@@ -473,11 +517,11 @@ async function sweep() {
         if (sendFor) {
           const acct = await loadAccount(b.account_id); const c = await ownerContact(b.account_id);
           const alertEmail = acct?.settings?.alert_email;
-          const t = b.tier as Tier;
+          const t = b.tier as Tier; const jrF = b.family === "junior"; const rate = jrF ? JUNIOR.minute_cents : OVERAGE_CENTS[t];
           const msg = sendFor === 100
-            ? `Donna has used all ${inc.toLocaleString()} included minutes this period (${used.toLocaleString()} so far). She keeps answering every call. Extra minutes are ${OVERAGE_CENTS[t]}c each${t === "starter" ? `, and your bill never goes above the Pro price (${money(BOOK[b.family as Family].pro.price[b.term as Term])})` : ""}.`
-            : `Donna has used ${used.toLocaleString()} of your ${inc.toLocaleString()} included minutes this period (${Math.round(pct * 100)}%). Nothing changes: she keeps answering. Extra minutes would be ${OVERAGE_CENTS[t]}c each.`;
-          await sendEmail([c.email, alertEmail], `Donna: ${sendFor}% of your minutes used`, `Hi${c.full_name ? " " + String(c.full_name).split(" ")[0] : ""},\n\n${msg}\n\nYour period renews on ${b.current_period_end ? new Date(b.current_period_end).toDateString() : "your next billing date"}.${t === "starter" ? " If you're busy every month, Pro includes more minutes and your whole team." : ""}\n\nDonna by Sidekick Logistics`);
+            ? `Donna has used all ${inc.toLocaleString()} included minutes this period (${used.toLocaleString()} so far). She keeps answering every call. Extra minutes are ${rate}c each${!jrF && t === "starter" ? `, and your bill never goes above the Pro price (${money(BOOK[b.family as Family].pro.price[b.term as Term])})` : ""}.`
+            : `Donna has used ${used.toLocaleString()} of your ${inc.toLocaleString()} included minutes this period (${Math.round(pct * 100)}%). Nothing changes: she keeps answering. Extra minutes would be ${rate}c each.`;
+          await sendEmail([c.email, alertEmail], `Donna: ${sendFor}% of your minutes used`, `Hi${c.full_name ? " " + String(c.full_name).split(" ")[0] : ""},\n\n${msg}\n\nYour period renews on ${b.current_period_end ? new Date(b.current_period_end).toDateString() : "your next billing date"}.${!jrF && t === "starter" ? " If you're busy every month, Pro includes more minutes and your whole team." : ""}\n\nDonna by Sidekick Logistics`);
           await saveBilling(b.account_id, sendFor === 100 ? { alert100_period: key, alert80_period: key } : { alert80_period: key }); out.alerts++;
         }
       }
@@ -501,7 +545,7 @@ Deno.serve(async (req: Request) => {
     const cronHdr = req.headers.get("x-cron-secret") || "";
     const internal = auth === SERVICE_ROLE || (!!cronHdr && cronHdr === CRON);
     if (action === "sweep") { if (!internal) return json({ ok: false, error: "internal_only" }, 403); return json({ ok: true, ...(await sweep()) }); }
-    if (action === "prices") { if (!internal) return json({ ok: false, error: "internal_only" }, 403); const ids: any = {}; for (const f of Object.keys(BOOK) as Family[]) for (const t of ["starter", "pro"] as Tier[]) for (const term of ["mtm", "1y", "2y"] as Term[]) ids[lookupKey(f, t, term)] = await priceId(f, t, term); return json({ ok: true, prices: ids }); }
+    if (action === "prices") { if (!internal) return json({ ok: false, error: "internal_only" }, 403); const ids: any = {}; for (const f of Object.keys(BOOK) as Family[]) for (const t of ["starter", "pro"] as Tier[]) for (const term of ["mtm", "1y", "2y"] as Term[]) { if (f === "junior" && (t !== "starter" || term !== "mtm")) continue; ids[lookupKey(f, t, term)] = await priceId(f, t, term); } return json({ ok: true, prices: ids }); }
     const u = await caller(req); if (!u) return json({ ok: false, error: "unauthorized" }, 401);
     if (action === "status") return json(await status(u));
     if (action === "checkout") return json(await checkout(u, body));
@@ -511,6 +555,7 @@ Deno.serve(async (req: Request) => {
     if (action === "resume") return json(await resume(u));
     if (action === "card") return json(await card(u));
     if (action === "extend") return json(await extend(u, body));
+    if (action === "texting_addon") return json(await textingAddon(u, body));
     return json({ ok: false, error: "unknown_action" }, 400);
   } catch (e) {
     console.error("billing", action, String((e as any)?.message || e));

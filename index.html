@@ -678,6 +678,12 @@ const blErr=r=>(BL_ERR[r&&r.error]||(r&&r.error)||'Something went wrong').replac
 // Plan picker shared by the Billing page and the setup wizard. opts.current = {tier, term} to mark the current plan.
 function planPickerHTML(prices, opts){
   opts=opts||{}; const term=opts.term||'mtm'; const t=prices.tiers; const cur=opts.current||null;
+  if(prices.family==='junior'){ const j=prices.junior||{texts:50,text_cents:3,minute_cents:25,addon_cents:500,addon_setup_cents:2000}; const p=t.starter;
+    return `<div class="bl-plans"><div class="bl-plan pro ${cur?'cur':''}"><span class="bl-tag">For ages 8 to 17</span><div class="bl-pn">Donna for Junior Entrepreneurs</div><div class="bl-pw">One young business owner, plus a parent login</div>
+      <div class="bl-pp"><b>${blMoney(p.price.mtm)}</b><span>/mo</span></div>
+      <ul><li><b>${p.minutes}</b> call minutes and <b>${j.texts}</b> texts a month</li><li>After that, ${j.minute_cents}¢ a minute and ${j.text_cents}¢ a text. You only pay more when the business gets busier.</li><li>Their own phone number, business plan, money tracker, supplies, posts and flyers</li><li>Texts go out from Donna. Two-way texting is an add-on: ${blMoney(j.addon_cents)} a month plus ${blMoney(j.addon_setup_cents)} to set up.</li></ul>
+      <button class="btn primary" data-bl-pick="starter" ${cur?'disabled':''}>${cur?'Your plan':(opts.cta||'Choose')+' Junior'}</button></div></div>
+      <p class="bl-fine">Billed monthly to a parent's card. Cancel any time.</p>`; }
   const card=(tier)=>{ const p=t[tier]; const price=p.price[term], list=p.price.mtm; const isCur=cur&&cur.tier===tier&&cur.term===term;
     return `<div class="bl-plan ${tier==='pro'?'pro':''} ${isCur?'cur':''}">
       ${tier==='pro'?'<span class="bl-tag">Best for teams</span>':''}
@@ -738,8 +744,10 @@ async function pageBilling(){
   const inv=(r.invoices||[]);
   host.innerHTML=`<div class="page">
     <div class="card"><div class="card-h"><h2>Your plan</h2>${blStatusPill(b)}</div>
-      <div class="bl-sum"><div><div class="bl-big">Donna ${esc(r.prices.label)} ${tierName}</div><div class="bl-sub">${blMoney(b.price_cents||0)} a month · ${esc(BL_TERM_LABEL[b.term]||'')} · ${inc.toLocaleString()} minutes included</div></div>
-        ${r.can_manage?`<div class="bl-acts"><button class="btn sm" id="bl-change">Change plan</button></div>`:''}</div>
+      <div class="bl-sum"><div><div class="bl-big">Donna ${esc(r.prices.label)}${r.prices.family==='junior'?'':' '+tierName}</div><div class="bl-sub">${blMoney(b.price_cents||0)} a month · ${esc(BL_TERM_LABEL[b.term]||'')} · ${inc.toLocaleString()} minutes included</div></div>
+        ${r.can_manage&&r.prices.family!=='junior'?`<div class="bl-acts"><button class="btn sm" id="bl-change">Change plan</button></div>`:''}</div>
+      ${r.prices.family==='junior'?(()=>{ const j=r.prices.junior||{}; const tx=(r.usage&&r.usage.texts)||null; return `${tx?`<div class="bl-meter"><div class="bl-mh"><span class="l"><b>${tx.texts}</b> of ${tx.included} texts this period</span><span>${tx.extra?`${tx.extra} extra: about ${blMoney(tx.cents)}`:`${Math.max(0,tx.included-tx.texts)} left`}</span></div><div class="bl-bar"><i style="width:${Math.min(100,Math.round(tx.texts*100/Math.max(1,tx.included)))}%"></i></div></div>`:''}
+        <div class="bl-note"><b>Two-way texting ${b.texting_addon?'is on your plan':'add-on'}.</b> ${b.texting_addon?`${blMoney(j.addon_cents||500)} a month. Sidekick Logistics switches it on once the number is registered for texting, which can take a few days.`:`Texts go out from Donna today. To let customers text the business number and get replies: ${blMoney(j.addon_cents||500)} a month plus a one-time ${blMoney(j.addon_setup_cents||2000)} setup. Each text still counts toward your texts.`} ${r.can_manage?`<button class="btn sm" id="bl-addon" style="margin-left:6px">${b.texting_addon?'Remove add-on':'Add two-way texting'}</button>`:''}</div>`; })():''}
       ${trialLine?`<div class="bl-note">${trialLine}</div>`:''}
       ${b.sub_status==='past_due'?`<div class="bl-note warn">We couldn't charge your card. Stripe will retry, and ${esc(aName())} keeps answering in the meantime. Update your card below to fix it now.</div>`:''}
       ${b.cancel_at&&b.sub_status!=='trialing'?`<div class="bl-note warn">Your plan is set to end on <b>${esc(blDate(b.cancel_at))}</b>. ${esc(aName())} keeps answering until then.</div>`:''}
@@ -767,6 +775,9 @@ async function pageBilling(){
       const up=tier==='pro'&&b.tier==='starter'; const msg=b.sub_status==='trialing'?`Switch to ${tier==='pro'?'Pro':'Starter'}, ${BL_TERM_LABEL[term]}? Nothing is charged during your trial.`:(up?`Upgrade to Pro now? You'll pay the difference for the rest of this month on your next bill.`:`Switch to ${tier==='pro'?'Pro':'Starter'}, ${BL_TERM_LABEL[term]}? The price change is prorated on your next bill.`)+(term!=='mtm'&&term!==b.term?` This starts a ${term==='2y'?'2-year':'1-year'} commitment.`:'');
       if(!(await uiConfirm(msg,{okText:'Switch plan',cancelText:'Not now'}))) return false;
       return done(await billingApi({ action:'change', tier, term })); }); };
+  const ad=$("#bl-addon"); if(ad) ad.onclick=async()=>{ const j=r.prices.junior||{}; const on=!b.texting_addon;
+    if(!(await uiConfirm(on?`Add two-way texting? ${blMoney(j.addon_cents||500)} a month is added to your plan and a one-time ${blMoney(j.addon_setup_cents||2000)} setup goes on your next bill.`:'Remove two-way texting from your plan? Texts will go out from Donna only.',{okText:on?'Add it':'Remove it',cancelText:'Not now'}))) return;
+    ad.disabled=true; const res=await billingApi({ action:'texting_addon', on }); if(res.ok){ state._billingNote=on?'Two-way texting added.':'Two-way texting removed.'; pageBilling(); } else { ad.disabled=false; m.style.color='var(--danger)'; m.textContent=blErr(res); } };
   const cd=$("#bl-card"); if(cd) cd.onclick=async()=>{ cd.disabled=true; const res=await billingApi({ action:'card' }); if(res.ok&&res.url) location.href=res.url; else { cd.disabled=false; m.style.color='var(--danger)'; m.textContent=blErr(res); } };
   const cn=$("#bl-cancel"); if(cn) cn.onclick=async()=>{
     const msg=b.sub_status==='trialing'?`Cancel your free trial? ${aName()} keeps answering until ${b.trial_anchored?blDate(b.trial_end):'the trial ends'}, then stops, and you won't be charged.`:(committed?`Your ${b.term==='2y'?'2-year':'1-year'} plan runs until ${blDate(b.commitment_ends_at)}. Billing continues monthly until then, and the plan ends that day instead of going month to month.`:`End your plan? ${aName()} keeps answering until ${blDate(b.current_period_end)}, then stops. You won't be charged again.`);
