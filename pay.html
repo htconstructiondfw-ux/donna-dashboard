@@ -92,7 +92,8 @@ function rentBox(inv, due){
   const call = b.phone ? ` Please call ${esc(b.phone)}.` : " Please call the office.";
   if(r.blocked) return `<div class="err">${esc(b.name||"The office")} is not accepting online payments for this home right now.${call}</div>`;
   const clearing = r.processing_cents>0 ? `<div class="done" style="background:#eef7f1">A bank payment of ${money(r.processing_cents)} is on its way. It takes 3 to 5 business days to clear, and you'll get a receipt when it does.</div>` : "";
-  if(n.balance<=0) return clearing || `<div class="alt">Confirming your payment…</div>`;
+  const apBox = r.autopay ? `<div class="done" style="background:#eef7f1;text-align:left;margin-top:10px"><b>Autopay is on.</b> Rent is drawn from your ${r.autopay.method==="bank"?"bank account":"card"}${r.autopay.last4?" ending "+esc(r.autopay.last4):""} on each due date. <a href="#" id="rentAutoOff">Turn autopay off</a></div>` : "";
+  if(n.balance<=0) return (clearing || `<div class="alt">Confirming your payment…</div>`) + apBox;
   if(!inv.can_pay_online) return `${clearing}<div class="alt">Pay ${esc(b.name||"the office")} directly${b.phone?` · ${esc(b.phone)}`:""}.</div>`;
   const cardName = r.cashapp ? "Card or Cash App" : "Card";
   return `${clearing}
@@ -102,7 +103,7 @@ function rentBox(inv, due){
       <label class="method ${n.method==="card"?"on":""}"><input type="radio" name="rpm" value="card" ${n.method==="card"?"checked":""}><div><b>${cardName}</b><span>${inv.card_fee_pct>0?`Includes a ${inv.card_fee_pct}% fee of ${money(Math.round(n.amt*inv.card_fee_pct/100))}`:"Debit or credit"}</span></div><div class="amt">${money(n.amt+(inv.card_fee_pct>0?Math.round(n.amt*inv.card_fee_pct/100):0))}</div></label>
     </div>
     ${r.cashapp?`<div class="alt" style="text-align:left;margin-top:10px"><b>Paying with Cash App?</b> Some Cash App accounts have lower sending limits. If yours is below your rent, Cash App will not work for this payment. Use your bank account or a card instead.</div>`:""}
-    ${r.autopay?`<div class="done" style="background:#eef7f1;text-align:left;margin-top:10px"><b>Autopay is on.</b> Rent is drawn from your ${r.autopay.method==="bank"?"bank account":"card"}${r.autopay.last4?" ending "+esc(r.autopay.last4):""} on each due date. <a href="#" id="rentAutoOff">Turn autopay off</a></div>`
+    ${r.autopay?apBox
       :(n.amt>=n.balance&&!(r.paid_cents>0)?`<label class="autopay" style="display:flex;gap:10px;align-items:flex-start;margin-top:12px;text-align:left;font-size:14px;line-height:1.45"><input type="checkbox" id="rentAuto" ${rentAuto?"checked":""} style="margin-top:3px"><span><b>Pay my rent automatically each month.</b> I authorize ${esc(b.name||"my property manager")} to draw my rent${n.method==="bank"?" from this bank account (no fee)":` from this card${inv.card_fee_pct>0?` (plus the ${inv.card_fee_pct}% card fee)`:""}`} on each due date. I get a reminder 3 days before and a receipt every time, and I can turn it off any time from my rent link.</span></label>`:"")}
     <button class="pay" id="rentBtn">Pay ${money(n.amt+n.fee)} by ${n.method==="bank"?"bank":(r.cashapp?"card or Cash App":"card")}</button>
     <div class="alt">Secure payment through Stripe. Your payment goes directly to ${esc(b.name||"your property manager")}. ${r.allow_partial?"You can pay part now and the rest later.":"Full amount only."}</div><div id="payErr"></div>`;
@@ -161,7 +162,7 @@ function render(inv){
         <div class="tipgrid">${[15,18,20,25].map(p=>{ const c=Math.round(base*p/100); return `<button type="button" data-tip="${c}" class="${tipNow===c?'on':''}">${p}%<small>${money(c)}</small></button>`; }).join("")}</div>
         <div class="tipcustom"><input id="tipCustom" inputmode="decimal" placeholder="Other amount"><button type="button" id="tipNone" style="padding:10px 14px;border:1.5px solid var(--line);border-radius:12px;background:#fff;font:inherit;font-weight:600;color:var(--muted);cursor:pointer">No tip</button></div></div>` : ""}
       ${inv.notes?`<div class="notes">${esc(inv.notes)}</div>`:""}
-      ${paid ? `<div class="done">Paid${inv.paid_method&&inv.paid_method!=="card"?" ("+esc(inv.paid_method)+")":""}${inv.paid_note&&/card processing fee/.test(inv.paid_note)?` · ${esc(inv.paid_note.replace(/^.*incl\. /,"incl. "))}`:""} on ${new Date(inv.paid_at).toLocaleDateString("en-US",{month:"long",day:"numeric",year:"numeric"})}. Thank you!</div>`
+      ${paid ? `<div class="done">Paid${inv.paid_method&&inv.paid_method!=="card"?" ("+esc(inv.paid_method)+")":""}${inv.paid_note&&/card processing fee/.test(inv.paid_note)?` · ${esc(inv.paid_note.replace(/^.*incl\. /,"incl. "))}`:""} on ${new Date(inv.paid_at).toLocaleDateString("en-US",{month:"long",day:"numeric",year:"numeric"})}. Thank you!</div>${isRent&&rent&&rent.autopay?`<div class="done" style="background:#eef7f1;text-align:left;margin-top:10px"><b>Autopay is on.</b> Rent is drawn from your ${rent.autopay.method==="bank"?"bank account":"card"}${rent.autopay.last4?" ending "+esc(rent.autopay.last4):""} on each due date. <a href="#" id="rentAutoOff">Turn autopay off</a></div>`:""}`
         : isVoid ? `<div class="err">This invoice was cancelled by ${esc(b.name||"the business")}.</div>`
         : isRent ? rentBox(inv, due)
         : bankInFlight ? `<div class="done" style="background:#eef7f1">Bank payment started. It takes 2–4 business days to clear; you\'ll get a receipt by text when it does. Nothing else to do.</div>`
@@ -177,7 +178,7 @@ function render(inv){
         : (justPaid ? `<div class="alt">Confirming your payment…</div>` : `<div class="alt">Pay ${esc(b.name||"the business")} directly${b.phone?` · ${esc(b.phone)}`:""}.</div>`)}
     </div>
     <div class="foot">Sent by ${esc(b.name||"the business")}${b.managed_by?` (managed by ${esc(b.managed_by)})`:""} with Donna.<br>Payments are processed by ${esc(b.name||"the business")}'s own Stripe account; Donna never holds your money.</div>`;
-  if(isRent && !paid && !isVoid) rentBind(inv, due);
+  if(isRent && !isVoid) rentBind(inv, due);
   document.querySelectorAll("[data-tip]").forEach(b=>b.onclick=()=>{ tipPick=Number(b.dataset.tip); render(inv); });
   const scb=document.getElementById("saveCard"); if(scb) scb.onchange=()=>{ saveCard=scb.checked; };
   const tn=document.getElementById("tipNone"); if(tn) tn.onclick=()=>{ tipPick=0; render(inv); };

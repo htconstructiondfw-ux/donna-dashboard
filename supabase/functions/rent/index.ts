@@ -1,7 +1,7 @@
 import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 
-// Donna: rent collection (v2: autopay; v1). PM Donna and Real Estate Donna.
+// Donna: rent collection (v3: keeps the Stripe row current; v2: autopay; v1). PM Donna and Real Estate Donna.
 //
 // Decisions (Hubert, Nov 11 2026): one Stripe account per management company (payment_accounts, the company is the
 // merchant of record; Donna never holds money). Tenants pay by bank (ACH, no fee), card or Cash App (card fee).
@@ -132,7 +132,13 @@ async function refreshStripe(acct: any, pa: any, request = false): Promise<{ cha
   if (!bank && request) { try { await stripeV2("POST", `/v2/core/accounts/${pa.stripe_account_id}`, { configuration: { merchant: { capabilities: { ach_debit_payments: { requested: true } } } } }); bank = "pending"; } catch (e) { console.error("ach request", String((e as any)?.message || e)); bank = "unavailable"; } }
   out.bank = bank;
   if (bank !== rentSettings(acct).bank_status) await saveRentSettings(acct, { bank_status: bank });
-  if (out.charges !== !!pa.charges_enabled) await supabase.from("payment_accounts").update({ charges_enabled: out.charges, updated_at: nowIso() }).eq("account_id", acct.id);
+  // Keep the company's Stripe row current here too (the Connect webhook may lag or be missing): status, card and Cash App approval.
+  const status = out.charges ? "active" : (pa.status === "restricted" ? "restricted" : "onboarding");
+  if (out.charges !== !!pa.charges_enabled || status !== pa.status || (out.cashapp || "") !== String(pa?.requirements?.cashapp_payments || "")) {
+    const upd: any = { charges_enabled: out.charges, payouts_enabled: out.charges, status, requirements: { ...(pa.requirements || {}), card_payments: caps.card_payments?.status || "", cashapp_payments: out.cashapp || "" }, last_checked_at: nowIso(), updated_at: nowIso() };
+    if (out.charges && !pa.connected_at) upd.connected_at = nowIso();
+    await supabase.from("payment_accounts").update(upd).eq("account_id", acct.id);
+  }
   return out;
 }
 
