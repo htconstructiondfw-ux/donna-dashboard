@@ -216,6 +216,7 @@
   :root{--side1:#0c1d36;--side2:#1e3d68;--signal-ink:#fff;--shadow:0 1px 2px rgba(16,24,40,.05),0 10px 28px -18px rgba(16,24,40,.28);--r:16px;--r-sm:11px}
   body[data-theme="general"]{--ink:#15302a;--ink-2:#2a4a41;--signal:#23895c;--signal-soft:#e6f5ee;--signal-line:#a9dcc4;--canvas:#eef3f1;--line:#dce7e2;--line-2:#edf3f0;--muted:#5a6f68;--muted-2:#8aa098;--side1:#0d261f;--side2:#1c4a3b;--hi:#86e0b5}
   body[data-theme="salon"]{--ink:#2d1622;--ink-2:#4a2a3a;--signal:#b03f71;--signal-soft:#fbeaf1;--signal-line:#edbfd3;--canvas:#f7f1f3;--line:#ecdfe5;--line-2:#f5edf0;--muted:#74606a;--muted-2:#a8939d;--side1:#280d1b;--side2:#5a1f3c;--hi:#f6a9c9}
+  body[data-theme="junior"]{--ink:#152033;--ink-2:#2c3e57;--signal:#1f6f5c;--signal-soft:#e4f4ee;--signal-line:#a6d8c7;--canvas:#f3f6f4;--line:#dfe6e2;--line-2:#edf1ee;--muted:#5d6b7c;--muted-2:#93a0ae;--side1:#123b4a;--side2:#1f6f5c;--hi:#ffd166}
   body[data-theme="contractor"]{--ink:#1d2631;--ink-2:#334152;--signal:#cf5713;--signal-soft:#fdeee3;--signal-line:#f5c3a0;--canvas:#f2f1ef;--line:#e3e1dc;--line-2:#efedea;--muted:#66707c;--muted-2:#98a0aa;--side1:#121820;--side2:#2a3645;--hi:#ffb27a}
   body[data-theme="pm"]{--ink:#13243d;--ink-2:#22375a;--signal:#2d68b8;--signal-soft:#e8f0fb;--signal-line:#b5cdee;--canvas:#eef2f8;--line:#dfe5f0;--line-2:#eef1f7;--muted:#5d6e8c;--muted-2:#8b99b3;--side1:#0b1b33;--side2:#1e3d68;--hi:#9cc8ff}
   body[data-theme="re"]{--ink:#11292b;--ink-2:#24474a;--signal:#0d8379;--signal-soft:#e3f5f2;--signal-line:#a3dcd5;--canvas:#edf4f3;--line:#d8e6e4;--line-2:#eaf2f1;--muted:#587270;--muted-2:#8ba3a0;--side1:#072326;--side2:#12474a;--hi:#7fe3d8}
@@ -540,7 +541,7 @@ function isManager(){ return ['owner','admin'].includes((state.owner&&state.owne
 function salonOn(){ const f=(state.account&&state.account.settings&&state.account.settings.features)||{}; return !!f.salon; }
 function propertyOn(){ const f=(state.account&&state.account.settings&&state.account.settings.features)||{}; return !!f.property_management; }
 // Payments (shared module, exposed per vertical): contractors today; any account with features.payments later.
-function paymentsOn(){ const ac=state.account||{}; const f=(ac.settings&&ac.settings.features)||{}; return ac.industry==='contractor' || !!f.payments; }
+function paymentsOn(){ const ac=state.account||{}; const f=(ac.settings&&ac.settings.features)||{}; return ac.industry==='contractor' || ac.industry==='junior' || !!f.payments || !!f.junior; }
 function realEstateOn(){ const ac=state.account||{}; const f=(ac.settings&&ac.settings.features)||{}; return ac.industry==='real_estate' || !!f.real_estate; }
 function reSettings(){ return (state.account&&state.account.settings&&state.account.settings.real_estate)||{}; }
 // Solo vs team is driven by the plan: starter is solo, Pro/Enterprise is a team.
@@ -556,7 +557,9 @@ function providerLabelPlural(){ return providerLabel()+'s'; }
 function teamAllowed(){ const p=String((state.account&&state.account.plan)||'').toLowerCase(); return p==='pro'||p==='enterprise'; }
 function renderApp(){
   const mgr=isManager();
-  if(!mgr && !['today','schedule','appointments','clients','messages','waitlist','mylink','jobs','money','account','listings','leads','requests','properties'].includes(state.view)) state.view='today';
+  if(!mgr && juniorOn()){ if(![...JR_VIEWS,'messages','account'].includes(state.view)||state.view==='jr_parent') state.view='jr_home'; }
+  else if(!mgr && !['today','schedule','appointments','clients','messages','waitlist','mylink','jobs','money','account','listings','leads','requests','properties'].includes(state.view)) state.view='today';
+  if(mgr && juniorOn() && !state._jrHomed){ state._jrHomed=true; state.view='jr_parent'; }
   // A solo owner lives in their day; land there on first load, then leave navigation free.
   if(mgr && isSolo() && !state._homed){ state._homed=true; if(state.view==='assistant') state.view='today'; }
   if(new URLSearchParams(location.search).get('mine')) state.view=mgr?'settings':'account';
@@ -597,6 +600,12 @@ function renderApp(){
     navConfig.push(["account","My account",I.gear]);
     navActivity=[];
   }
+  if(juniorOn()){
+    // Kid: a short, friendly menu. Parent: the same pages plus Parent corner and the grown-up settings.
+    const jr=[["jr_home","Home",I.clock],["jr_jobs","Jobs",I.appt],["jr_customers","Customers",I.users],["jr_money","Money",I.card],["jr_stuff","Supplies",I.clip],["jr_posts","Posts and flyers",I.promo],["jr_plan","My business plan",I.book]];
+    if(mgr){ navConfig=[["jr_parent","Parent corner",I.users],["assistant","Assistant",I.bot],["schedule","Schedule",I.cal],["staff","Team",I.users],["knowledge","Knowledge",I.book],["settings","Settings",I.gear]]; navActivity=jr.concat([["calls","Calls",I.phone],["messages","Phone messages",I.msg],["appointments","Appointments",I.appt]]); soon=[["billing","Billing",I.card]]; }
+    else { navConfig=jr.concat([["messages","Phone messages",I.msg],["account","My account",I.gear]]); navActivity=[]; }
+  }
   const navCount=v=>{ if(v==='messages') return unreadCount(); if(v==='conversations') return (state.conversations||[]).filter(c=>c.status==='awaiting_staff').length; if(v==='gaps') return (state.gaps||[]).length; return 0; };
   const navBtn=n=>{ const _c=navCount(n[0]); return `<button class="nav-item ${state.view===n[0]?'active':''}" data-v="${n[0]}">${n[2]}<span>${n[1]}</span>${_c?`<span class="tag unread">${_c}</span>`:''}</button>`; };
   const initials=(state.owner.name||"O").split(" ").map(w=>w[0]).slice(0,2).join("").toUpperCase();
@@ -618,7 +627,7 @@ function renderApp(){
     <main class="main">
       <div class="topbar">
         <div class="tb-left"><button class="menu-btn" id="menu-btn" aria-label="Menu"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M4 7h16M4 12h16M4 17h16"/></svg></button>
-        <div class="crumbs">${['settings','notifications','account','billing'].includes(state.view)?'Account':(['today','messages','appointments','waitlist','calls','contacts','clients','gaps','conversations','requests','leads','money','dues','rent'].includes(state.view)?'Activity':'Configure')} · <b>${esc(({today:"Today",assistant:"Assistant",schedule:"Schedule",types:(pmMode()?"Visit types":(salonOn()?"Services":"Appointment types")),staff:"Team",messages:"Phone messages",appointments:(pmMode()?"Visits & appointments":"Appointments"),settings:"Settings",notifications:"Notifications",calls:"Calls",knowledge:"Knowledge",contacts:(salonOn()?"Clients":"Contacts"),clients:"Clients",gaps:"Open questions",conversations:"Inbox",waitlist:"Waitlist",promotions:"Promotions",booking:(pmMode()?"Self-scheduling":"Booking page"),mylink:"My booking link",intake:"Intake forms",properties:"Properties",dues:"Communities & dues",rent:"Rent",contractors:"Contractors",requests:"Service requests",listings:"Listings",leads:"Leads & documents",money:(isManager()?"Checkout & money":"My money"),account:"My account",billing:"Billing"})[state.view])}</b></div>
+        <div class="crumbs">${['settings','notifications','account','billing'].includes(state.view)?'Account':(['today','messages','appointments','waitlist','calls','contacts','clients','gaps','conversations','requests','leads','money','dues','rent'].concat(JR_VIEWS).includes(state.view)?'Activity':'Configure')} · <b>${esc(({today:"Today",assistant:"Assistant",schedule:"Schedule",types:(pmMode()?"Visit types":(salonOn()?"Services":"Appointment types")),staff:"Team",messages:"Phone messages",appointments:(pmMode()?"Visits & appointments":"Appointments"),settings:"Settings",notifications:"Notifications",calls:"Calls",knowledge:"Knowledge",contacts:(salonOn()?"Clients":"Contacts"),clients:"Clients",gaps:"Open questions",conversations:"Inbox",waitlist:"Waitlist",promotions:"Promotions",booking:(pmMode()?"Self-scheduling":"Booking page"),mylink:"My booking link",intake:"Intake forms",properties:"Properties",dues:"Communities & dues",rent:"Rent",jr_home:"Home",jr_jobs:"Jobs",jr_customers:"Customers",jr_money:"Money",jr_stuff:"Supplies",jr_posts:"Posts and flyers",jr_plan:"My business plan",jr_parent:"Parent corner",contractors:"Contractors",requests:"Service requests",listings:"Listings",leads:"Leads & documents",money:(isManager()?"Checkout & money":"My money"),account:"My account",billing:"Billing"})[state.view])}</b></div>
         </div><div class="acct-chip"><span class="av">${initials}</span><div class="who"><b>${esc(state.account.company)}</b><span>${esc((state.account.status||'trial'))} · ${esc(state.account.plan||'starter')}</span></div></div>
       </div>
       <div id="approve-banner"></div>
@@ -637,13 +646,14 @@ function renderApp(){
   paintApproveBanner();
 }
 function renderPage(){
-  if(!isManager() && !['today','schedule','appointments','clients','messages','waitlist','mylink','jobs','money','account','listings','leads','requests','properties'].includes(state.view)) state.view='today';
+  if(!isManager() && juniorOn()){ if(![...JR_VIEWS,'messages','account'].includes(state.view)) state.view='jr_home'; }
+  else if(!isManager() && !['today','schedule','appointments','clients','messages','waitlist','mylink','jobs','money','account','listings','leads','requests','properties'].includes(state.view)) state.view='today';
   if('speechSynthesis' in window) window.speechSynthesis.cancel();
   teardownRealtime();
   document.querySelectorAll(".nav-item[data-v],.bbar button[data-v]").forEach(b=>b.classList.toggle("active",b.dataset.v===state.view));
   try{ window.scrollTo(0,0); const mn=document.querySelector('.main'); if(mn) mn.scrollTop=0; }catch(_e){}
-  $(".crumbs").innerHTML=`${['settings','notifications','account','billing'].includes(state.view)?'Account':(['today','messages','appointments','waitlist','calls','contacts','clients','gaps','conversations','requests','leads','money','dues','rent'].includes(state.view)?'Activity':'Configure')} · <b>${esc(({today:"Today",assistant:"Assistant",schedule:"Schedule",types:(pmMode()?"Visit types":(salonOn()?"Services":"Appointment types")),staff:"Team",messages:"Phone messages",appointments:(pmMode()?"Visits & appointments":"Appointments"),settings:"Settings",notifications:"Notifications",calls:"Calls",knowledge:"Knowledge",contacts:(salonOn()?"Clients":"Contacts"),clients:"Clients",gaps:"Open questions",conversations:"Email inbox",waitlist:"Waitlist",promotions:"Promotions",booking:(pmMode()?"Self-scheduling":"Booking page"),mylink:"My booking link",intake:"Intake forms",properties:"Properties",dues:"Communities & dues",rent:"Rent",contractors:"Contractors",requests:"Service requests",listings:"Listings",leads:"Leads & documents",money:(isManager()?"Checkout & money":"My money"),account:"My account",billing:"Billing"})[state.view])}</b>`;
-  const PAGES={today:pageToday, assistant:pageAssistant, schedule:pageSchedule, types:pageTypes, staff:pageStaff, messages:pageMessages, appointments:renderAppts, settings:pageSettings, notifications:pageNotifications, calls:pageCalls, knowledge:pageKnowledge, contacts:pageContacts, clients:pageClients, gaps:pageGaps, conversations:pageConversations, waitlist:pageWaitlist, promotions:pagePromotions, booking:pageBookingPage, mylink:pageMyLink, intake:pageIntakeForms, properties:pageProperties, dues:pageDues, rent:pageRent, contractors:pageContractors, requests:pageServiceRequests, jobs:pageJobs, money:pageSalonMoney, listings:pageListings, leads:pageLeads, account:pageMyAccount, billing:pageBilling};
+  $(".crumbs").innerHTML=`${['settings','notifications','account','billing'].includes(state.view)?'Account':(['today','messages','appointments','waitlist','calls','contacts','clients','gaps','conversations','requests','leads','money','dues','rent'].concat(JR_VIEWS).includes(state.view)?'Activity':'Configure')} · <b>${esc(({today:"Today",assistant:"Assistant",schedule:"Schedule",types:(pmMode()?"Visit types":(salonOn()?"Services":"Appointment types")),staff:"Team",messages:"Phone messages",appointments:(pmMode()?"Visits & appointments":"Appointments"),settings:"Settings",notifications:"Notifications",calls:"Calls",knowledge:"Knowledge",contacts:(salonOn()?"Clients":"Contacts"),clients:"Clients",gaps:"Open questions",conversations:"Email inbox",waitlist:"Waitlist",promotions:"Promotions",booking:(pmMode()?"Self-scheduling":"Booking page"),mylink:"My booking link",intake:"Intake forms",properties:"Properties",dues:"Communities & dues",rent:"Rent",jr_home:"Home",jr_jobs:"Jobs",jr_customers:"Customers",jr_money:"Money",jr_stuff:"Supplies",jr_posts:"Posts and flyers",jr_plan:"My business plan",jr_parent:"Parent corner",contractors:"Contractors",requests:"Service requests",listings:"Listings",leads:"Leads & documents",money:(isManager()?"Checkout & money":"My money"),account:"My account",billing:"Billing"})[state.view])}</b>`;
+  const PAGES={today:pageToday, assistant:pageAssistant, schedule:pageSchedule, types:pageTypes, staff:pageStaff, messages:pageMessages, appointments:renderAppts, settings:pageSettings, notifications:pageNotifications, calls:pageCalls, knowledge:pageKnowledge, contacts:pageContacts, clients:pageClients, gaps:pageGaps, conversations:pageConversations, waitlist:pageWaitlist, promotions:pagePromotions, booking:pageBookingPage, mylink:pageMyLink, intake:pageIntakeForms, properties:pageProperties, dues:pageDues, rent:pageRent, jr_home:pageJunior, jr_jobs:pageJunior, jr_customers:pageJunior, jr_money:pageJunior, jr_stuff:pageJunior, jr_posts:pageJunior, jr_plan:pageJunior, jr_parent:pageJunior, contractors:pageContractors, requests:pageServiceRequests, jobs:pageJobs, money:pageSalonMoney, listings:pageListings, leads:pageLeads, account:pageMyAccount, billing:pageBilling};
   const LOADERS={today:loadAppointments, appointments:loadAppointments, messages:loadMessages, calls:loadCalls, contacts:loadContacts, clients:loadContacts, gaps:loadGaps, conversations:loadConversations, staff:loadStaff, waitlist:loadWaitlist};
   const v=state.view;
   (PAGES[v]||(()=>{}))();
@@ -961,7 +971,7 @@ async function removeBlock(id,idx){
 function typeFromRow(t){ return { id:t.id, name:t.name, mode:t.mode, dur:t.default_duration_min, before:t.buffer_before_min, after:t.buffer_after_min, travel:t.requires_travel, overlap:t.overlap_minutes||0, recall:t.rebook_after_days||0, desc:t.description||'', price:t.price||'', category:t.category||'', includes:(t.includes||[]), special:!!t.is_special, sstart:t.special_starts||'', send:t.special_ends||'', newonly:!!t.new_clients_only, loc:t.location_kind||null, kind:t.kind||null, attendee:t.attendee_role||'', notice:t.notice_hours||0, collect:(Array.isArray(t.collect)?t.collect:[]), ptypes:(t.property_types||[]), pub:t.is_public!==false }; }
 // PM accounts (property management without salon) get the Visit-types experience instead of the salon/service form.
 // Each Donna wears its industry's colors (matches the brochures).
-function dTheme(){ if(salonOn()) return 'salon'; if(realEstateOn()) return 're'; if(propertyOn()) return 'pm'; if(contractorOn()||paymentsOn()) return 'contractor'; return 'general'; }
+function dTheme(){ if(juniorOn()) return 'junior'; if(salonOn()) return 'salon'; if(realEstateOn()) return 're'; if(propertyOn()) return 'pm'; if(contractorOn()||paymentsOn()) return 'contractor'; return 'general'; }
 function pmMode(){ return propertyOn() && !salonOn(); }
 function acctPmTypes(){ const s=(state.account&&state.account.settings)||{}; let t=Array.isArray(s.property_types)?s.property_types.filter(x=>['residential','commercial','hoa'].includes(x)):[]; if(!t.length && state.pm&&state.pm.props&&state.pm.props.length){ t=[...new Set(state.pm.props.map(p=>p.property_type).filter(Boolean))]; } return t.length?t:['residential','commercial','hoa']; }
 const PM_VISIT_KINDS=[["showing","Showing / tour"],["space_tour","Space tour"],["inspection_move_in","Move-in inspection"],["inspection_move_out","Move-out inspection"],["inspection_periodic","Periodic inspection"],["walkthrough","Walkthrough"],["vendor_access","Vendor access / site visit"],["meeting","Meeting"],["hearing","Hearing"],["site_visit","ARC site visit"],["other","Other"]];
@@ -5167,6 +5177,297 @@ const dOrd=n=>{ const t=['th','st','nd','rd'], v=n%100; return n+(t[(v-20)%10]||
 const dCents=v=>{ const n=Number(String(v||'').replace(/[^0-9.]/g,'')); return isFinite(n)?Math.round(n*100):0; };
 const dCsv=(name,rows)=>{ const esc2=v=>{ const s=v==null?'':String(v); return /[",\n]/.test(s)?'"'+s.replace(/"/g,'""')+'"':s; }; const blob=new Blob([rows.map(r=>r.map(esc2).join(',')).join('\n')],{type:'text/csv'}); const a=document.createElement('a'); a.href=URL.createObjectURL(blob); a.download=name; document.body.appendChild(a); a.click(); setTimeout(()=>{ URL.revokeObjectURL(a.href); a.remove(); },500); };
 
+// ================= Donna for Junior Entrepreneurs (ages 8 to 17; one kid login + a parent login) =================
+function juniorOn(){ const ac=state.account||{}; const f=(ac.settings&&ac.settings.features)||{}; return ac.industry==='junior' || !!f.junior; }
+function jrParent(){ return juniorOn() && isManager(); }
+const JR_VIEWS=['jr_home','jr_jobs','jr_customers','jr_money','jr_stuff','jr_posts','jr_plan','jr_parent'];
+const JR_LABELS={ jr_home:'Home', jr_jobs:'Jobs', jr_customers:'Customers', jr_money:'Money', jr_stuff:'Supplies', jr_posts:'Posts and flyers', jr_plan:'My business plan', jr_parent:'Parent corner' };
+const JR_IDEAS=[
+  ['lemonade','Lemonade stand',{ what:'I sell cold lemonade at a stand in my neighborhood.', who:'Neighbors walking by, people at yard sales and games.', prices:'$1 a cup', supplies:'Lemons or mix, sugar, cups, ice, pitcher, table, sign', when:'Saturdays, 10am to 1pm', items:[['Cups','cups',50,10],['Lemonade mix','scoops',40,8],['Ice','bags',2,1]], job:'Lemonade stand' }],
+  ['lawn','Lawn mowing',{ what:'I mow and edge lawns for neighbors.', who:'Neighbors on my street who are busy or away.', prices:'$20 for a small yard, $30 for a big yard', supplies:'Mower, gas, trimmer line, yard bags, gloves', when:'After school and Saturday mornings', items:[['Gas','gallons',2,1],['Yard bags','bags',10,3],['Trimmer line','spools',1,0]], job:'Mow the lawn' }],
+  ['bins','Trash bin service',{ what:'I take trash bins to the curb, bring them back, and wash them.', who:'Neighbors who travel or forget trash day.', prices:'$5 a week to take out and bring back, $10 to wash a bin', supplies:'Hose, scrub brush, soap, gloves', when:'The night before trash day and the day after', items:[['Soap','bottles',2,1],['Scrub brushes','brushes',1,0]], job:'Bins out and back' }],
+  ['pets','Pet sitting and dog walking',{ what:'I walk dogs and feed pets while their owners are away.', who:'Neighbors with pets who work late or travel.', prices:'$8 a walk, $12 a day for feeding', supplies:'Leash, waste bags, treats', when:'After school and weekends', items:[['Waste bags','rolls',4,1],['Treats','bags',2,1]], job:'Dog walk' }],
+  ['carwash','Car washing',{ what:'I wash cars by hand in the driveway.', who:'Neighbors and family friends.', prices:'$10 a car, $15 for a truck or SUV', supplies:'Bucket, car soap, sponges, towels, hose', when:'Saturday and Sunday afternoons', items:[['Car soap','bottles',2,1],['Towels','towels',8,3],['Sponges','sponges',3,1]], job:'Car wash' }],
+  ['tutoring','Tutoring',{ what:'I help younger kids with reading or math.', who:'Families with kids in lower grades.', prices:'$10 for 30 minutes', supplies:'Paper, pencils, flash cards', when:'Weekdays after school', items:[['Flash cards','packs',2,0],['Pencils','pencils',12,4]], job:'Tutoring session' }],
+  ['crafts','Crafts or baked goods',{ what:'I make and sell things like cookies, bracelets, or cards.', who:'Neighbors, family friends, people at markets.', prices:'$2 each or 3 for $5', supplies:'Ingredients or craft supplies, bags, labels', when:'I make them on Friday and sell on Saturday', items:[['Bags','bags',30,10],['Labels','labels',30,10]], job:'Sale day' }],
+  ['other','Something else',{ what:'', who:'', prices:'', supplies:'', when:'', items:[], job:'Job' }]
+];
+async function jrApi(body){ const { data, error }=await db.functions.invoke('junior',{ body }); if(error){ try{ return await error.context.json(); }catch(_e){ return { ok:false, error:error.message||'error' }; } } return data||{ ok:false, error:'empty' }; }
+const jrDay=d=>{ if(!d) return ''; const x=new Date(String(d).slice(0,10)+'T12:00:00'); return x.toLocaleDateString('en-US',{ weekday:'short', month:'short', day:'numeric' }); };
+const jrTime=t=>{ if(!t) return ''; const [h,m]=String(t).split(':').map(Number); return `${((h+11)%12)+1}:${String(m).padStart(2,'0')} ${h<12?'am':'pm'}`; };
+const JR_CSS=`<style>
+  .jr-hero{background:linear-gradient(135deg,var(--side1),var(--side2));color:#fff;border-radius:16px;padding:20px 22px;margin-bottom:14px} .jr-hero h1{margin:0 0 4px;font-size:24px;color:#fff} .jr-hero p{margin:0;opacity:.9;font-size:14.5px;line-height:1.5}
+  .jr-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(250px,1fr));gap:14px} .jr-3{display:grid;grid-template-columns:repeat(3,1fr);gap:12px} @media(max-width:780px){.jr-3{grid-template-columns:1fr}}
+  .jr-card{background:var(--surface,#fff);border:1px solid var(--line);border-radius:14px;padding:16px} .jr-card h2{margin:0 0 10px;font-size:15.5px}
+  .jr-big{font-size:26px;font-weight:800;font-variant-numeric:tabular-nums} .jr-sub{font-size:13px;color:var(--muted);line-height:1.5}
+  .jr-bar{height:14px;border-radius:10px;background:var(--line-2,#eef0f2);overflow:hidden;margin:8px 0} .jr-bar i{display:block;height:100%;background:var(--signal);border-radius:10px}
+  .jr-row{display:flex;gap:10px;align-items:center;padding:10px 0;border-bottom:1px solid var(--line-2,#eef0f2)} .jr-row:last-child{border-bottom:0} .jr-row .g{flex:1;min-width:0} .jr-row b{font-size:14px}
+  .jr-pill{font-size:11.5px;font-weight:700;border-radius:20px;padding:2px 9px;white-space:nowrap;display:inline-block;background:#f3f5f8;color:var(--ink-2)} .jr-pill.ok{background:#eef7f1;color:var(--ok)} .jr-pill.wait{background:#fff6e0;color:#8a5a00} .jr-pill.no{background:#fdf0ee;color:var(--danger)}
+  .jr-badges{display:grid;grid-template-columns:repeat(auto-fill,minmax(104px,1fr));gap:8px} .jr-badge{border:1px solid var(--line);border-radius:12px;padding:10px 8px;text-align:center;font-size:12px;line-height:1.35;color:var(--muted)} .jr-badge b{display:block;font-size:12.5px;color:var(--ink)} .jr-badge .m{width:34px;height:34px;border-radius:50%;margin:0 auto 6px;display:flex;align-items:center;justify-content:center;background:var(--line-2,#eef0f2);color:var(--muted);font-weight:800} .jr-badge.on{border-color:var(--signal-line);background:var(--signal-soft)} .jr-badge.on .m{background:var(--signal);color:#fff}
+  .jr-tip{background:var(--signal-soft);border:1px solid var(--signal-line);border-radius:14px;padding:14px 16px;font-size:14px;line-height:1.5} .jr-tip b{display:block;font-size:12px;text-transform:uppercase;letter-spacing:.05em;margin-bottom:4px}
+  .jr-acts{display:flex;gap:6px;flex-wrap:wrap} .jr-err{color:var(--danger);font-size:13px;margin-top:8px} .jr-ok{color:var(--ok);font-size:13px}
+  .jr-chips{display:flex;gap:8px;flex-wrap:wrap} .jr-chip{border:1.5px solid var(--line);border-radius:12px;padding:10px 14px;background:#fff;font:inherit;font-weight:600;cursor:pointer} .jr-chip.on{border-color:var(--signal);background:var(--signal-soft)}
+  .jr-steps{display:flex;gap:6px;margin-bottom:14px} .jr-steps i{flex:1;height:6px;border-radius:6px;background:var(--line)} .jr-steps i.on{background:var(--signal)}
+  .jr-note{background:#fff6e0;border:1px solid #f0d58a;border-radius:12px;padding:12px 14px;font-size:13.5px;line-height:1.5;color:#5c3d00;margin-bottom:14px}
+</style>`;
+
+async function pageJunior(){
+  const view=state.view; const S=state.jr=state.jr||{}; const parent=jrParent();
+  $("#page").innerHTML=JR_CSS+`<div class="page" id="jr-root"><div class="empty">Loading…</div></div>`;
+  const o=await jrApi({ action:'overview' }); const root=$("#jr-root"); if(!root||state.view!==view) return;
+  if(!o||!o.ok){ root.innerHTML=`<div class="empty">${esc((o&&o.message)||'This page could not load just now. Try again in a minute.')}</div>`; return; }
+  S.o=o; const kid=o.profile.kid_first_name||'your child'; const need=o.approvals_required;
+  const go=v=>{ state.view=v; renderPage(); };
+  // Until a parent finishes setup (name, age, permission) nothing else opens.
+  if(!o.setup_done){ if(parent) return jrSetup(root,o); root.innerHTML=`<div class="jr-hero"><h1>Almost ready</h1><p>A parent needs to sign in and finish setting up your business first. Ask them to open Donna and tap Parent corner.</p></div>`; return; }
+  const pend=(o.pending.customers.length+o.pending.posts.length);
+  const head=(t,p)=>`<div class="page-head"><h1>${t}</h1><p>${p}</p></div>`;
+  const pages={ jr_home:home, jr_jobs:jobs, jr_customers:customers, jr_money:moneyPage, jr_stuff:stuff, jr_posts:posts, jr_plan:plan, jr_parent:parentPage };
+  return (pages[view]||home)();
+
+  // ---------------------------------------------------------------- home
+  function home(){
+    const g=o.goal, t=o.totals; const pct=g&&g.cents>0?Math.min(100,Math.round(t.saved_cents*100/g.cents)):0; const earned=o.badges.filter(b=>b.earned).length;
+    root.innerHTML=`
+      <div class="jr-hero"><h1>${parent?`${esc(kid)}'s business`:`Hi ${esc(o.profile.kid_first_name)}!`}</h1><p>${esc(o.profile.business||'Your business')}${parent?' · You are signed in as the parent. You can see and do everything here.':''}</p></div>
+      ${parent&&pend?`<div class="jr-note"><b>${pend} thing${pend===1?'':'s'} waiting for your OK.</b> <button class="btn sm primary" id="jr-go-parent" style="margin-left:8px">Open Parent corner</button></div>`:''}
+      ${!parent&&pend?`<div class="jr-note">${pend} thing${pend===1?' is':'s are'} waiting for a parent to say OK. Donna already told them.</div>`:''}
+      ${!o.plan||!o.plan.done?`<div class="jr-note"><b>Start here:</b> build your business plan. It takes about 5 minutes and Donna helps with every step. <button class="btn sm primary" id="jr-go-plan" style="margin-left:8px">Build my plan</button></div>`:''}
+      <div class="jr-grid">
+        <div class="jr-card"><h2>Money this month</h2><div class="jr-big">${dMoney(o.month.profit_cents)}</div><div class="jr-sub">profit. You made ${dMoney(o.month.income_cents)} and spent ${dMoney(o.month.expense_cents)}.</div><button class="btn sm" data-go="jr_money" style="margin-top:10px">Open money</button></div>
+        <div class="jr-card"><h2>${g?`Saving for: ${esc(g.name)}`:'Savings goal'}</h2>${g?`<div class="jr-big">${dMoney(t.saved_cents)} <span class="jr-sub">of ${dMoney(g.cents)}</span></div><div class="jr-bar"><i style="width:${pct}%"></i></div><div class="jr-sub">${pct>=100?'You did it! Goal reached.':`${dMoney(Math.max(0,g.cents-t.saved_cents))} to go.`}</div>`:`<div class="jr-sub">Pick something to save for. Donna tracks how close you are.</div><button class="btn sm primary" data-go="jr_money" style="margin-top:10px">Set a goal</button>`}</div>
+        <div class="jr-tip"><b>Tip from Donna</b>${esc(o.tip)}</div>
+      </div>
+      <div class="jr-grid" style="margin-top:14px">
+        <div class="jr-card"><h2>Coming up</h2>${o.upcoming.length?o.upcoming.map(j=>`<div class="jr-row"><div class="g"><b>${esc(j.title)}</b><div class="jr-sub">${esc(jrDay(j.job_date))}${j.job_time?' at '+esc(jrTime(j.job_time)):''}${j.customer?' · '+esc(j.customer):''}</div></div>${j.late?'<span class="jr-pill wait">Was it done?</span>':''}</div>`).join(''):`<div class="jr-sub">No jobs on the calendar yet.</div>`}<button class="btn sm" data-go="jr_jobs" style="margin-top:10px">Open jobs</button></div>
+        <div class="jr-card"><h2>To do</h2>
+          ${o.low_stock.map(i=>`<div class="jr-row"><div class="g"><b>Buy more ${esc(i.name)}</b><div class="jr-sub">Only ${Number(i.qty)}${i.unit?' '+esc(i.unit):''} left</div></div><span class="jr-pill no">Low</span></div>`).join('')}
+          ${o.to_post.map(p=>`<div class="jr-row"><div class="g"><b>Share your post</b><div class="jr-sub">${esc(String(p.caption).slice(0,70))}</div></div><span class="jr-pill ok">Ready</span></div>`).join('')}
+          ${!o.low_stock.length&&!o.to_post.length?`<div class="jr-sub">Nothing right now. Nice work.</div>`:''}
+          <div class="jr-acts" style="margin-top:10px"><button class="btn sm" data-go="jr_stuff">Supplies</button><button class="btn sm" data-go="jr_posts">Posts</button></div></div>
+        <div class="jr-card"><h2>Badges (${earned} of ${o.badges.length})</h2><div class="jr-badges">${o.badges.map(b=>`<div class="jr-badge ${b.earned?'on':''}" title="${esc(b.how)}"><div class="m">${b.earned?'&#10003;':'?'}</div><b>${esc(b.name)}</b>${b.earned?'Earned':esc(b.how)}</div>`).join('')}</div></div>
+      </div>`;
+    root.querySelectorAll('[data-go]').forEach(b=>b.onclick=()=>go(b.dataset.go));
+    const gp=$("#jr-go-parent"); if(gp) gp.onclick=()=>go('jr_parent'); const pl=$("#jr-go-plan"); if(pl) pl.onclick=()=>go('jr_plan');
+  }
+
+  // ---------------------------------------------------------------- customers
+  async function customers(){
+    const r=await jrApi({ action:'customers' }); const list=(r&&r.customers)||[];
+    root.innerHTML=head('Customers',`The people you work for. ${need&&!parent?'A parent says OK to each new customer before you can book a job for them.':'Keep their name and how to reach them here.'}`)+`
+      <div class="jr-card"><div style="display:flex;gap:8px;align-items:center;margin-bottom:10px"><button class="btn sm primary" id="jr-c-add">Add a customer</button><span id="jr-c-msg" class="jr-ok"></span></div><div id="jr-c-form"></div>
+      ${list.length?list.map(c=>`<div class="jr-row"><div class="g"><b>${esc(c.name)}</b><div class="jr-sub">${esc([c.phone,c.street].filter(Boolean).join(' · ')||'No phone or street yet')}</div></div>${c.status==='pending'?'<span class="jr-pill wait">Waiting for a parent</span>':''}<button class="btn sm" data-edit="${c.id}">Edit</button></div>`).join(''):`<div class="jr-sub">No customers yet. Add your first one.</div>`}</div>
+      <div class="jr-tip" style="margin-top:14px"><b>Stay safe</b>Only work for people your parent knows about. Never go inside a customer's house alone, and always tell a parent where you will be.</div>`;
+    const form=c=>{ const f=$("#jr-c-form"); f.innerHTML=`<div class="jr-3" style="margin-bottom:8px"><div class="field"><label class="lab">Name</label><input class="inp" id="jr-c-name" value="${esc(c.name||'')}"></div><div class="field"><label class="lab">Phone (optional)</label><input class="inp" id="jr-c-phone" inputmode="tel" value="${esc(c.phone||'')}"></div><div class="field"><label class="lab">Street (optional)</label><input class="inp" id="jr-c-street" value="${esc(c.street||'')}" placeholder="12 Maple Lane"></div></div>
+        <div class="jr-acts"><button class="btn primary" id="jr-c-save">Save</button><button class="btn" id="jr-c-x">Cancel</button>${c.id?`<button class="btn" id="jr-c-del">Remove</button>`:''}</div><div class="jr-err" id="jr-c-err"></div><div style="height:12px"></div>`;
+      $("#jr-c-x").onclick=()=>{ f.innerHTML=''; };
+      $("#jr-c-save").onclick=async()=>{ const x=await jrApi({ action:'customer_save', customer:{ id:c.id, name:$("#jr-c-name").value, phone:$("#jr-c-phone").value.trim(), street:$("#jr-c-street").value } }); if(!x.ok){ $("#jr-c-err").textContent=x.message||'Could not save.'; return; } S.flash=x.pending?'Saved. Donna asked a parent to say OK.':'Saved.'; pageJunior(); };
+      const del=$("#jr-c-del"); if(del) del.onclick=async()=>{ if(!(await uiConfirm(`Remove ${c.name} from your customers?`))) return; await jrApi({ action:'customer_remove', id:c.id }); pageJunior(); }; };
+    $("#jr-c-add").onclick=()=>form({});
+    root.querySelectorAll('[data-edit]').forEach(b=>b.onclick=()=>form(list.find(c=>c.id===b.dataset.edit)));
+    if(S.flash){ $("#jr-c-msg").textContent=S.flash; S.flash=null; }
+  }
+
+  // ---------------------------------------------------------------- jobs
+  async function jobs(){
+    const [r,cr]=await Promise.all([jrApi({ action:'jobs' }), jrApi({ action:'customers' })]); const list=(r&&r.jobs)||[]; const cust=((cr&&cr.customers)||[]).filter(c=>c.status==='approved'); const today=(r&&r.today)||new Date().toLocaleDateString('en-CA');
+    const todo=list.filter(j=>j.status==='scheduled'), unpaid=list.filter(j=>j.status==='done'), paid=list.filter(j=>j.status==='paid').reverse().slice(0,10);
+    const idea=(JR_IDEAS.find(x=>x[0]===(o.profile.idea||''))||JR_IDEAS[7])[2];
+    const row=(j,acts)=>`<div class="jr-row"><div class="g"><b>${esc(j.title)}</b><div class="jr-sub">${esc(jrDay(j.job_date))}${j.job_time?' at '+esc(jrTime(j.job_time)):''}${j.customer?' · '+esc(j.customer):''}${j.price_cents?' · '+dMoney(j.price_cents):''}${j.repeat!=='none'?' · repeats '+({weekly:'every week',biweekly:'every 2 weeks',monthly:'every month'})[j.repeat]:''}</div></div><div class="jr-acts">${acts}</div></div>`;
+    root.innerHTML=head('Jobs','Put every job on the calendar, mark it done, then mark it paid. Donna adds the money to your records for you.')+`
+      <div class="jr-card"><div style="display:flex;gap:8px;align-items:center;margin-bottom:10px"><button class="btn sm primary" id="jr-j-add">Add a job</button><span id="jr-j-msg" class="jr-ok"></span></div><div id="jr-j-form"></div>
+        <h2>To do</h2>${todo.length?todo.map(j=>row(j,`${j.job_date<today?'<span class="jr-pill wait">Past</span>':''}<button class="btn sm primary" data-done="${j.id}">Done</button><button class="btn sm" data-jedit="${j.id}">Edit</button><button class="btn sm" data-cancel="${j.id}">Cancel</button>`)).join(''):`<div class="jr-sub">Nothing on the calendar. Add your next job.</div>`}</div>
+      <div class="jr-card" style="margin-top:14px"><h2>Done, waiting to be paid</h2>${unpaid.length?unpaid.map(j=>row(j,`<button class="btn sm primary" data-cash="${j.id}">Paid in cash</button><button class="btn sm" data-other="${j.id}">Paid another way</button><button class="btn sm" data-link="${j.id}">Send pay link</button>`)).join(''):`<div class="jr-sub">Nobody owes you money right now.</div>`}</div>
+      ${paid.length?`<div class="jr-card" style="margin-top:14px"><h2>Paid</h2>${paid.map(j=>row(j,`<span class="jr-pill ok">Paid${j.paid_method?' ('+esc(j.paid_method)+')':''}</span>`)).join('')}</div>`:''}`;
+    const msg=(m,bad)=>{ const e=$("#jr-j-msg"); if(e){ e.textContent=m; e.className=bad?'jr-err':'jr-ok'; } };
+    const form=j=>{ const f=$("#jr-j-form"); f.innerHTML=`<div class="jr-3" style="margin-bottom:8px">
+        <div class="field"><label class="lab">What is the job?</label><input class="inp" id="jr-j-title" value="${esc(j.title||idea.job||'')}"></div>
+        <div class="field"><label class="lab">Customer</label><select class="inp" id="jr-j-cust"><option value="">No customer (like a stand)</option>${cust.map(c=>`<option value="${c.id}" ${j.customer_id===c.id?'selected':''}>${esc(c.name)}</option>`).join('')}</select></div>
+        <div class="field"><label class="lab">Price</label><input class="inp" id="jr-j-price" inputmode="decimal" value="${j.price_cents?(j.price_cents/100).toFixed(2):''}" placeholder="20.00"></div>
+        <div class="field"><label class="lab">Day</label><input class="inp" type="date" id="jr-j-date" value="${esc(j.job_date||today)}"></div>
+        <div class="field"><label class="lab">Time (optional)</label><input class="inp" type="time" id="jr-j-time" value="${esc(j.job_time||'')}"></div>
+        <div class="field"><label class="lab">Does it repeat?</label><select class="inp" id="jr-j-rep">${[['none','Just once'],['weekly','Every week'],['biweekly','Every 2 weeks'],['monthly','Every month']].map(x=>`<option value="${x[0]}" ${(j.repeat||'none')===x[0]?'selected':''}>${x[1]}</option>`).join('')}</select></div></div>
+        <div class="jr-acts"><button class="btn primary" id="jr-j-save">Save job</button><button class="btn" id="jr-j-x">Cancel</button></div><div class="jr-err" id="jr-j-err"></div><div style="height:12px"></div>`;
+      $("#jr-j-x").onclick=()=>{ f.innerHTML=''; };
+      $("#jr-j-save").onclick=async()=>{ const x=await jrApi({ action:'job_save', job:{ id:j.id, title:$("#jr-j-title").value, customer_id:$("#jr-j-cust").value||null, price_cents:dCents($("#jr-j-price").value), job_date:$("#jr-j-date").value, job_time:$("#jr-j-time").value||null, repeat:$("#jr-j-rep").value } }); if(!x.ok){ $("#jr-j-err").textContent=x.message||'Could not save.'; return; } pageJunior(); }; };
+    $("#jr-j-add").onclick=()=>form({});
+    root.querySelectorAll('[data-jedit]').forEach(b=>b.onclick=()=>form(list.find(j=>j.id===b.dataset.jedit)));
+    root.querySelectorAll('[data-done]').forEach(b=>b.onclick=async()=>{ b.disabled=true; await jrApi({ action:'job_done', id:b.dataset.done }); pageJunior(); });
+    root.querySelectorAll('[data-cancel]').forEach(b=>b.onclick=async()=>{ const j=list.find(x=>x.id===b.dataset.cancel); if(!(await uiConfirm(j.repeat!=='none'?'Cancel this job and stop it from repeating?':'Cancel this job?'))) return; await jrApi({ action:'job_cancel', id:j.id, series:j.repeat!=='none' }); pageJunior(); });
+    const paidMsg=x=>`Nice! ${dMoney(x.amount_cents)} added to your money.${x.saved_cents?` ${dMoney(x.saved_cents)} went to your goal.`:''}`;
+    root.querySelectorAll('[data-cash]').forEach(b=>b.onclick=async()=>{ b.disabled=true; const x=await jrApi({ action:'job_paid', id:b.dataset.cash, method:'cash' }); if(!x.ok){ msg(x.message||'Could not save.',true); return; } S.jflash=paidMsg(x); pageJunior(); });
+    root.querySelectorAll('[data-other]').forEach(b=>b.onclick=async()=>{ const how=await uiPrompt('How did they pay? Type one: check, venmo, zelle, cashapp, other','check'); if(!how) return; const x=await jrApi({ action:'job_paid', id:b.dataset.other, method:String(how).trim().toLowerCase() }); if(!x.ok){ msg(x.message||'Could not save.',true); return; } S.jflash=paidMsg(x); pageJunior(); });
+    root.querySelectorAll('[data-link]').forEach(b=>b.onclick=async()=>{ b.disabled=true; const x=await jrApi({ action:'job_paylink', id:b.dataset.link }); b.disabled=false; msg(x.ok?'Pay link sent to the customer.':(x.message||'Could not send.'),!x.ok); });
+    if(S.jflash){ msg(S.jflash); S.jflash=null; }
+  }
+
+  // ---------------------------------------------------------------- money
+  async function moneyPage(){
+    const r=await jrApi({ action:'money' }); if(!r.ok){ root.innerHTML=`<div class="empty">Could not load money.</div>`; return; }
+    const g=r.goal, t=r.totals; const free=Math.max(0,t.income_cents-t.expense_cents-t.saved_cents); const pct=g&&g.cents>0?Math.min(100,Math.round(t.saved_cents*100/g.cents)):0;
+    root.innerHTML=head('Money','Money in, money out, and what you are saving. Profit is what you made minus what you spent.')+`
+      <div class="jr-grid">
+        <div class="jr-card"><h2>This month</h2><div class="jr-row"><div class="g">Money in</div><b>${dMoney(r.income_cents)}</b></div><div class="jr-row"><div class="g">Money out</div><b>${dMoney(r.expense_cents)}</b></div><div class="jr-row"><div class="g"><b>Profit</b></div><b class="jr-big" style="font-size:20px">${dMoney(r.profit_cents)}</b></div></div>
+        <div class="jr-card"><h2>${g?`Saving for: ${esc(g.name)}`:'Savings goal'}</h2>
+          ${g?`<div class="jr-big">${dMoney(t.saved_cents)} <span class="jr-sub">of ${dMoney(g.cents)}</span></div><div class="jr-bar"><i style="width:${pct}%"></i></div><div class="jr-sub">${g.save_pct?`Donna puts ${g.save_pct}% of every paid job toward this. `:''}You have ${dMoney(free)} you could save right now.</div><div class="jr-acts" style="margin-top:10px"><button class="btn sm primary" id="jr-m-save">Save some now</button><button class="btn sm" id="jr-m-goal">Change goal</button></div>`
+            :`<div class="jr-sub">What are you saving for? A bike, a game, college?</div><button class="btn sm primary" id="jr-m-goal" style="margin-top:10px">Set a goal</button>`}<div id="jr-m-gform"></div></div>
+      </div>
+      <div class="jr-card" style="margin-top:14px"><div class="jr-acts" style="margin-bottom:10px"><button class="btn sm primary" data-add="expense">I spent money</button><button class="btn sm" data-add="income">I got money</button><span id="jr-m-msg" class="jr-ok"></span></div><div id="jr-m-form"></div>
+        ${r.rows.length?r.rows.map(e=>`<div class="jr-row"><div class="g"><b>${e.kind==='income'?'Money in':e.kind==='expense'?'Money out':'Saved'}</b><div class="jr-sub">${esc(jrDay(e.happened_on))}${e.note?' · '+esc(e.note):''}</div></div><b style="color:${e.kind==='expense'?'var(--danger)':e.kind==='saved'?'var(--ink-2)':'var(--ok)'}">${e.kind==='expense'?'-':''}${dMoney(e.amount_cents)}</b>${e.job_id?'':`<button class="btn sm" data-rm="${e.id}">Remove</button>`}</div>`).join(''):`<div class="jr-sub">Nothing written down this month yet.</div>`}</div>`;
+    const entry=kind=>{ const f=$("#jr-m-form"); f.innerHTML=`<div class="jr-3" style="margin-bottom:8px"><div class="field"><label class="lab">How much?</label><input class="inp" id="jr-m-amt" inputmode="decimal" placeholder="5.00"></div><div class="field"><label class="lab">${kind==='expense'?'What did you buy?':'What was it for?'}</label><input class="inp" id="jr-m-note" placeholder="${kind==='expense'?'Cups and lemons':'Tip from a neighbor'}"></div><div class="field"><label class="lab">Day</label><input class="inp" type="date" id="jr-m-day" value="${new Date().toLocaleDateString('en-CA')}"></div></div><div class="jr-acts"><button class="btn primary" id="jr-m-ok">Save</button><button class="btn" id="jr-m-x">Cancel</button></div><div class="jr-err" id="jr-m-err"></div><div style="height:12px"></div>`;
+      $("#jr-m-x").onclick=()=>{ f.innerHTML=''; };
+      $("#jr-m-ok").onclick=async()=>{ const x=await jrApi({ action:'ledger_add', entry:{ kind, amount_cents:dCents($("#jr-m-amt").value), note:$("#jr-m-note").value, happened_on:$("#jr-m-day").value } }); if(!x.ok){ $("#jr-m-err").textContent=x.message||'Could not save.'; return; } pageJunior(); }; };
+    root.querySelectorAll('[data-add]').forEach(b=>b.onclick=()=>entry(b.dataset.add));
+    root.querySelectorAll('[data-rm]').forEach(b=>b.onclick=async()=>{ if(!(await uiConfirm('Remove this from your records?'))) return; const x=await jrApi({ action:'ledger_remove', id:b.dataset.rm }); if(!x.ok){ uiAlert(x.message||'Could not remove.'); return; } pageJunior(); });
+    const gb=$("#jr-m-goal"); if(gb) gb.onclick=()=>{ const f=$("#jr-m-gform"); f.innerHTML=`<div style="margin-top:12px"><div class="field"><label class="lab">What are you saving for?</label><input class="inp" id="jr-g-name" value="${esc((g&&g.name)||'')}" placeholder="New bike"></div><div class="field"><label class="lab">How much does it cost?</label><input class="inp" id="jr-g-cents" inputmode="decimal" value="${g&&g.cents?(g.cents/100).toFixed(2):''}" placeholder="150.00"></div><div class="field"><label class="lab">Save this much of every paid job</label><select class="inp" id="jr-g-pct">${[0,10,20,25,50].map(p=>`<option value="${p}" ${Number((g&&g.save_pct)||0)===p?'selected':''}>${p?p+'%':'I will save on my own'}</option>`).join('')}</select></div><div class="jr-acts"><button class="btn primary" id="jr-g-ok">Save goal</button></div><div class="jr-err" id="jr-g-err"></div></div>`;
+      $("#jr-g-ok").onclick=async()=>{ const x=await jrApi({ action:'goal_save', goal:{ name:$("#jr-g-name").value, cents:dCents($("#jr-g-cents").value), save_pct:Number($("#jr-g-pct").value) } }); if(!x.ok){ $("#jr-g-err").textContent=x.message||'Could not save.'; return; } pageJunior(); }; };
+    const sb=$("#jr-m-save"); if(sb) sb.onclick=async()=>{ const v=await uiPrompt(`How much do you want to put toward ${g.name}? You can save up to ${dMoney(free)}.`,(free/100).toFixed(2)); if(!v) return; const x=await jrApi({ action:'ledger_add', entry:{ kind:'saved', amount_cents:dCents(v), note:'Toward '+g.name } }); if(!x.ok){ uiAlert(x.message||'Could not save.'); return; } pageJunior(); };
+  }
+
+  // ---------------------------------------------------------------- supplies
+  async function stuff(){
+    const r=await jrApi({ action:'items' }); const list=(r&&r.items)||[]; const idea=(JR_IDEAS.find(x=>x[0]===(o.profile.idea||''))||JR_IDEAS[7])[2];
+    root.innerHTML=head('Supplies','Count what you have. Tap minus when you use some. Donna tells you when it is time to buy more, before you run out.')+`
+      <div class="jr-card"><div class="jr-acts" style="margin-bottom:10px"><button class="btn sm primary" id="jr-i-add">Add a supply</button>${!list.length&&idea.items.length?`<button class="btn sm" id="jr-i-seed">Add the usual supplies for my business</button>`:''}</div><div id="jr-i-form"></div>
+      ${list.length?list.map(i=>{ const low=Number(i.low_at)>0&&Number(i.qty)<=Number(i.low_at); return `<div class="jr-row"><div class="g"><b>${esc(i.name)}</b><div class="jr-sub">${Number(i.low_at)>0?`Tell me at ${Number(i.low_at)} or fewer`:'No low alert'}${i.cost_cents?' · costs '+dMoney(i.cost_cents)+' each':''}</div></div>${low?'<span class="jr-pill no">Buy more</span>':''}<button class="btn sm" data-adj="${i.id}" data-d="-1" aria-label="Use one">-</button><b style="min-width:70px;text-align:center">${Number(i.qty)}${i.unit?' '+esc(i.unit):''}</b><button class="btn sm" data-adj="${i.id}" data-d="1" aria-label="Add one">+</button><button class="btn sm" data-iedit="${i.id}">Edit</button></div>`; }).join(''):`<div class="jr-sub">No supplies yet.</div>`}</div>`;
+    const form=i=>{ const f=$("#jr-i-form"); f.innerHTML=`<div class="jr-3" style="margin-bottom:8px"><div class="field"><label class="lab">What is it?</label><input class="inp" id="jr-i-name" value="${esc(i.name||'')}" placeholder="Cups"></div><div class="field"><label class="lab">How many do you have?</label><input class="inp" id="jr-i-qty" inputmode="decimal" value="${i.qty!=null?Number(i.qty):''}"></div><div class="field"><label class="lab">Counted in</label><input class="inp" id="jr-i-unit" value="${esc(i.unit||'')}" placeholder="cups, bags, bottles"></div><div class="field"><label class="lab">Tell me when I have this many or fewer</label><input class="inp" id="jr-i-low" inputmode="decimal" value="${i.low_at!=null?Number(i.low_at):''}"></div><div class="field"><label class="lab">What does one cost? (optional)</label><input class="inp" id="jr-i-cost" inputmode="decimal" value="${i.cost_cents?(i.cost_cents/100).toFixed(2):''}"></div></div><div class="jr-acts"><button class="btn primary" id="jr-i-ok">Save</button><button class="btn" id="jr-i-x">Cancel</button>${i.id?`<button class="btn" id="jr-i-del">Remove</button>`:''}</div><div class="jr-err" id="jr-i-err"></div><div style="height:12px"></div>`;
+      $("#jr-i-x").onclick=()=>{ f.innerHTML=''; };
+      $("#jr-i-ok").onclick=async()=>{ const x=await jrApi({ action:'item_save', item:{ id:i.id, name:$("#jr-i-name").value, qty:Number($("#jr-i-qty").value)||0, unit:$("#jr-i-unit").value, low_at:Number($("#jr-i-low").value)||0, cost_cents:dCents($("#jr-i-cost").value) } }); if(!x.ok){ $("#jr-i-err").textContent=x.message||'Could not save.'; return; } pageJunior(); };
+      const del=$("#jr-i-del"); if(del) del.onclick=async()=>{ if(!(await uiConfirm(`Remove ${i.name}?`))) return; await jrApi({ action:'item_remove', id:i.id }); pageJunior(); }; };
+    $("#jr-i-add").onclick=()=>form({});
+    const seed=$("#jr-i-seed"); if(seed) seed.onclick=async()=>{ seed.disabled=true; for(const it of idea.items) await jrApi({ action:'item_save', item:{ name:it[0], unit:it[1], qty:it[2], low_at:it[3] } }); pageJunior(); };
+    root.querySelectorAll('[data-iedit]').forEach(b=>b.onclick=()=>form(list.find(i=>i.id===b.dataset.iedit)));
+    root.querySelectorAll('[data-adj]').forEach(b=>b.onclick=async()=>{ b.disabled=true; await jrApi({ action:'item_adjust', id:b.dataset.adj, delta:Number(b.dataset.d) }); pageJunior(); });
+  }
+
+  // ---------------------------------------------------------------- posts and flyers
+  async function posts(){
+    const r=await jrApi({ action:'posts' }); const list=(r&&r.posts)||[]; const PILL={ draft:['Draft',''], needs_parent:['Waiting for a parent','wait'], approved:['Approved','ok'], declined:['Needs a change','no'], reminded:['Time to post','ok'], posted:['Posted','ok'] };
+    root.innerHTML=head('Posts and flyers',`Donna helps you write a post. ${need&&!parent?'A parent checks it first. ':''}Pick a day and Donna reminds you when it is time. You copy it and post it yourself, so no app has your password.`)+`
+      <div class="jr-card"><h2>Write a post</h2>
+        <div class="jr-3"><div class="field" style="grid-column:span 2"><label class="lab">What do you want to tell people?</label><input class="inp" id="jr-p-about" placeholder="I have open spots this Saturday"></div><div class="field"><label class="lab">Where will you post it?</label><select class="inp" id="jr-p-plat">${[['any','Anywhere'],['instagram','Instagram'],['facebook','Facebook'],['tiktok','TikTok'],['nextdoor','Nextdoor (a parent posts)']].map(x=>`<option value="${x[0]}">${x[1]}</option>`).join('')}</select></div></div>
+        <div class="jr-acts"><button class="btn primary" id="jr-p-ideas">Donna, write it for me</button><button class="btn" id="jr-p-own">I will write my own</button></div>
+        <div id="jr-p-out" style="margin-top:12px"></div></div>
+      <div class="jr-card" style="margin-top:14px"><h2>My posts</h2><span id="jr-p-msg" class="jr-ok"></span>
+        ${list.length?list.map(p=>`<div class="jr-row" style="align-items:flex-start"><div class="g"><div style="font-size:14px;line-height:1.45">${esc(p.caption)}</div><div class="jr-sub">${p.picture_idea?'Picture idea: '+esc(p.picture_idea)+'<br>':''}${p.scheduled_at?'Post on '+esc(new Date(p.scheduled_at).toLocaleString('en-US',{ weekday:'short', month:'short', day:'numeric', hour:'numeric', minute:'2-digit' })):'No day picked'}${p.parent_note?'<br><b>Parent note:</b> '+esc(p.parent_note):''}</div></div>
+          <div style="display:flex;flex-direction:column;gap:6px;align-items:flex-end"><span class="jr-pill ${PILL[p.status][1]}">${PILL[p.status][0]}</span>
+          ${['approved','reminded'].includes(p.status)?`<button class="btn sm" data-copy="${p.id}">Copy</button><button class="btn sm primary" data-posted="${p.id}">I posted it</button>`:''}${p.status!=='posted'?`<button class="btn sm" data-prm="${p.id}">Delete</button>`:''}</div></div>`).join(''):`<div class="jr-sub">No posts yet.</div>`}</div>
+      <div class="jr-card" style="margin-top:14px"><h2>Flyer</h2><div class="jr-sub">A one-page flyer with your business name, what you do, your prices, Donna's phone number and a code people can scan to book. It never shows your age or where you live.</div><button class="btn primary" id="jr-flyer" style="margin-top:10px">Make my flyer</button></div>
+      <div class="jr-tip" style="margin-top:14px"><b>Posting rules</b>No last name, no school, no address, no faces of other people, no house numbers or license plates in pictures. People should call or text the business number, never message you privately.</div>`;
+    const out=$("#jr-p-out");
+    const editor=(caption,pic)=>{ out.innerHTML=`<div class="field"><label class="lab">Your post</label><textarea class="inp" id="jr-p-cap" rows="4">${esc(caption||'')}</textarea></div><div class="jr-3"><div class="field" style="grid-column:span 2"><label class="lab">Picture idea</label><input class="inp" id="jr-p-pic" value="${esc(pic||'')}"></div><div class="field"><label class="lab">Remind me to post on</label><input class="inp" type="datetime-local" id="jr-p-when"></div></div><div class="jr-acts"><button class="btn primary" id="jr-p-save">${need&&!parent?'Send to a parent':'Save post'}</button></div><div class="jr-err" id="jr-p-err"></div>`;
+      $("#jr-p-save").onclick=async()=>{ const w=$("#jr-p-when").value; const x=await jrApi({ action:'post_save', post:{ caption:$("#jr-p-cap").value, picture_idea:$("#jr-p-pic").value, platform:$("#jr-p-plat").value, scheduled_at:w?new Date(w).toISOString():null } }); if(!x.ok){ $("#jr-p-err").textContent=x.message||'Could not save.'; return; } S.pflash=x.needs_parent?'Sent to a parent to check.':'Saved.'; pageJunior(); }; };
+    $("#jr-p-own").onclick=()=>editor('','');
+    $("#jr-p-ideas").onclick=async()=>{ const b=$("#jr-p-ideas"); b.disabled=true; b.textContent='Donna is writing…'; const x=await jrApi({ action:'post_ideas', about:$("#jr-p-about").value, platform:$("#jr-p-plat").value }); b.disabled=false; b.textContent='Donna, write it for me'; const ideas=(x&&x.ideas)||[]; if(!ideas.length){ editor('',''); return; }
+      out.innerHTML=`<div class="jr-sub" style="margin-bottom:6px">Pick the one you like. You can change the words.</div>`+ideas.map((it,k)=>`<div class="jr-row" style="align-items:flex-start"><div class="g"><div style="font-size:14px;line-height:1.45">${esc(it.caption)}</div><div class="jr-sub">Picture idea: ${esc(it.picture_idea||'')}</div></div><button class="btn sm primary" data-pick="${k}">Use this</button></div>`).join('');
+      out.querySelectorAll('[data-pick]').forEach(p=>p.onclick=()=>{ const it=ideas[Number(p.dataset.pick)]; editor(it.caption,it.picture_idea); }); };
+    root.querySelectorAll('[data-copy]').forEach(b=>b.onclick=async()=>{ const p=list.find(x=>x.id===b.dataset.copy); try{ await navigator.clipboard.writeText(p.caption); $("#jr-p-msg").textContent='Copied. Open your app and paste it.'; }catch(_e){ uiAlert(p.caption); } });
+    root.querySelectorAll('[data-posted]').forEach(b=>b.onclick=async()=>{ const x=await jrApi({ action:'post_posted', id:b.dataset.posted }); if(!x.ok){ uiAlert(x.message||'Could not save.'); return; } pageJunior(); });
+    root.querySelectorAll('[data-prm]').forEach(b=>b.onclick=async()=>{ if(!(await uiConfirm('Delete this post?'))) return; await jrApi({ action:'post_remove', id:b.dataset.prm }); pageJunior(); });
+    $("#jr-flyer").onclick=()=>jrFlyer(o);
+    if(S.pflash){ $("#jr-p-msg").textContent=S.pflash; S.pflash=null; }
+  }
+
+  // ---------------------------------------------------------------- business plan wizard
+  function plan(){
+    const P=S.plan=S.plan||Object.assign({ idea:o.profile.idea||'', business_name:o.profile.business||'' }, o.plan||{}); S.step=S.step||0;
+    const steps=['Your idea','What you do','Your customers','Your prices','Your supplies','When you work','Staying safe','Your plan'];
+    if(o.plan&&o.plan.done&&!S.editing&&S.step===0) S.step=7;
+    const idea=(JR_IDEAS.find(x=>x[0]===P.idea)||JR_IDEAS[7])[2]; const k=S.step;
+    const profit=(P.price_per_cents||0)-(P.cost_per_cents||0);
+    const body=[
+      `<h2>What business do you want to run?</h2><div class="jr-chips">${JR_IDEAS.map(x=>`<button class="jr-chip ${P.idea===x[0]?'on':''}" data-idea="${x[0]}">${x[1]}</button>`).join('')}</div><div class="field" style="margin-top:14px"><label class="lab">Name your business</label><input class="inp" id="jp-name" value="${esc(P.business_name||'')}" placeholder="${esc((o.profile.kid_first_name||'My')+"'s "+((JR_IDEAS.find(x=>x[0]===P.idea)||[0,'Business'])[1]))}"></div><div class="jr-sub">Use your first name only. Never your last name.</div>`,
+      `<h2>What will you do for people?</h2><div class="jr-sub" style="margin-bottom:8px">One or two sentences. Donna uses this when she answers your phone.</div><textarea class="inp" id="jp-what" rows="3">${esc(P.what||idea.what)}</textarea>`,
+      `<h2>Who are your customers?</h2><div class="jr-sub" style="margin-bottom:8px">Who needs what you do? Think about neighbors, family friends, people on your street.</div><textarea class="inp" id="jp-who" rows="3">${esc(P.who||idea.who)}</textarea>`,
+      `<h2>What will you charge?</h2><div class="jr-sub" style="margin-bottom:8px">A good price is more than what it costs you, and fair for the customer.</div><div class="jr-3"><div class="field"><label class="lab">What does one job or one item cost you?</label><input class="inp" id="jp-cost" inputmode="decimal" value="${P.cost_per_cents?(P.cost_per_cents/100).toFixed(2):''}" placeholder="0.40"></div><div class="field"><label class="lab">What will you charge for it?</label><input class="inp" id="jp-price" inputmode="decimal" value="${P.price_per_cents?(P.price_per_cents/100).toFixed(2):''}" placeholder="1.00"></div><div class="field"><label class="lab">You keep</label><div class="jr-big" id="jp-keep" style="font-size:22px">${dMoney(profit)}</div></div></div><div class="jr-sub" id="jp-hint"></div><div class="field" style="margin-top:10px"><label class="lab">Your price list (what customers see)</label><input class="inp" id="jp-prices" value="${esc(P.prices||idea.prices)}"></div>`,
+      `<h2>What supplies do you need?</h2><div class="jr-sub" style="margin-bottom:8px">List what you need to buy or borrow before your first job.</div><textarea class="inp" id="jp-supplies" rows="3">${esc(P.supplies||idea.supplies)}</textarea>`,
+      `<h2>When will you work?</h2><div class="jr-sub" style="margin-bottom:8px">Pick times that work with school, homework and family. A parent sets the hours Donna can book for you.</div><input class="inp" id="jp-when" value="${esc(P.when||idea.when)}">`,
+      `<h2>Staying safe</h2><div class="jr-sub" style="line-height:1.9;font-size:14px">1. A parent knows every customer and where I am working.<br>2. I never go inside a customer's house alone.<br>3. I never share my last name, my school or my address online.<br>4. Customers call or text my business number. Donna answers it.<br>5. If something feels wrong, I leave and tell a parent.</div><label style="display:flex;gap:8px;align-items:center;margin-top:12px;font-weight:600"><input type="checkbox" id="jp-safe" ${P.safety?'checked':''}> I read these with a parent and I agree</label>`,
+      `<h2>${esc(P.business_name||o.profile.business||'My business')}: the plan</h2>
+        <div class="jr-row"><div class="g"><b>What I do</b><div class="jr-sub">${esc(P.what||'')}</div></div></div><div class="jr-row"><div class="g"><b>My customers</b><div class="jr-sub">${esc(P.who||'')}</div></div></div><div class="jr-row"><div class="g"><b>My prices</b><div class="jr-sub">${esc(P.prices||'')}${P.price_per_cents?` · I keep ${dMoney(profit)} each time`:''}</div></div></div><div class="jr-row"><div class="g"><b>My supplies</b><div class="jr-sub">${esc(P.supplies||'')}</div></div></div><div class="jr-row"><div class="g"><b>When I work</b><div class="jr-sub">${esc(P.when||'')}</div></div></div><div class="jr-row"><div class="g"><b>Safety rules</b><div class="jr-sub">${P.safety?'Read and agreed with a parent':'Not agreed yet'}</div></div></div>
+        <div class="jr-acts" style="margin-top:12px"><button class="btn" id="jp-edit">Change my plan</button><button class="btn" id="jp-print">Print my plan</button><button class="btn primary" data-go="jr_customers">Next: add a customer</button></div>`
+    ][k];
+    root.innerHTML=head('My business plan','Eight short steps. Donna fills in a starting idea for you, and you make it yours.')+`<div class="jr-card"><div class="jr-steps">${steps.map((_,i)=>`<i class="${i<=k?'on':''}"></i>`).join('')}</div><div class="jr-sub" style="margin-bottom:6px">Step ${k+1} of ${steps.length}: ${steps[k]}</div>${body}
+      ${k<7?`<div class="jr-acts" style="margin-top:16px">${k>0?'<button class="btn" id="jp-back">Back</button>':''}<button class="btn primary" id="jp-next">${k===6?'Finish my plan':'Next'}</button></div><div class="jr-err" id="jp-err"></div>`:''}</div>`;
+    root.querySelectorAll('[data-idea]').forEach(b=>b.onclick=()=>{ if(P.idea!==b.dataset.idea){ P.idea=b.dataset.idea; P.what=P.who=P.prices=P.supplies=P.when=''; } P.business_name=$("#jp-name").value; plan(); });
+    root.querySelectorAll('[data-go]').forEach(b=>b.onclick=()=>go(b.dataset.go));
+    const calc=()=>{ const c=dCents($("#jp-cost").value), p=dCents($("#jp-price").value); $("#jp-keep").textContent=dMoney(p-c); $("#jp-hint").textContent=p&&c>=p?'That price does not cover your costs. Raise the price or spend less on supplies.':(p&&c?`For every 10 you sell, you keep ${dMoney((p-c)*10)}.`:''); };
+    if(k===3){ $("#jp-cost").oninput=calc; $("#jp-price").oninput=calc; calc(); }
+    const grab=()=>{ const v=id=>{ const e=$(id); return e?e.value:undefined; }; if(k===0) P.business_name=v("#jp-name"); if(k===1) P.what=v("#jp-what"); if(k===2) P.who=v("#jp-who"); if(k===3){ P.cost_per_cents=dCents(v("#jp-cost")); P.price_per_cents=dCents(v("#jp-price")); P.prices=v("#jp-prices"); } if(k===4) P.supplies=v("#jp-supplies"); if(k===5) P.when=v("#jp-when"); if(k===6) P.safety=$("#jp-safe").checked; };
+    const bk=$("#jp-back"); if(bk) bk.onclick=()=>{ grab(); S.step--; plan(); };
+    const nx=$("#jp-next"); if(nx) nx.onclick=async()=>{ grab(); const err=m=>{ $("#jp-err").textContent=m; };
+      if(k===0&&!P.idea) return err('Pick a business idea first.'); if(k===3&&P.price_per_cents&&P.cost_per_cents>=P.price_per_cents) return err('Your price needs to be more than your cost.'); if(k===6&&!P.safety) return err('Read the safety rules with a parent and tick the box.');
+      nx.disabled=true; const x=await jrApi({ action:'plan_save', plan:Object.assign({}, P, { done:k===6?true:!!(o.plan&&o.plan.done) }) }); nx.disabled=false; if(!x.ok) return err(x.message||'Could not save.');
+      o.plan=x.plan; S.step++; if(k===6){ S.editing=false; } plan(); };
+    const ed=$("#jp-edit"); if(ed) ed.onclick=()=>{ S.editing=true; S.step=0; plan(); };
+    const pr=$("#jp-print"); if(pr) pr.onclick=()=>window.print();
+  }
+
+  // ---------------------------------------------------------------- parent corner
+  async function parentPage(){
+    if(!parent){ root.innerHTML=`<div class="jr-hero"><h1>Parent corner</h1><p>This part is for your parent. They sign in with their own email.</p></div>`; return; }
+    const a=await jrApi({ action:'approvals' }); const pc=(a&&a.customers)||[], pp=(a&&a.posts)||[];
+    root.innerHTML=head('Parent corner',`You see everything ${esc(kid)} does in Donna: customers, jobs, money, posts, calls and messages. ${o.approvals_locked?`Because ${esc(kid)} is 13 or younger, new customers and posts wait for your OK.`:`${esc(kid)} is 14 or older and can run things without your OK. You can keep approvals on.`}`)+`
+      <div class="jr-card"><h2>Waiting for your OK (${pc.length+pp.length})</h2><span id="jr-a-msg" class="jr-ok"></span>
+        ${pc.map(c=>`<div class="jr-row"><div class="g"><b>New customer: ${esc(c.name)}</b><div class="jr-sub">${esc([c.phone,c.street].filter(Boolean).join(' · ')||'No phone or street given')}</div></div><div class="jr-acts"><button class="btn sm primary" data-ok="customer:${c.id}">Approve</button><button class="btn sm" data-no="customer:${c.id}">Decline</button></div></div>`).join('')}
+        ${pp.map(p=>`<div class="jr-row" style="align-items:flex-start"><div class="g"><b>Post to check</b><div style="font-size:14px;line-height:1.45;margin-top:2px">${esc(p.caption)}</div><div class="jr-sub">${p.picture_idea?'Picture idea: '+esc(p.picture_idea):''}${p.scheduled_at?' · planned for '+esc(new Date(p.scheduled_at).toLocaleString('en-US',{ weekday:'short', month:'short', day:'numeric', hour:'numeric', minute:'2-digit' })):''}</div></div><div class="jr-acts"><button class="btn sm primary" data-ok="post:${p.id}">Approve</button><button class="btn sm" data-no="post:${p.id}">Ask for a change</button></div></div>`).join('')}
+        ${!pc.length&&!pp.length?`<div class="jr-sub">Nothing is waiting.</div>`:''}</div>
+      <div class="jr-grid" style="margin-top:14px">
+        <div class="jr-card"><h2>Controls</h2>
+          <label style="display:flex;gap:8px;align-items:flex-start;font-size:13.5px;margin-bottom:10px"><input type="checkbox" id="jr-k-appr" ${o.controls.approvals==='on'?'checked':''} ${o.approvals_locked?'disabled':''} style="margin-top:3px"><span><b>I approve new customers and posts</b><br><span class="jr-sub">${o.approvals_locked?'Always on until age 14.':'Optional at 14 and older.'}</span></span></label>
+          <div class="field"><label class="lab">Tell me about approvals by</label><select class="inp" id="jr-k-notify">${[['both','Text and email'],['text','Text only'],['email','Email only']].map(x=>`<option value="${x[0]}" ${o.controls.notify===x[0]?'selected':''}>${x[1]}</option>`).join('')}</select></div>
+          <div class="jr-acts"><button class="btn primary" id="jr-k-save">Save controls</button><span id="jr-k-msg" class="jr-ok"></span></div>
+          <div class="jr-sub" style="margin-top:10px">Work hours: set the days and times Donna may book jobs on the <a href="#" data-go="schedule">Schedule</a> page. Donna never tells a caller ${esc(kid)}'s age, last name or home address.</div></div>
+        <div class="jr-card"><h2>${esc(kid)}'s sign-in</h2>
+          <div class="jr-sub">${o.profile.kid_login?`${esc(kid)} signs in with <b>${esc(o.profile.kid_email||'their own email')}</b>. They see a simpler menu and cannot change billing, the phone number or these controls.`:`${esc(kid)} does not have a sign-in yet. Make one here. They get the kid menu and cannot change billing, the phone number or these controls.`}</div>
+          ${o.profile.kid_login?`<div class="jr-acts" style="margin-top:10px"><button class="btn sm" data-go="staff">Manage sign-in</button></div>`:`<div class="field" style="margin-top:10px"><label class="lab">Email ${esc(kid)} will sign in with</label><input class="inp" id="jr-u-email" inputmode="email" placeholder="An email you can check"></div><div class="field"><label class="lab">Starting password (8 or more characters)</label><input class="inp" id="jr-u-pass" type="password" autocomplete="new-password"></div><div class="jr-acts"><button class="btn sm primary" id="jr-u-make">Make the sign-in</button></div><div class="jr-err" id="jr-u-err"></div>`}
+          <h2 style="margin-top:16px">Getting paid online</h2><div class="jr-sub">Cash works from day one. To take cards or Cash App, connect Stripe in your own name (you must be 18 or older). Money goes to your bank, and Donna never holds it.</div><div class="jr-acts" style="margin-top:10px"><button class="btn sm" data-go="settings">Open payment settings</button><button class="btn sm" data-go="billing">Plan and billing</button></div></div>
+        <div class="jr-card"><h2>Your permission</h2><div class="jr-sub">You gave permission as ${esc(kid)}'s parent or guardian${o.profile.consent_at?' on '+esc(dDate(o.profile.consent_at)):''}. Donna keeps only what is needed to run the business: first name, birth month and year, and what ${esc(kid)} enters. To delete everything, email <b>accounts@sidekicklogistics.com</b> from your sign-in email and it is removed.</div><div class="jr-acts" style="margin-top:10px"><button class="btn sm" id="jr-k-edit">Change name or birth month</button></div></div>
+      </div>`;
+    root.querySelectorAll('[data-go]').forEach(b=>b.onclick=e=>{ e.preventDefault(); go(b.dataset.go); });
+    const decide=async(key,approve)=>{ const [kind,id]=key.split(':'); let note=''; if(!approve){ note=await uiPrompt(kind==='post'?'What should change? (they will see this note)':'Add a note (optional)',''); if(note===null||note===undefined) return; } const x=await jrApi({ action:'decide', kind, id, approve, note }); if(!x.ok){ uiAlert(x.message||'Could not save.'); return; } pageJunior(); };
+    root.querySelectorAll('[data-ok]').forEach(b=>b.onclick=()=>decide(b.dataset.ok,true));
+    root.querySelectorAll('[data-no]').forEach(b=>b.onclick=()=>decide(b.dataset.no,false));
+    $("#jr-k-save").onclick=async()=>{ const body={ action:'controls_save', notify:$("#jr-k-notify").value }; if(!o.approvals_locked) body.approvals=$("#jr-k-appr").checked?'on':'off'; const x=await jrApi(body); const m=$("#jr-k-msg"); m.textContent=x.ok?'Saved.':(x.message||'Could not save.'); m.className=x.ok?'jr-ok':'jr-err'; };
+    $("#jr-k-edit").onclick=()=>jrSetup(root,o);
+    const mk=$("#jr-u-make"); if(mk) mk.onclick=async()=>{ const email=$("#jr-u-email").value.trim(), pass=$("#jr-u-pass").value; const err=m=>{ $("#jr-u-err").textContent=m; };
+      if(!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)) return err('Enter an email address.'); if(pass.length<8) return err('Use a password with 8 or more characters.');
+      mk.disabled=true; let r=null; try{ r=(await db.functions.invoke('create-staff',{ body:{ full_name:o.profile.kid_first_name, email, password:pass, role:'member', is_bookable:false } })).data; }catch(_e){ r=null; } mk.disabled=false;
+      if(!r||!r.ok) return err((r&&r.error)||'Could not make the sign-in. Try again in a minute.');
+      await jrApi({ action:'controls_save', kid_user_id:r.user_id }); pageJunior(); };
+  }
+}
+
+// Parent setup: child's first name, birth month, permission. Nothing else opens until this is done.
+function jrSetup(root,o){
+  const p=o.profile||{}; const now=new Date(); const yr=now.getFullYear(); const bm=String(p.birth_month||''); const MON=["January","February","March","April","May","June","July","August","September","October","November","December"];
+  root.innerHTML=`<div class="jr-hero"><h1>Set up Donna for your junior entrepreneur</h1><p>You are the account owner. Your child gets their own sign-in next, and you can see everything they do.</p></div>
+    <div class="jr-card" style="max-width:640px"><div class="jr-3">
+      <div class="field"><label class="lab">Child's first name</label><input class="inp" id="js-name" value="${esc(p.kid_first_name||'')}"></div>
+      <div class="field"><label class="lab">Birth month</label><select class="inp" id="js-m"><option value="">Month</option>${MON.map((m,i)=>`<option value="${String(i+1).padStart(2,'0')}" ${bm.slice(5,7)===String(i+1).padStart(2,'0')?'selected':''}>${m}</option>`).join('')}</select></div>
+      <div class="field"><label class="lab">Birth year</label><select class="inp" id="js-y"><option value="">Year</option>${Array.from({length:11},(_,i)=>yr-18+i).map(y=>`<option ${bm.slice(0,4)===String(y)?'selected':''}>${y}</option>`).join('')}</select></div></div>
+      <div class="jr-sub" style="margin:6px 0 12px">Donna for Junior Entrepreneurs is for ages 8 to 17. Through age 13, you approve each new customer and each social media post. From 14, your child can run it and you still see everything.</div>
+      ${p.consent_at?`<div class="jr-sub">Permission given on ${esc(dDate(p.consent_at))}.</div>`:`<label style="display:flex;gap:8px;align-items:flex-start;font-size:13.5px;line-height:1.5"><input type="checkbox" id="js-consent" style="margin-top:3px"><span>I am this child's parent or legal guardian. I give permission for my child to use Donna, and for Donna to collect and use the information my child enters to run their business. I can see everything and can ask for it to be deleted at any time.</span></label>`}
+      <div class="jr-acts" style="margin-top:14px"><button class="btn primary" id="js-save">${p.consent_at?'Save':'Give permission and continue'}</button></div><div class="jr-err" id="js-err"></div></div>`;
+  $("#js-save").onclick=async()=>{ const m=$("#js-m").value, y=$("#js-y").value; const c=$("#js-consent"); const x=await jrApi({ action:'setup_save', kid_first_name:$("#js-name").value, birth_month:(m&&y)?`${y}-${m}`:'', consent:c?c.checked:true }); if(!x.ok){ $("#js-err").textContent=x.message||'Could not save.'; return; } state.view='jr_parent'; renderPage(); };
+}
+
+// Printable flyer with a scan-to-book code. First name and business only: never an age, a last name or an address.
+async function jrFlyer(o){
+  const plan=o.plan||{}; const biz=o.profile.business||((o.profile.kid_first_name||'My')+"'s Business"); const num=(state.assistant&&state.assistant.number)||'';
+  let slug=state._bookingSlug; if(slug===undefined){ try{ const { data }=await db.from('accounts').select('booking_slug').eq('id',state.account.id).maybeSingle(); slug=(data&&data.booking_slug)||null; }catch(_e){ slug=null; } state._bookingSlug=slug; }
+  const url=bookingUrl(); let qr='';
+  try{ if(!window.qrcode) await new Promise((res,rej)=>{ const s=document.createElement('script'); s.src='https://cdnjs.cloudflare.com/ajax/libs/qrcode-generator/1.4.4/qrcode.min.js'; s.onload=res; s.onerror=rej; document.head.appendChild(s); }); const q=window.qrcode(0,'M'); q.addData(url); q.make(); qr=q.createSvgTag({ cellSize:5, margin:2 }); }catch(_e){ qr=''; }
+  const fmt=n=>String(n||'').replace(/^\+1(\d{3})(\d{3})(\d{4})$/,'($1) $2-$3');
+  const html=`<!doctype html><html><head><meta charset="utf-8"><title>${esc(biz)} flyer</title><style>@page{size:letter;margin:.6in}body{font-family:system-ui,-apple-system,Segoe UI,Roboto,sans-serif;color:#152033;margin:0;text-align:center}.top{background:#1f6f5c;color:#fff;border-radius:22px;padding:38px 28px}.top h1{font-size:50px;margin:0 0 10px;line-height:1.05}.top p{font-size:22px;margin:0;opacity:.95;line-height:1.35}.price{font-size:30px;font-weight:800;margin:30px 0 6px}.when{font-size:20px;color:#44546a;margin:0 0 26px}.row{display:flex;gap:28px;align-items:center;justify-content:center;border:3px dashed #1f6f5c;border-radius:22px;padding:24px}.row svg{width:190px;height:190px}.call{text-align:left}.call b{display:block;font-size:20px}.call .n{font-size:38px;font-weight:800;margin:4px 0 8px}.call span{font-size:17px;color:#44546a;line-height:1.4}.foot{margin-top:22px;font-size:14px;color:#6b7a8c}@media print{.np{display:none}}</style></head><body>
+    <div class="top"><h1>${esc(biz)}</h1><p>${esc(plan.what||'A neighborhood business run by a young entrepreneur.')}</p></div>
+    <div class="price">${esc(plan.prices||'Ask about prices')}</div><p class="when">${esc(plan.when||'')}</p>
+    <div class="row">${qr}<div class="call"><b>${qr?'Scan to book, or call or text':'Call or text'}</b><div class="n">${esc(fmt(num)||'Ask for our number')}</div><span>Donna, our assistant, answers every call<br>and books your spot.</span></div></div>
+    <div class="foot">A young entrepreneur business, supervised by a parent.</div>
+    <p class="np" style="margin-top:26px"><button onclick="window.print()" style="font:inherit;font-size:16px;padding:12px 22px;border-radius:12px;border:0;background:#1f6f5c;color:#fff;font-weight:700;cursor:pointer">Print this flyer</button></p></body></html>`;
+  const w=window.open('','_blank'); if(!w){ uiAlert('Allow pop-ups to open your flyer.'); return; } w.document.write(html); w.document.close();
+}
+
 // ================= Rent collection (PM Donna + Real Estate Donna; managers) =================
 async function rentApi(body){ const { data, error }=await db.functions.invoke('rent',{ body }); if(error){ try{ return await error.context.json(); }catch(_e){ return { ok:false, error:error.message||'error' }; } } return data||{ ok:false, error:'empty' }; }
 async function pageRent(){
@@ -6407,7 +6708,7 @@ I understand that:
 4. I may be asked to show a government-issued photo ID before entering.
 
 Signed electronically. A copy of this agreement and its signing record is texted or emailed to me.`;
-const WZ_INDUSTRIES=[["property_management","Property management"],["hair_salon","Hair salon"],["nail_salon","Nail salon"],["barbershop","Barbershop"],["spa","Spa or skin care"],["lash_brow","Lash & brow"],["restaurant","Restaurant"],["contractor","Contractor or trades"],["real_estate","Real estate"],["professional","Professional services"],["other","Something else"]];
+const WZ_INDUSTRIES=[["property_management","Property management"],["hair_salon","Hair salon"],["nail_salon","Nail salon"],["barbershop","Barbershop"],["spa","Spa or skin care"],["lash_brow","Lash & brow"],["restaurant","Restaurant"],["contractor","Contractor or trades"],["real_estate","Real estate"],["professional","Professional services"],["junior","Junior entrepreneur (ages 8 to 17, a parent signs up)"],["other","Something else"]];
 // ---------- Setup wizard v2: "Donna proposes, you confirm" ----------
 // One engine for every vertical. Donna finds the business (Google listing + website) and shows a confirm card; the owner taps
 // through; the phone is the only step that truly needs them; Donna calls them at the end. Anything unconfirmed goes to the
@@ -6416,6 +6717,7 @@ const WZ_TITLES=["Welcome","Confirm","Meet Donna","Your number","Try her"];
 const WZ_TZ=[["America/New_York","Eastern"],["America/Chicago","Central"],["America/Denver","Mountain"],["America/Phoenix","Arizona"],["America/Los_Angeles","Pacific"],["America/Anchorage","Alaska"],["Pacific/Honolulu","Hawaii"]];
 function obState(){ return (state.account&&state.account.settings&&state.account.settings.onboarding)||null; }
 function needsOnboarding(){
+  if(juniorOn()) return false;
   const ob=obState();
   if(ob && typeof ob.completed==='boolean') return ob.completed===false;
   return !state.assistantId && (!state.types||!state.types.length) && (!state.blocks||!state.blocks.length);
