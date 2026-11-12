@@ -339,7 +339,7 @@ Deno.serve(async (req: Request) => {
           display_name: c.name, contact_email: (owner as any)?.email || undefined, dashboard: "full",
           defaults: { responsibilities: { fees_collector: "stripe", losses_collector: "stripe" }, locales: ["en-US"] },
           identity: { country: "us" },
-          configuration: { merchant: { capabilities: { card_payments: { requested: true }, ach_debit_payments: { requested: true } } } },
+          configuration: { merchant: { capabilities: { card_payments: { requested: true }, ach_debit_payments: { requested: true }, cashapp_payments: { requested: true } } } },
           metadata: { donna_account_id: acctId, donna_community_id: c.id },
           include: ["configuration.merchant", "requirements"],
         });
@@ -357,7 +357,10 @@ Deno.serve(async (req: Request) => {
       const a: any = await stripeV2("GET", `/v2/core/accounts/${c.stripe_account_id}?include=configuration.merchant&include=requirements`);
       const cardStatus = a?.configuration?.merchant?.capabilities?.card_payments?.status || ""; const achStatus = a?.configuration?.merchant?.capabilities?.ach_debit_payments?.status || "";
       const charges = cardStatus === "active"; const entries: any[] = Array.isArray(a?.requirements?.entries) ? a.requirements.entries : []; const pastDue = entries.some((e: any) => e?.minimum_deadline?.status === "past_due");
-      const upd = { charges_enabled: charges, stripe_status: charges ? "active" : (pastDue ? "restricted" : "onboarding"), requirements: { summary: a?.requirements?.summary || null, count: entries.length, card_payments: cardStatus, ach_debit_payments: achStatus }, updated_at: new Date().toISOString() };
+      // Cash App Pay: ask for it once on older community accounts (best effort; some association types aren't eligible).
+      let cashStatus = a?.configuration?.merchant?.capabilities?.cashapp_payments?.status || "";
+      if (!cashStatus) { try { await stripeV2("POST", `/v2/core/accounts/${c.stripe_account_id}`, { configuration: { merchant: { capabilities: { cashapp_payments: { requested: true } } } } }); cashStatus = "pending"; } catch { cashStatus = "unavailable"; } }
+      const upd = { charges_enabled: charges, stripe_status: charges ? "active" : (pastDue ? "restricted" : "onboarding"), requirements: { summary: a?.requirements?.summary || null, count: entries.length, card_payments: cardStatus, ach_debit_payments: achStatus, cashapp_payments: cashStatus }, updated_at: new Date().toISOString() };
       const { data } = await supabase.from("communities").update(upd).eq("id", c.id).select("*").maybeSingle();
       return json({ ok: true, community: data || { ...c, ...upd } });
     } catch (e) { return json({ ok: false, error: "stripe_error", detail: String((e as any)?.message || e) }, 502); }

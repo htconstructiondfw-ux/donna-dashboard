@@ -2,7 +2,7 @@ import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import Stripe from "https://esm.sh/stripe@14.25.0?target=denonext";
 
-// Donna shared payments module (v21: HOA dues — per-community Stripe accounts (communities.stripe_account_id), pay by bank (ACH) or card +fee, autopay enrollment on units, dues_autopay_charge for the sweep; v19: card on file per client (contacts.card) + save-card-on-pay; v18: salon checkout — tickets with tips, products with stock, gift cards sold/redeemed; v17 activity log). Any vertical can use it; the dashboard exposes it to contractors first.
+// Donna shared payments module (v22: Cash App Pay next to card when the account's cashapp_payments capability is active. v21: HOA dues — per-community Stripe accounts (communities.stripe_account_id), pay by bank (ACH) or card +fee, autopay enrollment on units, dues_autopay_charge for the sweep; v19: card on file per client (contacts.card) + save-card-on-pay; v18: salon checkout — tickets with tips, products with stock, gift cards sold/redeemed; v17 activity log). Any vertical can use it; the dashboard exposes it to contractors first.
 // Tenants connect THEIR OWN Stripe account (Connect, Accounts v2, SaaS pattern). Donna never holds, touches or routes money:
 // Checkout Sessions are created directly on the tenant's account (Stripe-Account header), no application fee.
 //
@@ -53,6 +53,14 @@ async function stripeV2(method: string, path: string, body?: any): Promise<any> 
   return j;
 }
 
+// v22: Cash App Pay. Every connected account asks Stripe for the cashapp_payments capability (best effort: some
+// business types aren't eligible). Checkout offers Cash App next to card only once the capability is active.
+async function ensureCashApp(a: any): Promise<string> {
+  const cap = a?.configuration?.merchant?.capabilities?.cashapp_payments;
+  if (cap?.status) return cap.status;
+  try { await stripeV2("POST", `/v2/core/accounts/${a.id}`, { configuration: { merchant: { capabilities: { cashapp_payments: { requested: true } } } } }); return "pending"; } catch (e) { console.error("cashapp request", String((e as any)?.message || e)); return "unavailable"; }
+}
+
 const CORS = { "Access-Control-Allow-Origin": "*", "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type, stripe-signature", "Access-Control-Allow-Methods": "POST, OPTIONS" };
 const json = (o: unknown, s = 200) => new Response(JSON.stringify(o), { status: s, headers: { ...CORS, "Content-Type": "application/json" } });
 const money = (c: number) => `$${(Math.round(c) / 100).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
@@ -100,7 +108,7 @@ async function loadPA(accountId: string) {
 // Which Stripe account takes this invoice's money: the community's own (HOA dues) or the business's.
 async function paFor(inv: any): Promise<any> {
   if (inv?.community_id) {
-    const { data: c } = await supabase.from("communities").select("id, name, stripe_account_id, charges_enabled, card_fee_pct").eq("id", inv.community_id).maybeSingle();
+    const { data: c } = await supabase.from("communities").select("id, name, stripe_account_id, charges_enabled, card_fee_pct, requirements").eq("id", inv.community_id).maybeSingle();
     return c ? { stripe_account_id: c.stripe_account_id, charges_enabled: c.charges_enabled, community: c, enabled: c.charges_enabled } : null;
   }
   const pa = await loadPA(inv.account_id); if (!pa) return null;
@@ -112,7 +120,8 @@ async function refreshCommunity(c: any) {
   const cardStatus = a?.configuration?.merchant?.capabilities?.card_payments?.status || ""; const achStatus = a?.configuration?.merchant?.capabilities?.ach_debit_payments?.status || "";
   const charges = cardStatus === "active"; const entries: any[] = Array.isArray(a?.requirements?.entries) ? a.requirements.entries : [];
   const pastDue = entries.some((e: any) => e?.minimum_deadline?.status === "past_due");
-  const upd = { charges_enabled: charges, stripe_status: charges ? "active" : (pastDue ? "restricted" : "onboarding"), requirements: { summary: a?.requirements?.summary || null, count: entries.length, card_payments: cardStatus, ach_debit_payments: achStatus }, updated_at: new Date().toISOString() };
+  const cashStatus = await ensureCashApp(a);
+  const upd = { charges_enabled: charges, stripe_status: charges ? "active" : (pastDue ? "restricted" : "onboarding"), requirements: { summary: a?.requirements?.summary || null, count: entries.length, card_payments: cardStatus, ach_debit_payments: achStatus, cashapp_payments: cashStatus }, updated_at: new Date().toISOString() };
   const { data } = await supabase.from("communities").update(upd).eq("id", c.id).select("*").maybeSingle();
   return data || { ...c, ...upd };
 }
@@ -153,7 +162,8 @@ async function refreshStatus(acct: any, pa: any) {
   const pastDue = entries.some((e: any) => e?.minimum_deadline?.status === "past_due");
   const submitted = charges || entries.length === 0 || pastDue;
   const status = charges ? "active" : (pastDue ? "restricted" : "onboarding");
-  const upd: any = { charges_enabled: charges, payouts_enabled: charges, details_submitted: submitted, status, requirements: reqs ? { summary: reqs.summary || null, count: entries.length, card_payments: cardStatus } : null, last_checked_at: new Date().toISOString(), updated_at: new Date().toISOString() };
+  const cashStatus = await ensureCashApp(a);
+  const upd: any = { charges_enabled: charges, payouts_enabled: charges, details_submitted: submitted, status, requirements: reqs ? { summary: reqs.summary || null, count: entries.length, card_payments: cardStatus, cashapp_payments: cashStatus } : { cashapp_payments: cashStatus }, last_checked_at: new Date().toISOString(), updated_at: new Date().toISOString() };
   if (charges && !pa.connected_at) upd.connected_at = new Date().toISOString();
   const { data } = await supabase.from("payment_accounts").update(upd).eq("account_id", acct.id).select("*").maybeSingle();
   if (charges && acct.settings?.payments?.enabled !== true) await setPaymentsEnabled(acct, true);
@@ -351,13 +361,14 @@ Deno.serve(async (req: Request) => {
       : [...lines.map((l: any) => ({ quantity: 1, price_data: { currency: inv.currency, unit_amount: l.cents, product_data: { name: l.desc.slice(0, 120) } } })),
          ...(tax > 0 ? [{ quantity: 1, price_data: { currency: inv.currency, unit_amount: tax, product_data: { name: "Sales tax" } } }] : [])];
     if (inv.tip_cents > 0 && !(discount > 0 || lines.length === 0)) items.push({ quantity: 1, price_data: { currency: inv.currency, unit_amount: inv.tip_cents, product_data: { name: "Tip" } } });
-    if (fee.cents > 0) items.push({ quantity: 1, price_data: { currency: inv.currency, unit_amount: fee.cents, product_data: { name: `Card processing fee (${fee.pct}%)` } } });
+    const cashOk = !byBank && ((pa.community ? pa.community.requirements : pa.requirements)?.cashapp_payments === "active");
+    if (fee.cents > 0) items.push({ quantity: 1, price_data: { currency: inv.currency, unit_amount: fee.cents, product_data: { name: cashOk ? `Card / Cash App processing fee (${fee.pct}%)` : `Card processing fee (${fee.pct}%)` } } });
     try {
       const saveCard = body.save_card === true && !!inv.contact_id;
       const keep = saveCard || autopay; const payee = pa.community ? pa.community.name : acct.name;
       const session: any = await stripe.checkout.sessions.create({
         mode: "payment", line_items: items,
-        payment_method_types: byBank ? ["us_bank_account"] : ["card"],
+        payment_method_types: byBank ? ["us_bank_account"] : (cashOk ? ["card", "cashapp"] : ["card"]),
         ...(byBank ? { payment_method_options: { us_bank_account: { verification_method: "instant", financial_connections: { permissions: ["payment_method"] } } } } : {}),
         success_url: `${payUrl(token)}?paid=1`, cancel_url: payUrl(token),
         customer_email: inv.customer_email || undefined,
@@ -395,7 +406,7 @@ Deno.serve(async (req: Request) => {
           dashboard: "full",
           defaults: { responsibilities: { fees_collector: "stripe", losses_collector: "stripe" }, locales: ["en-US"] },
           identity: { country: "us" },
-          configuration: { merchant: { capabilities: { card_payments: { requested: true } } } },
+          configuration: { merchant: { capabilities: { card_payments: { requested: true }, cashapp_payments: { requested: true } } } },
           metadata: { donna_account_id: acct.id },
           include: ["configuration.merchant", "requirements"],
         });
