@@ -177,7 +177,7 @@ async function sweep(only?: string): Promise<any> {
         const lines = Array.isArray(job.lines) && job.lines.length ? job.lines : r.lines;
         if (linesTotal(lines) <= 0) { out.skipped++; if (!t.autopay.no_price_told) { await saveAutopay(t, { no_price_told: nowIso() }); await tellOwner(acct, `Autopay is on for ${t.name || "a customer"} (${t.what}) but the job has no price, so nothing was charged. Add the price on the job.`); } continue; }
         const contactId = await ensureContact(t);
-        const inv: any = await pay({ action: "invoice_create", job_id: job.id, contact_id: contactId, customer_name: job.customer_name || t.name, customer_phone: job.customer_phone || t.phone, customer_email: job.customer_email || t.email, service_address: job.address, lines, notes: "Autopay: charged to the card on file after the visit." }, own.id);
+        const inv: any = await pay({ action: "invoice_create", job_id: job.id, contact_id: contactId, customer_name: job.customer_name || t.name, customer_phone: job.customer_phone || t.phone, customer_email: job.customer_email || t.email, service_address: job.address, lines, notes: "Autopay is on for this service." }, own.id);
         if (!inv?.ok || !inv.invoice?.id) { out.errors.push(`${t.what}: ${inv?.error || "invoice failed"}`); continue; }
         await supabase.from("jobs").update({ invoice_id: inv.invoice.id, lines: inv.invoice.lines, updated_at: nowIso() }).eq("id", job.id).is("invoice_id", null);
         await chargeInvoice(acct, own, t, inv.invoice.id, t.what);
@@ -196,7 +196,7 @@ async function sweep(only?: string): Promise<any> {
         if (!job.series_id && String(job.repeat || "none") === "none") continue;       // one-off jobs are never charged automatically
         if (t.autopay.consent_at && job.updated_at < t.autopay.consent_at) continue;
         const contactId = await ensureContact(t);
-        const inv: any = await pay({ action: "invoice_create", contact_id: contactId, customer_name: t.name, customer_phone: t.phone, customer_email: t.email, lines: [{ desc: job.title, qty: 1, unit_cents: job.price_cents }], notes: "Autopay: charged to the card on file after the job." }, own.id);
+        const inv: any = await pay({ action: "invoice_create", contact_id: contactId, customer_name: t.name, customer_phone: t.phone, customer_email: t.email, lines: [{ desc: job.title, qty: 1, unit_cents: job.price_cents }], notes: "Autopay is on for this service." }, own.id);
         if (!inv?.ok || !inv.invoice?.id) { out.errors.push(`junior ${job.title}: ${inv?.error || "invoice failed"}`); continue; }
         await supabase.from("junior_jobs").update({ invoice_id: inv.invoice.id, updated_at: nowIso() }).eq("id", job.id).is("invoice_id", null);
         const okCharge = await chargeInvoice(acct, own, t, inv.invoice.id, job.title);
