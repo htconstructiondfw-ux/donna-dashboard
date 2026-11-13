@@ -1,7 +1,7 @@
 import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 
-// Donna: autopay for repeat services (v2: cards get a Stripe customer so they can be charged later; v1). Contractor Donna (recurring_jobs) and Junior Donna (junior_customers).
+// Donna: autopay for repeat services (v3: repairs any card on file saved without a Stripe customer; v2: cards get a Stripe customer; v1). Contractor Donna (recurring_jobs) and Junior Donna (junior_customers).
 //
 // The business sets the price on the repeating job. Donna never prices a job and never holds money: every charge is made on
 // the business's own Stripe account (for Junior, the parent's), through the shared `payments` module (card on file on the client).
@@ -142,9 +142,39 @@ async function sendAsk(acct: any, t: Target): Promise<boolean> {
   return await tell(acct, t, `Would you like to pay automatically for ${t.what}? ${priceWords(t, jj)}. Your card is charged only after each visit is done, you get a receipt every time, and you can turn it off any time. Set it up here: ${link(t.autopay.token)}`, "Set up automatic payment");
 }
 
+// ---------------------------------------------------------------- card repair
+// Any card on file saved without a Stripe customer (older "keep a card on file" links did this) cannot be charged later.
+// Give each one a customer on the business's own account. Runs with every sweep; a card that cannot be repaired is marked and skipped.
+async function repairCards(only?: string): Promise<number> {
+  let fixed = 0; const pas: Record<string, any> = {};
+  const paOf = async (id: string) => { if (!(id in pas)) pas[id] = await loadPA(id); return pas[id]; };
+  const repair = async (accountId: string, card: any, who: { name?: string; email?: string; phone?: string }, meta: Record<string, string>): Promise<any> => {
+    const pa = await paOf(accountId); if (!pa?.stripe_account_id) return null;
+    try {
+      const f: Record<string, string> = {}; if (who.name) f.name = who.name; if (who.email) f.email = who.email; const ph = normPhone(who.phone || ""); if (ph) f.phone = ph; for (const k of Object.keys(meta)) f[`metadata[${k}]`] = meta[k];
+      const cu: any = await stripeV1("POST", "/v1/customers", f, pa.stripe_account_id);
+      await stripeV1("POST", `/v1/payment_methods/${card.payment_method}/attach`, { customer: cu.id }, pa.stripe_account_id);
+      fixed++; return { ...card, customer: cu.id };
+    } catch (e) { console.error("repairCards", String(e)); return { ...card, repair_failed_at: nowIso(), repair_error: String((e as any)?.message || e).slice(0, 160) }; }
+  };
+  let cq = supabase.from("contacts").select("id, account_id, name, email, phone, card").not("card->>payment_method", "is", null).is("card->>customer", null).is("card->>repair_failed_at", null); if (only) cq = cq.eq("account_id", only);
+  const { data: cs } = await cq.limit(40);
+  for (const c of cs || []) { const card = await repair(c.account_id, c.card, { name: c.name, email: c.email, phone: c.phone }, { contact_id: c.id, account_id: c.account_id }); if (card) await supabase.from("contacts").update({ card, updated_at: nowIso() }).eq("id", c.id); }
+  let jq = supabase.from("jobs").select("id, account_id, contact_id, customer_name, customer_email, customer_phone, card").not("card->>payment_method", "is", null).is("card->>customer", null).is("card->>repair_failed_at", null); if (only) jq = jq.eq("account_id", only);
+  const { data: js } = await jq.limit(40);
+  for (const j of js || []) {
+    let card: any = null;
+    if (j.contact_id) { const { data: c } = await supabase.from("contacts").select("card").eq("id", j.contact_id).maybeSingle(); const cc = (c as any)?.card; if (cc?.payment_method === j.card.payment_method && cc?.customer) card = { ...j.card, customer: cc.customer }; }
+    if (!card) card = await repair(j.account_id, j.card, { name: j.customer_name, email: j.customer_email, phone: j.customer_phone }, { job_id: j.id, account_id: j.account_id });
+    if (card) await supabase.from("jobs").update({ card, updated_at: nowIso() }).eq("id", j.id);
+  }
+  return fixed;
+}
+
 // ---------------------------------------------------------------- sweep
 async function sweep(only?: string): Promise<any> {
   const out: any = { ok: true, charged: 0, failed: 0, heads_up: 0, skipped: 0, errors: [] as string[] };
+  try { out.cards_repaired = await repairCards(only); } catch (e) { out.errors.push(`card repair: ${String((e as any)?.message || e)}`); }
   const since = new Date(Date.now() - 7 * 86400000).toISOString(); const settle = new Date(Date.now() - 10 * 60000).toISOString();
   const accts: Record<string, any> = {}; const pas: Record<string, any> = {}; const owners: Record<string, any> = {};
   const ctx = async (accountId: string) => { if (!accts[accountId]) { accts[accountId] = await loadAccount(accountId); pas[accountId] = await loadPA(accountId); owners[accountId] = await owner(accountId); } return { acct: accts[accountId], pa: pas[accountId], own: owners[accountId] }; };
