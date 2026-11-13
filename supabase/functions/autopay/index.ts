@@ -1,7 +1,7 @@
 import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 
-// Donna: autopay for repeat services (v1). Contractor Donna (recurring_jobs) and Junior Donna (junior_customers).
+// Donna: autopay for repeat services (v2: cards get a Stripe customer so they can be charged later; v1). Contractor Donna (recurring_jobs) and Junior Donna (junior_customers).
 //
 // The business sets the price on the repeating job. Donna never prices a job and never holds money: every charge is made on
 // the business's own Stripe account (for Junior, the parent's), through the shared `payments` module (card on file on the client).
@@ -108,13 +108,26 @@ async function ensureContact(t: Target): Promise<string | null> {
   return id;
 }
 async function cardOf(t: Target): Promise<any> { if (!t.contact_id) return null; const { data } = await supabase.from("contacts").select("card").eq("id", t.contact_id).maybeSingle(); const c = (data as any)?.card; return c?.payment_method ? c : null; }
+// Stripe only lets a saved card be charged later when it belongs to a Stripe customer. Make one (on the business's account) when missing.
+async function stripeCustomer(t: Target, pa: any): Promise<string | null> {
+  if (t.autopay?.stripe_customer) return t.autopay.stripe_customer;
+  try { const f: Record<string, string> = { "metadata[contact_id]": String(t.contact_id || ""), "metadata[account_id]": t.account_id }; if (t.name) f.name = t.name; if (t.email) f.email = t.email; if (t.phone) f.phone = t.phone;
+    const c: any = await stripeV1("POST", "/v1/customers", f, pa.stripe_account_id); await saveAutopay(t, { stripe_customer: c.id }); return c.id; } catch (e) { console.error("stripeCustomer", String(e)); return null; }
+}
+async function ensureCustomer(t: Target, pa: any): Promise<any> {
+  const card = await cardOf(t); if (!card || card.customer || !pa?.stripe_account_id) return card;
+  try { const cust = await stripeCustomer(t, pa); if (!cust) return card;
+    await stripeV1("POST", `/v1/payment_methods/${card.payment_method}/attach`, { customer: cust }, pa.stripe_account_id);
+    const fixed = { ...card, customer: cust }; await supabase.from("contacts").update({ card: fixed, updated_at: nowIso() }).eq("id", t.contact_id); return fixed;
+  } catch (e) { console.error("ensureCustomer", String(e)); return card; }
+}
 // The customer came back from Stripe before the webhook landed: read the setup session and keep the card ourselves.
 async function pullCard(t: Target, pa: any): Promise<any> {
   const sid = t.autopay?.setup_session; if (!sid || !pa?.stripe_account_id || !t.contact_id) return null;
   try {
     const cs: any = await stripeV1("GET", `/v1/checkout/sessions/${sid}?expand[]=setup_intent.payment_method`, null, pa.stripe_account_id);
     const pm = cs?.setup_intent?.payment_method; if (cs.status !== "complete" || !pm?.id) return null;
-    const card = { payment_method: pm.id, customer: typeof cs.customer === "string" ? cs.customer : cs.customer?.id || null, brand: pm.card?.brand || null, last4: pm.card?.last4 || null, saved_at: nowIso() };
+    const card = { payment_method: pm.id, customer: (typeof cs.customer === "string" ? cs.customer : cs.customer?.id) || t.autopay?.stripe_customer || null, brand: pm.card?.brand || null, last4: pm.card?.last4 || null, saved_at: nowIso() };
     await supabase.from("contacts").update({ card, updated_at: nowIso() }).eq("id", t.contact_id); return card;
   } catch (e) { console.error("pullCard", String(e)); return null; }
 }
@@ -137,6 +150,7 @@ async function sweep(only?: string): Promise<any> {
   const ctx = async (accountId: string) => { if (!accts[accountId]) { accts[accountId] = await loadAccount(accountId); pas[accountId] = await loadPA(accountId); owners[accountId] = await owner(accountId); } return { acct: accts[accountId], pa: pas[accountId], own: owners[accountId] }; };
   const live = (acct: any, pa: any) => acct?.settings?.payments?.enabled === true && pa?.charges_enabled === true;
   const chargeInvoice = async (acct: any, own: any, t: Target, invId: string, label: string): Promise<boolean> => {
+    await ensureCustomer(t, pas[t.account_id]);
     const c: any = await pay({ action: "invoice_charge_card", id: invId }, own.id);
     if (c?.ok) { out.charged++; await saveAutopay(t, { last_charge_at: nowIso(), first_charge_at: t.autopay?.first_charge_at || nowIso(), last_error: null }); return true; }
     out.failed++;
@@ -216,7 +230,7 @@ Deno.serve(async (req: Request) => {
       if (!online) return json({ ok: false, error: "online_payments_off", message: `${acct.name} is not set up to take cards online yet. Please contact them.` });
       try {
         const f: Record<string, string> = { mode: "setup", "payment_method_types[0]": "card", success_url: `${link(token)}?card=1`, cancel_url: link(token), "metadata[contact_id]": String(t.contact_id || ""), "metadata[account_id]": t.account_id, "metadata[autopay_token]": token };
-        if (t.email) f.customer_email = t.email; else f.customer_creation = "always";
+        const cust = await stripeCustomer(t, pa); if (cust) f.customer = cust; else if (t.email) f.customer_email = t.email;
         const cs: any = await stripeV1("POST", "/v1/checkout/sessions", f, pa.stripe_account_id);
         await saveAutopay(t, { setup_session: cs.id });
         return json({ ok: true, url: cs.url });
@@ -228,6 +242,7 @@ Deno.serve(async (req: Request) => {
       if (!online) return json({ ok: false, error: "online_payments_off", message: `${acct.name} is not set up to take cards online yet.` });
       if (!card) return json({ ok: false, error: "no_card", message: "Add a card first." });
       if (t.kind === "recurring" && t.price_cents <= 0) return json({ ok: false, error: "no_price", message: `${acct.name} has not set the price yet. Please check back soon.` });
+      card = (await ensureCustomer(t, pa)) || card;
       await saveAutopay(t, { status: "on", consent_at: nowIso(), off_at: null, off_by: null, last_error: null });
       const jj = t.kind === "junior" ? await juniorJobs(t) : [];
       await tell(acct, t, `Autopay is on for ${t.what}: ${priceWords(t, jj)}, charged to your card${card.last4 ? " ending " + card.last4 : ""} after each visit is done. You get a receipt every time. To turn it off any time: ${link(token)}`, "Autopay is on");
