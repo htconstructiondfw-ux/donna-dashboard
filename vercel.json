@@ -23,6 +23,10 @@
       "destination": "/pay?t=:token"
     },
     {
+      "source": "/autopay/:token",
+      "destination": "/autopay?t=:token"
+    },
+    {
       "source": "/quote/:token",
       "destination": "/quote?t=:token"
     },

@@ -1,0 +1,83 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>Automatic payment</title>
+<meta name="robots" content="noindex">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Figtree:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+  :root{--accent:#1f6f4a;--accent-deep:#164f35;--bg:#f4f6f3;--card:#fff;--ink:#1b2420;--ink2:#4c5a52;--muted:#7d8a82;--line:#e3e8e4;--ok:#2d7a4f;--danger:#b4443a;--radius:18px}
+  *{box-sizing:border-box} body{margin:0;background:var(--bg);color:var(--ink);font:16px/1.5 'Figtree',-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;-webkit-font-smoothing:antialiased;min-height:100vh}
+  .wrap{max-width:520px;margin:0 auto;padding:22px 16px 60px}
+  .biz{display:flex;align-items:center;gap:12px;margin-bottom:16px}
+  .logo{width:44px;height:44px;border-radius:12px;background:var(--accent);color:#fff;display:flex;align-items:center;justify-content:center;font-weight:700;font-size:18px;flex:none}
+  .biz h1{font-size:18px;margin:0;font-weight:700}
+  .card{background:var(--card);border:1px solid var(--line);border-radius:var(--radius);padding:20px;box-shadow:0 10px 30px -22px rgba(0,0,0,.25)}
+  h2{font-size:21px;margin:0 0 6px;line-height:1.25} p{margin:8px 0;color:var(--ink2)}
+  .facts{margin:16px 0;border-top:1px solid var(--line)} .facts div{display:flex;gap:12px;justify-content:space-between;padding:11px 0;border-bottom:1px solid var(--line);font-size:15px} .facts span{color:var(--muted);flex:none} .facts b{text-align:right;font-weight:600}
+  ul{margin:12px 0;padding-left:20px;color:var(--ink2);font-size:14.5px} li{margin:5px 0}
+  .btn{display:block;width:100%;margin-top:14px;padding:16px;border:0;border-radius:14px;background:var(--accent);color:#fff;font:inherit;font-weight:700;font-size:17px;cursor:pointer}
+  .btn:hover:not(:disabled){background:var(--accent-deep)} .btn:disabled{opacity:.6;cursor:default}
+  .btn.ghost{background:#fff;color:var(--ink);border:1.5px solid var(--line);font-weight:600;font-size:15px;padding:13px}
+  .ok{margin-top:14px;padding:14px;border-radius:14px;background:#e4f3ea;color:var(--ok);font-weight:600}
+  .err{margin-top:14px;padding:14px;border-radius:14px;background:#f6e7e5;color:var(--danger)}
+  .muted{color:var(--muted);font-size:13.5px} .foot{margin-top:26px;text-align:center;color:var(--muted);font-size:12.5px;line-height:1.6}
+  .skel{height:14px;border-radius:7px;background:linear-gradient(90deg,#eceeec,#f6f7f6,#eceeec);background-size:200% 100%;animation:sh 1.2s infinite;margin:10px 0} @keyframes sh{to{background-position:-200% 0}}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div class="biz"><div class="logo" id="logo">·</div><h1 id="biz">&nbsp;</h1></div>
+  <div class="card" id="card"><div class="skel" style="width:60%"></div><div class="skel"></div><div class="skel" style="width:80%"></div></div>
+  <div class="foot" id="foot"></div>
+</div>
+<script>
+const SB = "https://hingbdtmxozbjetzwibj.supabase.co";
+const qs = new URLSearchParams(location.search);
+const token = (qs.get("t") || location.pathname.split("/").filter(Boolean).pop() || "").trim();
+const esc = (s) => String(s == null ? "" : s).replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+const $ = (id) => document.getElementById(id);
+async function api(action) {
+  try { const r = await fetch(`${SB}/functions/v1/autopay`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ action, token }) }); return await r.json(); }
+  catch (_e) { return { ok: false, message: "We could not reach the server. Check your connection and try again." }; }
+}
+let note = "";
+function render(v) {
+  const b = esc(v.business || "This business");
+  $("biz").textContent = v.business || ""; $("logo").textContent = (v.business || "·").trim().split(/\s+/).slice(0, 2).map((w) => w[0]).join("").toUpperCase();
+  document.title = `Automatic payment · ${v.business || ""}`;
+  $("foot").innerHTML = `Sent by ${b} with Donna.<br>Payments are processed by ${b}'s own Stripe account. Donna never holds your money.`;
+  const facts = `<div class="facts"><div><span>For</span><b>${esc(v.what)}</b></div><div><span>Amount</span><b>${esc(v.price)}</b></div><div><span>When</span><b>After each visit is done</b></div><div><span>Card</span><b>${v.card ? esc(String(v.card.brand || "Card").replace(/^./, (c) => c.toUpperCase())) + " ending " + esc(v.card.last4) : "Not added yet"}</b></div></div>`;
+  const msg = note ? `<div class="${note.startsWith("!") ? "err" : "ok"}">${esc(note.replace(/^!/, ""))}</div>` : "";
+  let html = "";
+  if (v.status === "on") {
+    html = `<h2>Autopay is on</h2><p>${b} charges your card after each visit is done. You get a receipt every time.</p>${facts}${msg}
+      <button class="btn ghost" id="stop">Turn autopay off</button><p class="muted">Turning it off takes effect right away. You will get a pay link after each visit instead.</p>`;
+  } else if (v.status === "off") {
+    html = `<h2>Autopay is off</h2><p>Nothing is charged automatically. ${b} will send you a pay link after each visit.</p>${msg}`;
+  } else {
+    html = `<h2>${v.first_name ? esc(v.first_name) + ", pay" : "Pay"} automatically after each visit?</h2><p>${b} is offering automatic payment so you do not have to pay by hand each time.</p>${facts}
+      <ul><li>Your card is charged only after a visit is done, never before.</li><li>You get a receipt every time.</li><li>You can turn it off any time from this same link.</li><li>If a charge does not go through, you get a pay link instead. Nothing is retried on its own.</li></ul>${msg}
+      ${!v.online ? `<div class="err">${b} is not set up to take cards online yet. Please contact them.</div>`
+        : !v.has_price ? `<div class="err">${b} has not set the price yet. Please check back soon.</div>`
+        : !v.card ? `<button class="btn" id="card">Add a card</button><p class="muted">You add your card on Stripe's secure page. Nothing is charged now.</p>`
+        : `<button class="btn" id="agree">I agree, turn on autopay</button><button class="btn ghost" id="card">Use a different card</button><p class="muted">By turning this on you allow ${b} to charge this card for the amount above after each visit, until you turn it off.</p>`}`;
+  }
+  $("card").innerHTML = html;
+  const c = $("card").querySelector("#card"); if (c) c.onclick = async () => { c.disabled = true; c.textContent = "Opening secure page…"; const r = await api("card"); if (r.ok && r.url) location.href = r.url; else { note = "!" + (r.message || "That did not work. Please try again."); load(); } };
+  const a = $("agree"); if (a) a.onclick = async () => { a.disabled = true; a.textContent = "Turning on…"; const r = await api("agree"); note = r.ok ? "Autopay is on. Thank you." : "!" + (r.message || "That did not work. Please try again."); load(); };
+  const s = $("stop"); if (s) s.onclick = async () => { if (s.dataset.sure !== "1") { s.dataset.sure = "1"; s.textContent = "Tap again to turn autopay off"; return; } s.disabled = true; const r = await api("stop"); note = r.ok ? "Autopay is off." : "!" + (r.message || "That did not work. Please try again."); load(); };
+}
+async function load(tries) {
+  const v = await api("view");
+  if (!v.ok) { $("card").innerHTML = `<h2>${v.error === "not_ready" ? "Not ready yet" : "This link is not valid"}</h2><p>${esc(v.message || "Please ask the business to send you a new link.")}</p>`; return; }
+  // Just back from adding a card: the card can take a few seconds to show up.
+  if (qs.get("card") === "1" && !v.card && (tries || 0) < 6) { $("card").innerHTML = `<h2>Saving your card…</h2><div class="skel"></div>`; setTimeout(() => load((tries || 0) + 1), 2000); return; }
+  render(v);
+}
+if (!token) $("card").innerHTML = "<h2>This link is not valid</h2><p>Please ask the business to send you a new link.</p>"; else load(0);
+</script>
+</body>
+</html>
