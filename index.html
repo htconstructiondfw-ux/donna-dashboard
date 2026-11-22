@@ -4095,6 +4095,13 @@ async function loadDocuments(){
     const s=stats[c.document_id]||(stats[c.document_id]={total:0,approved:0}); s.total++; if(c.approved) s.approved++;
     (pass[c.document_id]||(pass[c.document_id]=[])).push(c);
   });
+  // Exact counts per document (the passage list above is capped at 1,000 rows), plus how many are indexed and which property it belongs to.
+  await Promise.all((state.documents||[]).map(async d=>{ try{
+    const base=()=>db.from('knowledge_entries').select('id',{count:'exact',head:true}).eq('document_id',d.id);
+    const [t,a,x,pp]=await Promise.all([base(), base().eq('approved',true), base().not('embedding','is',null), db.from('knowledge_entries').select('property_id').eq('document_id',d.id).limit(1)]);
+    const total=(t.error||t.count==null)?((stats[d.id]||{}).total||0):t.count;
+    stats[d.id]={ total, approved:(a.error||a.count==null)?((stats[d.id]||{}).approved||0):a.count, indexed:(x.error||x.count==null)?total:x.count, property_id:(pp.data&&pp.data[0]&&pp.data[0].property_id)||null };
+  }catch(_e){} }));
   state.docStats=stats; state.docPassages=pass;
   if(!state.docOpen) state.docOpen=new Set();
 }
@@ -4607,7 +4614,7 @@ async function openProperty(id){
     db.from('property_contacts').select('*').eq('property_id',id).order('created_at'),
     db.from('property_escalation_contacts').select('*').eq('property_id',id).order('priority'),
     db.from('tenant_insurance').select('*').eq('property_id',id).order('created_at',{ascending:false}),
-    db.from('knowledge_entries').select('id,title,category,content,created_at').eq('property_id',id).order('created_at',{ascending:false})
+    db.from('knowledge_entries').select('id,title,category,content,created_at').eq('property_id',id).is('document_id',null).order('created_at',{ascending:false})
   ]);
   const p=pr.data; if(!p){ if(box) box.innerHTML=''; return; }
   const people=pe.data||[], escal=ec.data||[], coi=ci.data||[], kn2=kn.data||[];
@@ -4701,6 +4708,7 @@ async function openProperty(id){
     </div>
     <div class="field"><label class="lab">Or paste text</label><textarea class="inp" id="kp-content" rows="3" placeholder="Paste a section of the bylaws or a rule…"></textarea></div>
     <div style="display:flex;align-items:center;gap:12px"><button class="btn primary" id="kp-add">Teach ${esc(aName())}</button><span id="kp-msg" style="font-size:12.5px;color:var(--muted)"></span></div>
+    <div id="kp-docs" style="margin-top:14px"></div>
     <div id="kp-list" style="margin-top:14px">${kn2.length?kn2.map(k=>`<div class="block-item" style="align-items:flex-start"><div style="flex:1;min-width:0"><div style="font-weight:600;font-size:13px;margin-bottom:3px">${esc(k.title||'(untitled)')}${k.category?` <span class="lang-badge">${esc(k.category)}</span>`:''}</div><div style="font-size:12px;color:var(--muted)">${esc((k.content||'').slice(0,160))}${(k.content||'').length>160?'…':''}</div></div><button class="btn sm" data-kpdel="${k.id}">Delete</button></div>`).join(''):`<div class="empty" style="padding:14px">Nothing taught for this property yet.</div>`}</div>
   </div>
 
@@ -4731,6 +4739,7 @@ async function openProperty(id){
   box.querySelectorAll('[data-ecdel]').forEach(b=>b.onclick=async()=>{ await db.from('property_escalation_contacts').delete().eq('id',b.dataset.ecdel); openProperty(id); });
   $("#kp-add").onclick=()=>addPropKnowledge(id);
   $("#kp-file").onchange=(e)=>uploadPropDoc(id,e);
+  state.kpProp=id; loadDocuments().then(()=>{ paintKpDocs(); scheduleDocPoll(); }).catch(()=>{});
   box.querySelectorAll('[data-kpdel]').forEach(b=>b.onclick=async()=>{ if(!(await uiConfirm('Delete this? '+aName()+' will no longer use it for this property.',{okText:'Delete',cancelText:'Keep'})))return; await db.from('knowledge_entries').delete().eq('id',b.dataset.kpdel); openProperty(id); });
   const ti=$("#ti-send"); if(ti) ti.onclick=()=>requestCoi(id);
   box.querySelectorAll('[data-tiverify]').forEach(b=>b.onclick=async()=>{ await db.from('tenant_insurance').update({status:'verified',verified_at:new Date().toISOString(),verified_by:state.owner.name||'manager'}).eq('id',b.dataset.tiverify); openProperty(id); });
@@ -4789,9 +4798,9 @@ async function uploadPropDoc(id,e){
   msg.style.color='var(--muted)'; msg.textContent='Reading '+file.name+'…';
   let text=''; try{ text=((await extractText(file))||'').trim(); }catch(err){ msg.style.color='var(--danger)'; msg.textContent=(err&&err.message)||'Could not read that file.'; return; }
   if(text.length<20){ msg.style.color='var(--danger)'; msg.textContent='That file had no readable text.'; return; }
-  msg.textContent='Teaching '+aName()+' from '+file.name+'…';
-  const ok=await teachProperty(id, file.name.replace(/\.[^.]+$/,''), text, 'Governing documents');
-  if(!ok){ msg.style.color='var(--danger)'; msg.textContent='Could not save.'; return; }
+  msg.textContent='Uploading '+file.name+'…';
+  let ok=false; try{ const { data, error }=await db.functions.invoke('knowledge-ingest-document',{ body:{ filename:file.name, text, property_id:id } }); ok=!error&&data&&data.ok; }catch(_e){ ok=false; }
+  if(!ok){ msg.style.color='var(--danger)'; msg.textContent='Could not save. Please try again.'; return; }
   openProperty(id);
 }
 async function requestCoi(id){
@@ -6185,7 +6194,7 @@ async function handleFileUpload(e){
     done++;
   }
   await loadDocuments(); refreshDocViews();
-  if(added){ msg.style.color="var(--ok)"; msg.textContent="Added "+added+" file"+(added===1?"":"s")+" to review below"+(failed?(", "+failed+" skipped"):"")+"."; }
+  if(added){ msg.style.color="var(--ok)"; msg.textContent="Uploaded "+added+" file"+(added===1?"":"s")+(failed?(", "+failed+" skipped"):"")+". The bar below shows how much "+aName()+" has read; long files take a while and keep going if you close this page."; }
   else { msg.style.color="var(--danger)"; msg.textContent="Couldn't read "+failed+" file"+(failed===1?"":"s")+". Word, Excel, CSV, text, and text PDFs work; scans and photos need OCR."; }
 }
 function docCardHtml(d){
@@ -6193,7 +6202,9 @@ function docCardHtml(d){
   const pill=(bg,fg,txt)=>`<span style="display:inline-block;font-size:11px;font-weight:600;padding:2px 9px;border-radius:999px;background:${bg};color:${fg}">${txt}</span>`;
   const s=stats[d.id]||{total:0,approved:0}; const pending=s.total-s.approved;
   let status;
+  const idx=(s.indexed==null?s.total:s.indexed); const pct=s.total?Math.floor(idx*100/s.total):0;
   if(s.total===0) status=`<span style="font-size:12px;color:var(--muted-2)">processing…</span>`;
+  else if(idx<s.total) status=`<div style="font-size:12px;color:var(--muted);margin-bottom:5px">${esc(aName())} is reading this: ${idx} of ${s.total} passages ready (${pct}%). You can close this page; it keeps going.${pending>0?' Approve it any time.':''}</div><div style="height:8px;border-radius:999px;background:var(--line-2);overflow:hidden;max-width:420px"><div style="height:100%;width:${pct}%;background:var(--ok);border-radius:999px;transition:width .4s"></div></div>`;
   else if(pending>0) status=pill("var(--signal-soft)","var(--site)","Pending review · "+s.total+" passage"+(s.total===1?"":"s"));
   else status=pill("#e7f5ee","var(--ok)","Live · "+s.total+" passage"+(s.total===1?"":"s"));
   const open=state.docOpen&&state.docOpen.has(d.id);
@@ -6225,10 +6236,15 @@ function renderDocSection(el, docs, allId, emptyTxt){
   el.querySelectorAll("[data-docdel]").forEach(b=>b.onclick=()=>deleteDocument(b.dataset.docdel));
   el.querySelectorAll("[data-passdel]").forEach(b=>b.onclick=()=>deletePassage(b.dataset.passdel));
 }
-function splitDocs(){ const all=state.documents||[]; return { uploads: all.filter(d=>d.doc_type!=='interview'), interviews: all.filter(d=>d.doc_type==='interview') }; }
+function docProp(d){ const s=(state.docStats||{})[d.id]; return (s&&s.property_id)||null; }
+function splitDocs(){ const all=state.documents||[]; return { uploads: all.filter(d=>d.doc_type!=='interview'&&!docProp(d)), interviews: all.filter(d=>d.doc_type==='interview') }; }
+function paintKpDocs(){ const el=$("#kp-docs"); if(!el||!state.kpProp) return; renderDocSection(el, (state.documents||[]).filter(d=>docProp(d)===state.kpProp), "kp-approve-all", ""); }
+function docsIndexing(){ const st=state.docStats||{}; return (state.documents||[]).some(d=>{ const s=st[d.id]; return s&&s.total>0&&s.indexed!=null&&s.indexed<s.total; }); }
+function scheduleDocPoll(){ if(state.docPoll) return; if(!docsIndexing()) return; if(!$("#kb-docs")&&!$("#kp-docs")) return;
+  state.docPoll=setTimeout(async()=>{ state.docPoll=null; if(!$("#kb-docs")&&!$("#kp-docs")) return; try{ await loadDocuments(); }catch(_e){} refreshDocViews(); },6000); }
 function paintDocs(){ const el=$("#kb-docs"); if(!el) return; renderDocSection(el, splitDocs().uploads, "kb-approve-all", "Nothing uploaded or imported yet."); }
 function paintIvDocs(){ const el=$("#iv-docs"); if(!el) return; const ivs=splitDocs().interviews; if(!ivs.length){ el.innerHTML=""; return; } el.innerHTML=`<div style="font-weight:600;font-size:12.5px;margin:2px 0 8px;padding-top:12px;border-top:1px solid var(--line-2)">From your voice setup — review and approve</div><div id="iv-docs-list"></div>`; renderDocSection($("#iv-docs-list"), ivs, "iv-approve-all", ""); }
-function refreshDocViews(){ paintDocs(); paintIvDocs(); }
+function refreshDocViews(){ paintDocs(); paintIvDocs(); paintKpDocs(); scheduleDocPoll(); }
 function toggleDoc(id){ if(!state.docOpen) state.docOpen=new Set(); if(state.docOpen.has(id)) state.docOpen.delete(id); else state.docOpen.add(id); refreshDocViews(); }
 async function deletePassage(id){
   if(!(await uiConfirm("Delete this passage? "+aName()+" will no longer use it.",{okText:'Delete',cancelText:'Keep'}))) return;
