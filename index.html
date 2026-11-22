@@ -647,7 +647,20 @@ function renderApp(){
   renderPage();
   paintApproveBanner();
 }
+/* Unsaved-changes reminder for the Assistant page: compares what is on screen with what was last saved. */
+function asstSnap(){ const a=state.assistant||{}, r=a.routing||{}; return JSON.stringify([a.name||'',a.greetingLabel||'',a.voice||'',(a.languages||[]).slice().sort(),a.number||'',!!a.recordingNotice,(r.custom_instructions||'').trim(),(r.opening_question||'').trim()]); }
+function asstDirty(){ return state._asstSaved!=null && state._asstSaved!==asstSnap(); }
+window.addEventListener('beforeunload',e=>{ try{ if(state.view==='assistant'&&asstDirty()){ e.preventDefault(); e.returnValue=''; } }catch(_e){} });
 function renderPage(){
+  if(state._lastView==='assistant' && state.view!=='assistant' && !state._asstBypass && asstDirty() && $("#a-save")){
+    const want=state.view; state.view='assistant';
+    uiConfirm("You changed "+aName()+"'s settings but haven't saved them yet. Save your changes before leaving this page?",{okText:'Save changes',cancelText:'Leave without saving'}).then(async yes=>{
+      if(yes){ try{ await saveAssistant(); }catch(_e){} }
+      state._asstBypass=true; state.view=want; renderPage(); state._asstBypass=false;
+    });
+    return;
+  }
+  state._lastView=state.view;
   if(!isManager() && juniorOn()){ if(![...JR_VIEWS,'messages','account'].includes(state.view)) state.view='jr_home'; }
   else if(!isManager() && !['today','schedule','appointments','clients','messages','waitlist','mylink','jobs','money','account','listings','leads','requests','properties'].includes(state.view)) state.view='today';
   if('speechSynthesis' in window) window.speechSynthesis.cancel();
@@ -877,6 +890,7 @@ function pageAssistant(){
   ["a-voice","a-rec"].forEach(id=>$("#"+id).onchange=sync);
   $("#a-langs").querySelectorAll(".chip").forEach(c=>c.onclick=()=>{ const l=c.dataset.l, on=c.getAttribute("aria-pressed")==="true"; if(on){a.languages=a.languages.filter(x=>x!==l);}else{a.languages.push(l);} c.setAttribute("aria-pressed",String(!on)); });
   $("#a-save").onclick=saveAssistant;
+  if(state._asstSaved==null) state._asstSaved=asstSnap();
   { const ie=$("#a-instr"); if(ie) ie.oninput=()=>{ state.assistant.routing=state.assistant.routing||{}; state.assistant.routing.custom_instructions=ie.value; }; }
   { const oe=$("#a-openq"); if(oe) oe.oninput=()=>{ state.assistant.routing=state.assistant.routing||{}; state.assistant.routing.opening_question=oe.value; const sy=$("#say"); if(sy) sy.innerHTML=greetingText(); }; }
   async function runProvision(area, replace, btn, msg){
@@ -906,7 +920,7 @@ function pageAssistant(){
   else pb.onclick=()=>{ sync(); speakGreeting(pb); };
 }
 async function saveAssistant(){
-  const a=state.assistant, btn=$("#a-save"); btn.disabled=true; const o=btn.textContent; btn.textContent="Saving…";
+  const a=state.assistant, btn=$("#a-save"); if(!btn) return; btn.disabled=true; const o=btn.textContent; btn.textContent="Saving…";
   const instrEl=$("#a-instr"); const custom_instructions=instrEl?instrEl.value.trim():(((a.routing||{}).custom_instructions)||"");
   const oqEl=$("#a-openq"); const opening_question=oqEl?oqEl.value.trim():(((a.routing||{}).opening_question)||"");
   const routing=Object.assign({}, a.routing||{}, {recording_notice:a.recordingNotice, custom_instructions, opening_question});
@@ -915,8 +929,8 @@ async function saveAssistant(){
   let error;
   if(state.assistantId){ ({error}=await db.from('assistants').update(row).eq('id',state.assistantId)); }
   else { row.account_id=state.account.id; const r=await db.from('assistants').insert(row).select().single(); error=r.error; if(r.data) state.assistantId=r.data.id; }
-  if(!error) a.routing=routing;
-  btn.disabled=false; btn.textContent=error?"Error — retry":"Saved ✓"; setTimeout(()=>btn.textContent=o,1300);
+  if(!error){ a.routing=routing; state._asstSaved=asstSnap(); }
+  if(btn){ btn.disabled=false; btn.textContent=error?"Error — retry":"Saved ✓"; } setTimeout(()=>btn.textContent=o,1300);
 }
 
 /* ===================== SCHEDULE PAGE ===================== */
